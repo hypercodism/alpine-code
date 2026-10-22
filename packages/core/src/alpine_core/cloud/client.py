@@ -65,7 +65,10 @@ def send(
     Raises:
         Unreachable: The connection failed or timed out.
     """
-    request = urllib.request.Request(url, data=body, method=method, headers=headers or {})
+    # Cloudflare's browser check answers urllib's own User-Agent with 403 (error 1010) before the API sees the request.
+    request = urllib.request.Request(
+        url, data=body, method=method, headers={"User-Agent": settings.client_header(), **(headers or {})}
+    )
     try:
         with _opener.open(request, timeout=timeout) as response:
             return response.status, {k.lower(): v for k, v in response.headers.items()}, response.read()
