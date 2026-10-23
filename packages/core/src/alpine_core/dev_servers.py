@@ -68,10 +68,14 @@ def _owned_by(listener: dict[str, Any], pid: int) -> bool:
         return False
 
 
+#: Terminal colour and style codes; Vite, for one, prints its port in bold inside the URL.
+_ANSI = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\))")
+
+
 def _loopback_ports(process: Any) -> list[int]:
     # The tail also finds URLs from a restarted child after a long-running build's output.
     offset = max(0, process.snapshot()["output_size"] - 262144)
-    text = process.read(offset=offset, limit=262144)["text"]
+    text = _ANSI.sub("", process.read(offset=offset, limit=262144)["text"])
     values = re.findall(r"https?://(?:localhost|127\.0\.0\.1|\[::1\]):(\d{1,5})(?!\d)", text)
     return list(dict.fromkeys(int(value) for value in reversed(values) if 1 <= int(value) <= 65535))
 
@@ -190,7 +194,12 @@ class DevelopmentServerManager:
             if how is None:
                 return {"server": None}
             command, first = how
-            taken = {server.requested_port for server in self.servers.values()}
+            # Only servers still alive hold their port; a stopped one's port is free again (Vite takes it back).
+            taken = {
+                server.requested_port
+                for server in self.servers.values()
+                if (await server.snapshot())["status"] in {"starting", "running", "stopping"}
+            }
             port = first
             for candidate in range(first, first + _PORT_TRIES):
                 if candidate not in taken and not await listener(candidate):
@@ -217,9 +226,10 @@ class DevelopmentServerManager:
                 uuid.uuid4().hex, str(project), command, port, external=True, external_pid=conflict["pid"]
             )
         else:
-            # PORT is supplied for servers that support it; explicit CLI flags still take precedence.
+            # PORT is supplied for servers that support it; explicit CLI flags still take precedence. Exported, so it
+            # reaches every step of a command like ``npm install && npm run start``, not only the first.
             process = await process_manager().start(
-                f"PORT={port} {command}", project, session_id=session_id, title=f"Dev server :{port}"
+                f"export PORT={port}; {command}", project, session_id=session_id, title=f"Dev server :{port}"
             )
             server = DevelopmentServer(
                 uuid.uuid4().hex,
