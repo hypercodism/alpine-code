@@ -5,7 +5,7 @@ import { ChevronRight, CircleX, RotateCcw, Search, Sparkles } from 'lucide-react
 import { useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { AgentChip, ModeChip, type Mode } from '@/shared/components/composer';
-import { latestTaskForce } from '@/shared/components/taskforce';
+import { latestTaskForce, roomOf } from '@/shared/components/taskforce';
 import { useMessages } from '@/shared/i18n';
 import {
   ServerError,
@@ -36,7 +36,10 @@ import { changedCards } from './FlowTree';
 import { toTreeMap } from './flowTreeData';
 import { flowTreeMessages } from './flowTreeMessages';
 import { JourneyMap } from './JourneyMap';
-import { PlannedMap } from './PlannedMap';
+import { PlanBar, type PlanReview } from './PlanBar';
+import { buildActivity, pendingQuestion, planPhase } from './planData';
+import { mapLookCss } from './planLook';
+import { planMessages } from './planMessages';
 import { AskFlight, MapAsk } from './MapAsk';
 import { DeleteMap, MapMenu, ScopeEditor } from './MapSettings';
 import { Unmapped } from './Unmapped';
@@ -95,6 +98,7 @@ export function ProductMap({
 }) {
   const t = useMessages(messages);
   const tree = useMessages(flowTreeMessages);
+  const plan = useMessages(planMessages);
   const board = useProductMap(cwd);
   const sessions = useSessions().data;
   const live = useSession(sessionId);
@@ -186,9 +190,16 @@ export function ProductMap({
         ? toTreeMap(data, working, project, {
             unnamed: { ko: tree.unnamed, en: tree.unnamed },
             unnamedRole: { ko: tree.unnamedRole, en: tree.unnamedRole },
+            // A plan shows its cards as soon as they are written, before the AI puts them on journeys.
+            ...(data.planned
+              ? {
+                  unplaced: { ko: plan.unplaced, en: plan.unplaced },
+                  unplacedRole: { ko: plan.unplacedRole, en: plan.unplacedRole },
+                }
+              : {}),
           })
         : null,
-    [data, working, project, tree.unnamed, tree.unnamedRole],
+    [data, working, project, tree.unnamed, tree.unnamedRole, plan.unplaced, plan.unplacedRole],
   );
 
   const landed = !!flight?.toFirst && !!treeMap?.people.length;
@@ -255,8 +266,105 @@ export function ProductMap({
   const conversationWorking = mapConversation?.status === 'running' || mapConversation?.status === 'waiting';
   // My words to the map's conversation, as they are: answers to its questions and anything else about the plan.
   const say = (text: string) => {
-    if (mapConversation) send.mutate({ sessionId: mapConversation.id, text });
+    const to = talkTo ?? mapConversation?.id;
+    if (to) send.mutate({ sessionId: to, text });
   };
+
+  // A product being planned on this map (it began as a plan): the question its conversation waits on, where the plan
+  // stands, what the AI does now while building and the look its screens wear, all from facts (map-first 6, 17).
+  const planned = !!data?.planned;
+  const conversationItems = conversation.data?.items;
+  const pending = useMemo(
+    () => (planned && !conversationWorking ? pendingQuestion(conversationItems ?? []) : null),
+    [planned, conversationWorking, conversationItems],
+  );
+  const question = pending?.question ?? null;
+  // A build is a conversation of its own (map-first 36): the map follows it and the TF it proposes or runs.
+  const buildSessionId = planned ? (data?.buildSession ?? null) : null;
+  const buildConversation = useSession(buildSessionId);
+  const buildInfo = (sessions ?? []).find((s) => s.id === buildSessionId);
+  const buildWorking = buildInfo?.status === 'running' || buildInfo?.status === 'waiting';
+  const buildItems = buildConversation.data?.items;
+  const buildTeam = buildItems ? latestTaskForce(buildItems) : null;
+  const phase =
+    planned && data
+      ? planPhase(data, conversationWorking, !!question, { working: buildWorking, team: buildTeam?.status ?? null })
+      : null;
+  // While a build is unfinished, the map's one input goes to the build, which fixes things itself (map-first 37).
+  const building = phase === 'building' || phase === 'team' || phase === 'stopped';
+  const talkTo = building ? buildSessionId : (mapConversation?.id ?? null);
+  const talking = building ? buildWorking : conversationWorking;
+  const [lookPreview, setLookPreview] = useState<{ question: string; option: number } | null>(null);
+  const previewing = question && lookPreview?.question === question.id ? lookPreview.option : 0;
+  // Looking at a look option restyles every screen on the map at once; until then the map wears its own look.
+  const look = question?.options[previewing]?.look ?? (data?.look ? mapLookCss(data.look) : undefined);
+  const activity =
+    phase === 'building' && data
+      ? (buildActivity(buildItems ?? [], data, {
+          onCard: plan.activityOnCard,
+          editing: plan.activityEditing,
+          running: plan.activityRunning,
+          reading: plan.activityReading,
+          thinking: plan.activityThinking,
+        }) ?? { text: plan.activityThinking, touching: [] })
+      : null;
+  const touchingKey = activity?.touching.join(' ') ?? '';
+  const touching = useMemo(() => new Set(touchingKey.split(' ').filter(Boolean)), [touchingKey]);
+  // A question the AI answered on its own, opened from its card to answer again.
+  const [reviewing, setReviewing] = useState<string | null>(null);
+  const aiPick = (cardId: string) => treeMap?.cards[cardId]?.picks?.findLast((pick) => pick.by === 'ai');
+  const reviewPick = reviewing ? aiPick(reviewing) : undefined;
+  const pickReview: PlanReview | null =
+    reviewing && reviewPick
+      ? {
+          card: treeMap?.cards[reviewing]?.title ?? '',
+          picked: Math.max(reviewPick.options.indexOf(reviewPick.answer), 0),
+          question: {
+            id: `pick:${reviewing}`,
+            about: reviewing,
+            text: reviewPick.question,
+            options: (reviewPick.options.length ? reviewPick.options : [reviewPick.answer]).map((label) => ({ label })),
+          },
+        }
+      : null;
+  // "이대로 만들기" starts the build in a new conversation that reads only the map; 이어서 만들기 continues that one.
+  const startBuild = async (request: string) => {
+    if (!data || lock.current) return;
+    lock.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      const sessionId =
+        buildSessionId ??
+        (
+          await create.mutateAsync({
+            cwd,
+            purpose: 'build',
+            agent: mapConversation?.agent ?? newAgent ?? undefined,
+            mode: mapConversation?.mode ?? newMode ?? undefined,
+          })
+        ).id;
+      const prepared = await prepare.mutateAsync({
+        cwd,
+        revision: data.revision,
+        action: 'build',
+        request,
+        nodeId: null,
+        flowId: null,
+        sessionId,
+      });
+      await send.mutateAsync({ sessionId, text: prepared.prompt });
+      onSession(sessionId);
+    } catch (error) {
+      const known = error instanceof ServerError ? reasons[String(error.data?.reason)] : undefined;
+      setError({ text: known ?? t.failedStart, detail: error instanceof Error ? error.message : undefined });
+    } finally {
+      lock.current = false;
+      setBusy(false);
+    }
+  };
+  const aiPicked = Object.values(treeMap?.cards ?? {}).filter((card) => card.picks?.some((pick) => pick.by === 'ai'));
+  const promisesAll = Object.values(treeMap?.cards ?? {}).flatMap((card) => card.promises);
   // Who does the map's work: the conversation's agent once it exists, until then my pick for it (else the project's
   // last agent, as a new conversation would take).
   const agents = useAgents().data?.agents;
@@ -492,23 +600,6 @@ export function ProductMap({
     />
   );
 
-  if (data?.planned && treeMap) {
-    return (
-      <main ref={area} className="flex min-h-0 min-w-0 grow flex-col contain-inline-size" aria-label={t.title}>
-        <PlannedMap
-          board={data}
-          tree={treeMap}
-          items={conversation.data?.items ?? []}
-          working={conversationWorking}
-          onSay={say}
-          onBuild={() => void start('build', { request: t.buildRequest })}
-          onOpenApp={() => onOpenApp?.()}
-          headerEnd={mapMenu}
-        />
-      </main>
-    );
-  }
-
   return (
     <main ref={area} className="flex min-h-0 min-w-0 grow flex-col bg-canvas contain-inline-size" aria-label={t.title}>
       {/* Before the first card the map may already exist (being drawn, or stopped early): its menu (scope, delete)
@@ -563,6 +654,11 @@ export function ProductMap({
           )}
           {drawingLine && <span className="min-w-0">{drawingLine}</span>}
           <span className="grow" />
+          {phase === 'asking' && !!data.undecided?.length && (
+            <span className="inline-flex h-7 shrink-0 items-center rounded-full border border-line px-2.5 text-meta text-attention">
+              {plan.left(data.undecided.length)}
+            </span>
+          )}
           {lenses.failed.size > 0 && (
             <Chip pressed={lens === 'failed'} tone="danger" onClick={() => pick('failed')}>
               <CircleX size={13} aria-hidden />
@@ -781,6 +877,9 @@ export function ProductMap({
               drawing={drawing}
               lit={lit}
               reveal={reveal}
+              look={planned ? look : undefined}
+              touching={touching}
+              asked={phase === 'asking' ? (question?.about ?? null) : null}
               stepParts={(cardId) => {
                 const node = nodeOf(cardId);
                 if (!node) return {};
@@ -800,10 +899,25 @@ export function ProductMap({
                   extras: (
                     <>
                       {!!mine?.removedPromises?.length && <PromiseMore {...promiseProps(node)} only={REMOVED} />}
+                      {planned && aiPick(cardId) && (
+                        <p className="flex flex-wrap items-baseline gap-x-1.5 rounded-md bg-canvas-sunken px-2 py-1 text-meta">
+                          <span className="min-w-0 grow text-fg-muted">
+                            {plan.aiDecided} · {aiPick(cardId)!.answer}
+                          </span>
+                          <LinkButton className="min-h-5 px-0.5" onClick={() => setReviewing(cardId)}>
+                            {plan.change}
+                          </LinkButton>
+                        </p>
+                      )}
                       <CardAsk
                         key={cardId}
                         locked={locked}
-                        onAsk={(request) => start('change', { node, request })}
+                        // While planning or building, a word about a card goes to that conversation (map-first 37).
+                        onAsk={(request) =>
+                          planned && phase !== 'built'
+                            ? Promise.resolve(say(plan.cardRequest(node.title, request))).then(() => true)
+                            : start('change', { node, request })
+                        }
                         onRecheck={() => void start('verify', { node })}
                       />
                     </>
@@ -822,12 +936,69 @@ export function ProductMap({
           )
         )}
         {flight && <AskFlight key={flight.at} {...flight} landed={landed} />}
-        <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 mx-auto flex w-[min(560px,calc(100%-32px))] flex-col gap-2">
+        <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 mx-auto flex w-[min(640px,calc(100%-32px))] flex-col gap-2">
+          {phase && (
+            <PlanBar
+              phase={phase}
+              thinking={talking && phase === 'asking'}
+              question={question}
+              about={question?.about ? (treeMap?.cards[question.about]?.title ?? null) : null}
+              preview={previewing}
+              sample={
+                pending?.sample ||
+                Object.values(treeMap?.cards ?? {}).find((card) => card.screen?.kind === 'planned')?.screen?.src ||
+                ''
+              }
+              activity={activity}
+              review={pickReview}
+              built={{
+                checked: promisesAll.filter((p) => p.status === 'passed').length,
+                total: promisesAll.length,
+                aiPicks: aiPicked.length,
+                cards: data?.document?.nodes?.length ?? 0,
+                done: (data?.document?.nodes ?? []).filter((node) => node.phase === 'built').length,
+              }}
+              team={
+                buildTeam?.status === 'proposed'
+                  ? { title: buildTeam.title, agents: roomOf(buildTeam).planned, minutes: buildTeam.minutes }
+                  : null
+              }
+              onTeam={(go) =>
+                buildTeam &&
+                buildSessionId &&
+                teamAction.mutate({ action: go ? 'start' : 'decline', sessionId: buildSessionId, runId: buildTeam.id })
+              }
+              onContinue={() => void startBuild(plan.continueRequest)}
+              onAnswer={(option) => {
+                const label = question?.options[option]?.label;
+                if (label) say(label);
+              }}
+              onPreview={(option) => question && setLookPreview({ question: question.id, option })}
+              onDecideRest={() => say(plan.decideRestMessage)}
+              onBuild={() => void startBuild(t.buildRequest)}
+              onDecide={(option) => {
+                const label = pickReview?.question.options[option]?.label;
+                if (pickReview && label)
+                  say(plan.changeDecisionMessage(pickReview.card, pickReview.question.text, label));
+                setReviewing(null);
+              }}
+              onCloseReview={() => setReviewing(null)}
+              onReviewPicks={() => aiPicked[0] && setReviewing(aiPicked[0].id)}
+              onOpenApp={() => onOpenApp?.()}
+            />
+          )}
           {data && !readOnly && !board.isError && (
             <MapAsk
               empty={!hasMap}
-              disabled={busy || anyActive}
-              onSend={askMap}
+              disabled={busy || (planned ? talking : anyActive)}
+              onSend={
+                planned
+                  ? async (text) => {
+                      if (text) say(text);
+                      return !!text;
+                    }
+                  : askMap
+              }
               agent={
                 <>
                   {agentChip}

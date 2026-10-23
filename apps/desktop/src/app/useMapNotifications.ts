@@ -8,7 +8,7 @@ import { messages } from './messages';
 
 /**
  * No one needs to watch the map while the AI works on it (map-first decision 18): when a project's map conversation
- * finishes its work while the window is in the background, the system says so.
+ * or a build of its plan finishes its work while the window is in the background, the system says so.
  */
 export function useMapNotifications() {
   const t = useMessages(messages);
@@ -18,7 +18,7 @@ export function useMapNotifications() {
   useEffect(() => {
     const now = new Set<string>();
     for (const session of sessions ?? []) {
-      if (session.purpose !== 'map') continue;
+      if (!session.purpose) continue; // the map conversation, or a build of its plan
       if (session.status === 'running' || session.status === 'waiting') now.add(session.id);
       else if (working.current.has(session.id) && !document.hasFocus()) {
         const project = projects?.find((p) => p.path === session.cwd)?.name ?? session.cwd.split('/').pop() ?? '';

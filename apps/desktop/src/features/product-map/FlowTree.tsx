@@ -29,6 +29,8 @@ import {
 } from 'lucide-react';
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
+import { HtmlFrame } from '@/shared/components/html-frame';
+import { FallingSnow } from '@/shared/components/snowscape';
 import { useFormat, useMessages } from '@/shared/i18n';
 
 import {
@@ -62,7 +64,8 @@ import {
   useText,
   type PromiseTarget,
 } from './treeParts';
-import { CHECKLIST_ROWS, layoutTree, SCREEN_H, stepId, type LaidNode } from './treeLayout';
+import { SCREEN_WIDTH, screenPage, WIREFRAME } from './planLook';
+import { CHECKLIST_ROWS, layoutTree, SCREEN_H, stepId, THUMB_W, type LaidNode } from './treeLayout';
 
 export type { PromiseTarget } from './treeParts';
 
@@ -113,6 +116,12 @@ export interface FlowTreeProps {
   stepParts?: (cardId: string) => StepParts;
   /** More for an open promise, after its last check (what the check saw: pictures, output, who confirmed it). */
   promiseExtras?: (cardId: string, promiseId: string) => ReactNode;
+  /** The look planned screens wear (theme CSS); grey lines without one. */
+  look?: string;
+  /** Cards the AI's work touches now: outlined, their screen frosted with snow falling on it. */
+  touching?: ReadonlySet<string>;
+  /** The card a question is about now: outlined so its screen can be read while answering. */
+  asked?: string | null;
 }
 
 /** What the side panel shows: a node's details, a promise of a step, or a form for what a "+" adds. */
@@ -271,6 +280,16 @@ export function FlowTree(props: FlowTreeProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [asked]);
 
+  // The card a question is about comes into view, without opening it: the question is read beside it.
+  useEffect(() => {
+    const where = props.asked && stepOf(props.asked);
+    if (!props.asked || !where) return;
+    const timer = setTimeout(() => canvas.current?.reveal(stepId(where.journey.id, props.asked!)), 420);
+    return () => clearTimeout(timer);
+    // Only a new question moves the view.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.asked]);
+
   /** Opens the step of a promise, picks the promise and brings it into view once it has grown in. */
   const show = (target: PromiseTarget, personId: string) => {
     const journey = map.people
@@ -378,6 +397,9 @@ export function FlowTree(props: FlowTreeProps) {
             map={map}
             open={openSteps.has(node.id)}
             picked={node.id === focusId}
+            look={props.look ?? WIREFRAME}
+            touched={!!node.cardId && !!props.touching?.has(node.cardId)}
+            asked={!!node.cardId && node.cardId === props.asked}
             onHover={hoverNode}
             onPress={pressNode}
           />
@@ -463,7 +485,7 @@ export function FlowTree(props: FlowTreeProps) {
           >
             <X size={14} aria-hidden />
           </Dialog.Close>
-          {focusScreen && <ScreenView key={focusScreen.src} screen={focusScreen} />}
+          {focusScreen && <ScreenView key={focusScreen.src} screen={focusScreen} look={props.look ?? WIREFRAME} />}
           <div>
             <Panel
               key={focusId ?? 'product'}
@@ -504,6 +526,9 @@ const NodeView = memo(function NodeView({
   map,
   open,
   picked,
+  look,
+  touched,
+  asked,
   onHover: hover,
   onPress: press,
 }: {
@@ -511,6 +536,9 @@ const NodeView = memo(function NodeView({
   map: TreeMap;
   open: boolean;
   picked: boolean;
+  look: string;
+  touched: boolean;
+  asked: boolean;
   onHover: (id: string, on: boolean) => void;
   onPress: (node: LaidNode) => void;
 }) {
@@ -571,17 +599,19 @@ const NodeView = memo(function NodeView({
         node,
         shell(
           clsx(
-            'rounded-xl border bg-canvas-raised p-3.5',
+            'rounded-xl border p-3.5',
+            card.tentative ? 'border-dashed bg-canvas' : 'bg-canvas-raised',
             counts.failed
               ? 'border-danger'
               : counts.recheck
                 ? 'border-attention'
-                : open
+                : open || touched || asked
                   ? 'border-interactive'
                   : 'border-line hover:border-interactive',
+            (touched || asked) && 'ring-3 ring-interactive/15',
             counts.checking > 0 && 'motion-sweep',
           ),
-          <StepCard card={card} number={node.index + 1} open={open} loops={node.loops} />,
+          <StepCard card={card} number={node.index + 1} open={open} loops={node.loops} look={look} touched={touched} />,
         ),
       );
     }
@@ -727,11 +757,15 @@ function StepCard({
   number,
   open,
   loops,
+  look,
+  touched,
 }: {
   card: TreeCard;
   number: number;
   open: boolean;
   loops?: LaidNode['loops'];
+  look: string;
+  touched: boolean;
 }) {
   const t = useMessages(messages);
   const format = useFormat();
@@ -764,8 +798,9 @@ function StepCard({
         )}
       </CardLabel>
       <span className="mt-1.5 shrink-0 truncate font-medium">{card.title}</span>
+      <PickLine card={card} />
       {card.description && <span className="shrink-0 truncate text-meta text-fg-muted">{card.description}</span>}
-      {hasScreenArea(card) && <ScreenThumb screen={card.screen} />}
+      {hasScreenArea(card) && <ScreenThumb screen={card.screen} look={look} touched={touched} />}
       <ul className="mt-2 flex shrink-0 flex-col">
         {shown.map((promise) => (
           <CheckRow key={promise.id} promise={promise} />
@@ -802,10 +837,29 @@ function StepCard({
  * keep their shape; a tall one stops at a part of the window so the details stay in reach, and pressing it shows it
  * whole.
  */
-function ScreenView({ screen }: { screen: CardScreen }) {
+function ScreenView({ screen, look }: { screen: CardScreen; look: string }) {
   const t = useMessages(messages);
   const format = useFormat();
   const [whole, setWhole] = useState(false);
+  if (screen.kind === 'planned')
+    return (
+      <div className="flex flex-col gap-2 border-b border-line bg-canvas-sunken px-5 pt-5 pb-4">
+        <span className="flex items-center gap-1.5 pr-8 text-meta text-fg-muted">
+          <PenLine size={12} aria-hidden />
+          {t.screenPlanned}
+        </span>
+        <div className="mx-auto w-full max-w-72">
+          <HtmlFrame
+            html={screenPage(screen.src)}
+            title=""
+            pageWidth={SCREEN_WIDTH}
+            ratio={1.6}
+            theme={look}
+            className="rounded-lg border border-line-subtle bg-canvas"
+          />
+        </div>
+      </div>
+    );
   return (
     <div className="flex flex-col gap-2 border-b border-line bg-canvas-sunken px-5 pt-5 pb-4">
       <span className="flex items-center gap-1.5 pr-8 text-meta text-fg-muted">
@@ -836,8 +890,23 @@ function ScreenView({ screen }: { screen: CardScreen }) {
   );
 }
 
-/** The card's screen at a glance: a real capture, a sketch marked as one, or room left for one. */
-function ScreenThumb({ screen }: { screen?: CardScreen }) {
+/**
+ * What was decided on a card, in one line under its title: the person's latest answer, or what the AI took on its own
+ * ("AI가 정함 · 같이 지워요"), which the person can change from the card.
+ */
+function PickLine({ card }: { card: TreeCard }) {
+  const t = useMessages(messages);
+  const last = card.picks?.at(-1);
+  if (!last) return null;
+  return (
+    <span className="shrink-0 truncate text-meta text-fg-muted">
+      {last.by === 'ai' ? `${t.aiPicked} · ${last.answer}` : last.answer}
+    </span>
+  );
+}
+
+/** The card's screen at a glance: a real capture, a sketch marked as one, a planned screen, or room left for one. */
+function ScreenThumb({ screen, look, touched }: { screen?: CardScreen; look: string; touched: boolean }) {
   const t = useMessages(messages);
   const format = useFormat();
   if (!screen)
@@ -850,6 +919,28 @@ function ScreenThumb({ screen }: { screen?: CardScreen }) {
         {t.noScreen}
       </span>
     );
+  if (screen.kind === 'planned')
+    return (
+      <span
+        className="relative mt-2 block shrink-0 overflow-hidden rounded-md border border-line-subtle bg-canvas"
+        style={{ height: SCREEN_H - 10 }}
+      >
+        <HtmlFrame
+          html={screenPage(screen.src)}
+          title=""
+          pageWidth={SCREEN_WIDTH}
+          ratio={(SCREEN_H - 10) / THUMB_W}
+          theme={look}
+          inert
+          className={clsx('transition-[filter] duration-(--motion-panel)', touched && 'blur-[1.5px]')}
+        />
+        {touched && (
+          <span aria-hidden className="motion-content absolute inset-0 bg-brand-blue/15">
+            <FallingSnow />
+          </span>
+        )}
+      </span>
+    );
   return (
     <span
       className={clsx(
@@ -859,6 +950,11 @@ function ScreenThumb({ screen }: { screen?: CardScreen }) {
       style={{ height: SCREEN_H - 10 }}
     >
       <img src={screen.src} alt="" draggable={false} className="size-full object-cover object-top" />
+      {touched && (
+        <span aria-hidden className="motion-content absolute inset-0 bg-brand-blue/15">
+          <FallingSnow />
+        </span>
+      )}
       <span className="absolute bottom-1.5 left-1.5 flex items-center gap-1 rounded-sm bg-canvas-raised/90 px-1.5 py-0.5 text-meta text-fg-muted shadow-overlay">
         {screen.kind === 'sketch' ? <PenLine size={11} aria-hidden /> : <Camera size={11} aria-hidden />}
         {screen.kind === 'sketch' ? t.screenSketch : t.screenShot}

@@ -3,8 +3,9 @@ import { describe, expect, it } from 'vitest';
 
 import type { Item } from '@/shared/server';
 
-import type { TreeMap } from './flowTreeModel';
-import { buildActivity, pendingQuestion, planPhase, toPlan } from './planData';
+import { toTreeMap } from './flowTreeData';
+import { buildActivity, pendingQuestion, planPhase } from './planData';
+import { blogBoard } from './planExample';
 
 const node = (id: string, more: Partial<FlowNode> = {}): FlowNode => ({ id, title: id, phase: 'planned', ...more });
 const board = (nodes: FlowNode[], more: Partial<FlowGetResult> = {}): FlowGetResult => ({
@@ -13,43 +14,42 @@ const board = (nodes: FlowNode[], more: Partial<FlowGetResult> = {}): FlowGetRes
   document: { nodes, flows: [], edges: [] },
   ...more,
 });
-const tree: TreeMap = { product: 'blog', people: [], cards: {}, recent: [] };
+const words = {
+  unnamed: { ko: '누군가', en: 'Someone' },
+  unnamedRole: { ko: '', en: '' },
+  unplaced: { ko: '정리 전', en: 'Not placed' },
+};
 
-const ask = (id: string, options: unknown[]): Item =>
+const call = (id: string, name: string, args: Record<string, unknown>): Item =>
   ({
     id,
     kind: 'tool_call',
-    name: 'ask_user',
-    args: { question: '누가 쓰나요?', about: 'write', options },
+    name,
+    args,
     status: 'done',
     result: '',
     images: 0,
     commandResult: null,
     fileChanges: null,
   }) as Item;
+const ask = (id: string, options: unknown[]) =>
+  call(id, 'ask_user', { question: '누가 쓰나요?', about: 'write', options });
 const said = (text: string): Item => ({ id: `u-${text}`, kind: 'user_message', text }) as Item;
 
-describe('toPlan', () => {
-  it('shows each card with its screen, my latest answer and the AI’s own pick', () => {
-    const plan = toPlan(
-      board(
-        [
-          node('write', {
-            tentative: true,
-            decisions: [
-              { question: '누가 쓰나요?', options: ['나만', '여럿'], answer: '나만', by: 'person' },
-              { question: '임시 저장할까요?', options: ['네', '아니요'], answer: '아니요', by: 'ai' },
-            ],
-          }),
-        ],
-        { screens: { write: '<main>글쓰기</main>' } },
-      ),
-      tree,
-    );
-    const card = plan.cards.write!;
-    expect([card.sketch, card.note, card.maybe]).toEqual(['<main>글쓰기</main>', '나만', true]);
-    expect(card.decided?.question.text).toBe('임시 저장할까요?');
-    expect(card.decided?.picked).toBe(1);
+describe('a planned map read person first', () => {
+  it('shows each card with its planned screen and what was decided on it', () => {
+    const tree = toTreeMap(blogBoard('building'), new Set(), 'blog', words);
+    expect(tree.cards.list?.screen?.kind).toBe('planned');
+    expect(tree.cards.publish?.picks?.at(-1)).toMatchObject({ answer: '같이 지워요', by: 'ai' });
+    expect(tree.people.map((person) => person.name.ko)).toEqual(['방문자', '글쓴이']);
+  });
+
+  it('shows cards no journey holds yet in a row of their own, only when asked to', () => {
+    const tree = toTreeMap(board([node('home', { tentative: true })]), new Set(), 'blog', words);
+    expect(tree.people.map((p) => [p.name.ko, p.journeys[0]?.steps])).toEqual([['정리 전', ['home']]]);
+    expect(tree.cards.home?.tentative).toBe(true);
+    const plain = { unnamed: words.unnamed, unnamedRole: words.unnamedRole };
+    expect(toTreeMap(board([node('home')]), new Set(), 'blog', plain).people).toEqual([]);
   });
 });
 
@@ -67,29 +67,36 @@ describe('pendingQuestion', () => {
 });
 
 describe('planPhase', () => {
-  const plan = toPlan(board([node('write')]), tree);
   it('asks while something is left, and is ready once nothing is', () => {
-    expect(planPhase(plan, board([node('write')], { undecided: ['느낌'] }), false, false)).toBe('asking');
-    expect(planPhase(plan, board([node('write')]), true, false)).toBe('asking');
-    expect(planPhase(plan, board([node('write')]), false, false)).toBe('ready');
+    expect(planPhase(board([node('write')], { undecided: ['느낌'] }), false, false)).toBe('asking');
+    expect(planPhase(board([node('write')]), true, false)).toBe('asking');
+    expect(planPhase(board([node('write')]), false, false)).toBe('ready');
+    expect(planPhase(board([]), true, false)).toBe('drawing');
   });
-  it('follows the build once it starts', () => {
-    expect(planPhase(plan, board([node('write')], { build: 'running' }), true, false)).toBe('building');
-    expect(planPhase(plan, board([node('write')], { build: 'ended' }), false, false)).toBe('built');
-    expect(planPhase(plan, board([]), true, false)).toBe('drawing');
+  it('follows the build and its TF once it starts', () => {
+    const quiet = { working: false, team: null };
+    const running = board([node('write')], { build: 'running' });
+    const ended = board([node('write')], { build: 'ended' });
+    expect(planPhase(running, false, false, { working: true, team: null })).toBe('building');
+    // The build proposed a TF and waits: not over, it waits for the person's yes.
+    expect(planPhase(ended, false, false, { working: false, team: 'proposed' })).toBe('team');
+    expect(planPhase(ended, false, false, { working: false, team: 'running' })).toBe('building');
+    // Over: built only when every card is.
+    expect(planPhase(ended, false, false, quiet)).toBe('stopped');
+    expect(planPhase(board([node('write', { phase: 'built' })], { build: 'ended' }), false, false, quiet)).toBe(
+      'built',
+    );
   });
 });
 
 describe('buildActivity', () => {
-  const words = {
+  const activity = {
     onCard: (title: string) => `${title} 만드는 중`,
     editing: '고치는 중',
     running: '실행 중',
     reading: '읽는 중',
     thinking: '생각 중',
   };
-  const call = (id: string, name: string, args: Record<string, unknown>): Item =>
-    ({ ...ask(id, []), name, args }) as Item;
   const built = board([node('write', { title: '글 쓰기', sources: ['src/write.tsx'] }), node('read')]);
   it('names the card its latest call is about and the cards its edits touch', () => {
     const items = [
@@ -98,8 +105,8 @@ describe('buildActivity', () => {
       call('e2', 'write', { path: '/p/.alpine-code/map/features/read.json' }),
       call('b1', 'bash', { command: 'pnpm test' }),
     ];
-    expect(buildActivity(items, built, words)).toEqual({ text: '실행 중', touching: ['write', 'read'] });
-    expect(buildActivity(items.slice(0, 2), built, words)?.text).toBe('글 쓰기 만드는 중');
-    expect(buildActivity([said('만들어 주세요')], built, words)).toBeNull();
+    expect(buildActivity(items, built, activity)).toEqual({ text: '실행 중', touching: ['write', 'read'] });
+    expect(buildActivity(items.slice(0, 2), built, activity)?.text).toBe('글 쓰기 만드는 중');
+    expect(buildActivity([said('만들어 주세요')], built, activity)).toBeNull();
   });
 });

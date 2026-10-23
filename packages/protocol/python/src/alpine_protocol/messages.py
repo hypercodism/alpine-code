@@ -848,8 +848,9 @@ class SessionInfo(Message):
     """The first user message, shortened."""
     pinned: bool = False
     archived: bool = False
-    purpose: Literal["map"] | None = None
-    """``map``: the project's map conversation, asked from the map itself and kept off the list of conversations."""
+    purpose: Literal["map", "build"] | None = None
+    """``map``: the project's map conversation, asked from the map itself and kept off the list of conversations.
+    ``build``: a build of a planned map ("이대로 만들기"), also kept off the list; the map follows it."""
     summary: str = ""
     """Short excerpt of the latest answer; empty for conversations saved before this field existed."""
     cwd: str
@@ -1228,8 +1229,8 @@ class SessionNewParams(Message):
     mode: Mode | None = None
     agent: str | None = None
     """An agent id; the project's last agent, else the default agent, when omitted."""
-    purpose: Literal["map"] | None = None
-    """``map`` makes the project's map conversation (see ``SessionInfo.purpose``)."""
+    purpose: Literal["map", "build"] | None = None
+    """``map`` makes the project's map conversation, ``build`` a build of its plan (see ``SessionInfo.purpose``)."""
 
 
 class SessionNewResult(Message):
@@ -2050,7 +2051,10 @@ class FlowGetResult(Message):
     planned: bool = False
     """The map began as the plan of a product that did not exist yet (``plan``): the app shows it as a plan."""
     build: Literal["none", "running", "ended"] = "none"
-    """The last ``build`` of the plan: none yet, its session still working, or ended (done or stopped)."""
+    """The last ``build`` of the plan: none yet, its session still working, or ended (done or stopped). The session
+    may still wait on a TF it proposed or started; the app looks at that in ``build_session``."""
+    build_session: str | None = None
+    """The conversation of the last build, which continues it ("이어서 만들기")."""
 
 
 class FlowNodeParams(Message):

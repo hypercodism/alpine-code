@@ -29,6 +29,7 @@ from alpine_server.flow import (
     edit_flow,
     get_flow,
     node_flow,
+    planning_files,
     prepare_flow,
     promise_flow,
     review_flow,
@@ -982,12 +983,21 @@ def test_building_a_plan_goes_on_without_asking_and_checks_the_promises(proj):
     assert "<skill_content" not in prepared.prompt  # the skill came with the plan, in the same conversation
 
 
+def test_the_map_is_written_without_asking_only_while_its_product_is_planned(proj):
+    assert planning_files(proj) == []
+    prepare(proj, action="plan", request="블로그", nodeId=None, flowId=None)
+    assert planning_files(proj) == [(proj / BASE).resolve()]
+    prepare(proj, action="build", request="만들어 주세요.", nodeId=None, flowId=None)
+    assert planning_files(proj) == []
+
+
 def test_the_map_says_whether_its_build_is_still_working(proj, monkeypatch):
     prepare(proj, action="plan", request="블로그", nodeId=None, flowId=None)
     assert get(proj).build == "none"
     make_session(proj, sid="b1", calls=(), status="running", updated="2999-01-01T00:00:00+00:00")
     prepare(proj, action="build", request="만들어 주세요.", nodeId=None, flowId=None, sessionId="b1")
     assert get(proj).build == "running"
+    assert get(proj).build_session == "b1"
     monkeypatch.setattr(map_state, "live_ids", lambda: set())  # the server no longer runs it
     assert get(proj).build == "ended"
 

@@ -73,14 +73,35 @@ export interface TreeCard {
   decision?: string;
   /** The conversation last started on this card. */
   sessionId?: string | null;
-  /** What it looks like: a capture of the running app, or until one is taken, a sketch the AI drew from the code. */
+  /**
+   * What it looks like: a capture of the running app, or until one is taken, a sketch the AI drew from the code, or
+   * for a product being planned the screen the AI drew for it.
+   */
   screen?: CardScreen;
+  /** A planned step that exists only if an open question goes one way: drawn dashed until it is answered. */
+  tentative?: boolean;
+  /** Product questions answered on this card, oldest first: by the person, or by the AI on its own. */
+  picks?: CardPick[];
+}
+
+/** The journey holding the cards no journey holds yet, while the AI is still placing them. */
+export const UNPLACED = 'unplaced';
+
+export interface CardPick {
+  question: string;
+  options: string[];
+  answer: string;
+  by: 'person' | 'ai';
 }
 
 export interface CardScreen {
-  /** An image the page can show (a data or asset URL). */
+  /** An image the page can show (a data or asset URL); for `planned`, the screen's HTML. */
   src: string;
-  kind: 'shot' | 'sketch';
+  /**
+   * `shot`: captured from the running app. `sketch`: an SVG the AI drew from the code. `planned`: the HTML the AI drew
+   * while planning, drawn with the theme tokens so a look restyles it.
+   */
+  kind: 'shot' | 'sketch' | 'planned';
   /** When it was captured or drawn. */
   at?: string | null;
 }

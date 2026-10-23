@@ -112,7 +112,8 @@ class SessionInfo:
     pinned: bool = False
     archived: bool = False
     purpose: str | None = None
-    """``"map"`` for a project's map conversation, which the app keeps off the list of conversations."""
+    """``"map"`` for a project's map conversation, ``"build"`` for a build of its plan; the app keeps both off the list
+    of conversations."""
     summary: str = ""
     """A short excerpt of the latest answer, for finding and resuming work."""
 

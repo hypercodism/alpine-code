@@ -2249,6 +2249,7 @@ export interface FlowGetResult {
   unmapped?: UnmappedPart[];
   planned?: boolean;
   build?: 'none' | 'running' | 'ended';
+  buildSession?: string | null;
 }
 /**
  * The assembled map the app shows.
@@ -3088,7 +3089,7 @@ export interface SessionInfo {
   title: string;
   pinned?: boolean;
   archived?: boolean;
-  purpose?: 'map' | null;
+  purpose?: ('map' | 'build') | null;
   summary?: string;
   cwd: string;
   model: string;
@@ -4250,7 +4251,7 @@ export interface SessionNewParams {
   model?: string | null;
   mode?: ('default' | 'accept_edits' | 'auto' | 'yolo') | null;
   agent?: string | null;
-  purpose?: 'map' | null;
+  purpose?: ('map' | 'build') | null;
 }
 /**
  * This interface was referenced by `AlpineProtocol`'s JSON-Schema

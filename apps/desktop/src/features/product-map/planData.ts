@@ -1,57 +1,47 @@
-import type { CardDecision, FlowGetResult, MapLook, ToolCallItem } from '@alpine/protocol';
+import type { FlowGetResult, ToolCallItem } from '@alpine/protocol';
 
 import { ASK_USER, lookCss, pageOf, readQuestion } from '@/shared/questions';
-import { toolKind } from '@/shared/tool-calls';
 import type { Item } from '@/shared/server';
+import { toolKind } from '@/shared/tool-calls';
 
-import type { TreeMap } from './flowTreeModel';
-import type { Plan, PlanActivity, PlanCard, PlanPhase, PlanQuestion } from './planModel';
-import type { PlanLook } from './planThemes';
+/** A question about the product, as the map shows it above its input. */
+export interface PlanQuestion {
+  id: string;
+  /** The card it changes, outlined while it is asked; `null` when it is about the whole product. */
+  about: string | null;
+  text: string;
+  options: PlanOption[];
+}
+
+export interface PlanOption {
+  label: string;
+  /** Why someone might pick it, in a few words. */
+  detail?: string;
+  /** The AI's pick: shown first and marked. */
+  recommended?: boolean;
+  /** For "how should it look": the look this option is, as theme CSS. */
+  look?: string;
+}
 
 /**
- * A planned map from what the server sends for it: the people and steps of the person-first tree, each step with the
- * screen the AI drew (`screens/<card>.html`), the promises it assumed and the product questions answered on it. The
- * latest answer the person gave is the card's note; the latest one the AI took on its own is its decision to review.
+ * `team`: the build proposed a TF and waits for the person's yes. `stopped`: the build is over with cards left to
+ * build.
  */
-export function toPlan(result: FlowGetResult, tree: TreeMap): Plan {
-  const cards: Record<string, PlanCard> = {};
-  for (const node of result.document?.nodes ?? []) {
-    const decisions = node.decisions ?? [];
-    const mine = decisions.filter((d) => d.by !== 'ai').at(-1);
-    const ai = decisions.filter((d) => d.by === 'ai').at(-1);
-    cards[node.id] = {
-      id: node.id,
-      title: node.title,
-      sketch: result.screens?.[node.id] ?? '',
-      note: mine?.answer,
-      maybe: !!node.tentative,
-      promises: tree.cards[node.id]?.promises ?? [],
-      capture: result.previews?.[node.id] ? `<img src="${result.previews[node.id]}" class="w-full">` : undefined,
-      decided: ai ? decidedBy(ai, node.id) : undefined,
-    };
-  }
-  return { product: tree.product, people: tree.people, cards };
+export type PlanPhase = 'drawing' | 'asking' | 'ready' | 'building' | 'team' | 'built' | 'stopped';
+
+/** How the build's own conversation stands: whether it works now, and the state of its latest TF. */
+export interface BuildState {
+  working: boolean;
+  team: string | null;
 }
 
-function decidedBy(decision: CardDecision, cardId: string): PlanCard['decided'] {
-  const labels = decision.options?.length ? decision.options : [decision.answer];
-  const picked = Math.max(labels.indexOf(decision.answer), 0);
-  return {
-    question: {
-      id: `decided:${cardId}`,
-      about: cardId,
-      text: decision.question,
-      options: labels.map((label) => ({ label })),
-    },
-    picked,
-  };
-}
+const TEAM_WORKING = new Set(['running', 'over', 'stopping']);
 
-/** The look the planned screens wear, as theme CSS. */
-export const mapLook = (look: MapLook): PlanLook => ({
-  id: 'map',
-  css: lookCss({ ...look, on_accent: look.onAccent }),
-});
+/** What the AI is doing right now while building, in its words, and the cards that work touches. */
+export interface PlanActivity {
+  text: string;
+  touching: string[];
+}
 
 /**
  * The question the AI asked last in the map's conversation, while I have not answered it: its options with the AI's
@@ -73,7 +63,7 @@ export function pendingQuestion(items: Item[]): { question: PlanQuestion; sample
         label: option.label,
         detail: option.detail || undefined,
         recommended: i === 0,
-        look: option.look ? { id: `${call.id}:${i}`, css: lookCss(option.look) } : undefined,
+        look: option.look ? lookCss(option.look) : undefined,
       })),
     },
     sample: pageOf(asked, asked.options[0]),
@@ -82,15 +72,24 @@ export function pendingQuestion(items: Item[]): { question: PlanQuestion; sample
 
 /**
  * Where the plan stands, from facts only: the AI drawing the first map, asking (a question waits, the AI is changing
- * the map, or decisions are still open), ready once nothing is left, building while the build's session works, built
- * once it ended (the done line then says how many promises were checked).
+ * the map, or decisions are still open), ready once nothing is left. Once built, it follows the build's conversation
+ * and its TF: building while either works, `team` while a TF waits for the person's yes, and once both are quiet,
+ * built when every card is, else stopped.
  */
-export function planPhase(plan: Plan, result: FlowGetResult, working: boolean, asking: boolean): PlanPhase {
+export function planPhase(
+  result: FlowGetResult,
+  working: boolean,
+  asking: boolean,
+  build: BuildState = { working: false, team: null },
+): PlanPhase {
   const nodes = result.document?.nodes ?? [];
-  if (result.build === 'running') return 'building';
-  if (result.build === 'ended') return 'built';
+  if (result.build !== 'none' && result.build !== undefined) {
+    if (build.team === 'proposed' && !build.working) return 'team';
+    if (result.build === 'running' || build.working || (build.team && TEAM_WORKING.has(build.team))) return 'building';
+    return nodes.length && nodes.every((node) => node.phase === 'built') ? 'built' : 'stopped';
+  }
   if (!nodes.length) return working ? 'drawing' : 'asking';
-  if (asking || working || (result.undecided?.length ?? 0) > 0 || !Object.keys(plan.cards).length) return 'asking';
+  if (asking || working || (result.undecided?.length ?? 0) > 0) return 'asking';
   return 'ready';
 }
 

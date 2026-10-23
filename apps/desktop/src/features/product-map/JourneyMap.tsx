@@ -31,6 +31,9 @@ export function JourneyMap({
   reveal = null,
   stepParts,
   promiseExtras,
+  look,
+  touching,
+  asked,
 }: {
   cwd: string;
   /** `board` read person first (`toTreeMap`). */
@@ -47,6 +50,10 @@ export function JourneyMap({
   reveal?: { cardId: string; seq: number } | null;
   stepParts?: (cardId: string) => StepParts;
   promiseExtras?: (cardId: string, promiseId: string) => ReactNode;
+  /** A planned product: the look its screens wear, the cards the AI works on now, the card a question is about. */
+  look?: string;
+  touching?: ReadonlySet<string>;
+  asked?: string | null;
 }) {
   const t = useMessages(flowTreeMessages);
   const edit = useEditFlow();
@@ -71,6 +78,9 @@ export function JourneyMap({
       reveal={reveal}
       stepParts={stepParts}
       promiseExtras={promiseExtras}
+      look={look}
+      touching={touching}
+      asked={asked}
       seenAt={seenAt ?? undefined}
       readSource={readSource}
       onCheck={(targets) => void start('verify', { nodeIds: [...new Set(targets.map((target) => target.cardId))] })}

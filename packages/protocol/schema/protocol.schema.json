@@ -4191,6 +4191,17 @@
             "ended"
           ],
           "type": "string"
+        },
+        "buildSession": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -8102,7 +8113,10 @@
         "purpose": {
           "anyOf": [
             {
-              "const": "map",
+              "enum": [
+                "map",
+                "build"
+              ],
               "type": "string"
             },
             {
@@ -8303,7 +8317,10 @@
         "purpose": {
           "anyOf": [
             {
-              "const": "map",
+              "enum": [
+                "map",
+                "build"
+              ],
               "type": "string"
             },
             {

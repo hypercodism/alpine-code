@@ -91,6 +91,7 @@ from alpine_protocol import (
 
 from . import map_state
 from .agents import agents
+from .flow import planning_files
 from .methods import APP_ERROR, INVALID_PARAMS, MethodError
 from .skills import skills
 from .tools import list_tools
@@ -544,6 +545,9 @@ class SessionManager:
     def _keep(self, session: Session, approver: _Approver) -> _Live:
         """A live session; a turn it asks for itself (a TF's result) runs as its task, after the one running."""
         live = _Live(session, approver)
+        if session.info.purpose == "map":
+            root = session.workspace.root
+            session.policy.editable = lambda: planning_files(root)
 
         def turn(notice: str) -> None:
             before = live.task

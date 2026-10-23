@@ -26,6 +26,7 @@ as outside.
 from __future__ import annotations
 
 import tempfile
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from functools import cache
@@ -141,6 +142,9 @@ class PermissionPolicy:
     """Folders outside the workspace whose files may be read without asking: the user's memory folders."""
     guards: GuardMatcher | None = None
     """Calls the user is always asked about, whatever the mode and whatever was allowed before (memory guards)."""
+    editable: Callable[[], Iterable[Path]] | None = None
+    """Folders inside the workspace whose files the file tools may change without asking, whatever the mode (the map
+    files of a product being planned). Asked at every call, since what it returns changes while the session lives."""
 
     def evaluate(
         self, name: str, args: dict[str, Any], tool: Tool | None, remembered: Remembered | None = None
@@ -156,7 +160,8 @@ class PermissionPolicy:
         remembered = remembered or Remembered()
         if self.readable:
             remembered = replace(remembered, read_dirs=remembered.read_dirs | {d.resolve() for d in self.readable})
-        return _Evaluation(self.workspace, self.mode, remembered).evaluate(name, args, tool)
+        editable = tuple(d.resolve() for d in self.editable()) if self.editable is not None else ()
+        return _Evaluation(self.workspace, self.mode, remembered, editable).evaluate(name, args, tool)
 
 
 @dataclass(frozen=True)
@@ -166,6 +171,7 @@ class _Evaluation:
     workspace: Workspace
     mode: Mode
     remembered: Remembered
+    editable: tuple[Path, ...] = ()
 
     def evaluate(self, name: str, args: dict[str, Any], tool: Tool | None) -> Verdict:
         if name == "bash":
@@ -178,6 +184,8 @@ class _Evaluation:
             return self._outside(kind, target)
         if kind == "read":
             return self._read_inside(name, target)
+        if any(_inside(target, d) for d in self.editable):
+            return ALLOW
         return ALLOW if self.mode in (Mode.ACCEPT_EDITS, Mode.AUTO) else self._by_tool(name)
 
     @property

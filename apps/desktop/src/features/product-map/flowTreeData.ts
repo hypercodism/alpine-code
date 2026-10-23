@@ -1,6 +1,14 @@
 import type { FlowGetResult, FlowNode, ProductFlow } from '@alpine/protocol';
 
-import type { Journey, Person, PromiseStatus, TreeCard, TreeMap, TreePromise } from './flowTreeModel';
+import {
+  UNPLACED,
+  type Journey,
+  type Person,
+  type PromiseStatus,
+  type TreeCard,
+  type TreeMap,
+  type TreePromise,
+} from './flowTreeModel';
 
 /**
  * The person-first tree from what the server sends for the map (`flow/get`): cards with their promises and the state
@@ -13,7 +21,13 @@ export function toTreeMap(
   /** Ids of the sessions working now (running or waiting): their cards show as being checked. */
   working: ReadonlySet<string>,
   product: string,
-  words: { unnamed: Person['name']; unnamedRole: Person['role'] },
+  words: {
+    unnamed: Person['name'];
+    unnamedRole: Person['role'];
+    /** Given, cards no journey holds yet show in a row of their own (a plan the AI is still drawing). */
+    unplaced?: Person['name'];
+    unplacedRole?: Person['role'];
+  },
 ): TreeMap {
   const document = result.document ?? {};
   const cards: Record<string, TreeCard> = {};
@@ -32,6 +46,17 @@ export function toTreeMap(
     tone: ((index % 5) + 1) as Person['tone'],
     journeys: flows.map(toJourney),
   }));
+  const placed = new Set(people.flatMap((person) => person.journeys.flatMap((journey) => journey.steps)));
+  const loose = Object.keys(cards).filter((id) => !placed.has(id));
+  if (words.unplaced && loose.length)
+    people.push({
+      id: 'actor:unplaced',
+      name: words.unplaced,
+      role: words.unplacedRole ?? { ko: '', en: '' },
+      start: { ko: '', en: '' },
+      tone: ((people.length % 5) + 1) as Person['tone'],
+      journeys: [{ id: UNPLACED, title: words.unplaced, goal: words.unplacedRole ?? { ko: '', en: '' }, steps: loose }],
+    });
 
   return {
     product,
@@ -99,6 +124,15 @@ function toCard(node: FlowNode, result: FlowGetResult, working: ReadonlySet<stri
       ? { src: result.previews[node.id]!, kind: 'shot', at: node.previewAt ?? null }
       : result.sketches?.[node.id]
         ? { src: result.sketches[node.id]!, kind: 'sketch', at: null }
-        : undefined,
+        : result.screens?.[node.id]
+          ? { src: result.screens[node.id]!, kind: 'planned', at: null }
+          : undefined,
+    tentative: !!node.tentative,
+    picks: (node.decisions ?? []).map((pick) => ({
+      question: pick.question,
+      options: pick.options ?? [],
+      answer: pick.answer,
+      by: pick.by ?? 'person',
+    })),
   };
 }

@@ -16,7 +16,6 @@ export function MapAsk({
   disabled,
   onSend,
   agent,
-  placeholder,
 }: {
   /** No map yet: the placeholder invites drawing one, and sending with no words draws it. */
   empty: boolean;
@@ -25,8 +24,6 @@ export function MapAsk({
   onSend: (text: string, from: DOMRect | null) => Promise<boolean>;
   /** Who does the map's work (an agent chip), under the words as in every input. */
   agent?: ReactNode;
-  /** In place of the map's own invitation, e.g. for asking about one card. */
-  placeholder?: string;
 }) {
   const t = useMessages(messages);
   const [text, setText] = useState('');
@@ -51,7 +48,7 @@ export function MapAsk({
         value={text}
         rows={1}
         aria-label={t.mapAskLabel}
-        placeholder={placeholder ?? (empty ? t.mapAskFirst : t.mapAskMore)}
+        placeholder={empty ? t.mapAskFirst : t.mapAskMore}
         onChange={(event) => setText(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {

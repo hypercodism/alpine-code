@@ -294,6 +294,7 @@ def _result(root: Path, layout: Layout) -> FlowGetResult:
         unmapped=list(layout.map.unmapped),
         planned=bool(project.get("planned")),
         build=_build_state(project, sessions),
+        build_session=project.get("buildSession") or None,
     )
     result = _with_etag(result)
     if writable:
@@ -326,6 +327,19 @@ def _build_state(project: dict, sessions: list) -> str:
     if map_state.is_live(info) or (parse_time(info.updated_at) or 0) <= (started or 0):
         return "running"
     return "ended"
+
+
+def planning_files(cwd: Path) -> list[Path]:
+    """The map's folder while its product is being planned (the map began as a plan and no build has started): the
+    map conversation writes there without asking, since the map is the plan, not code."""
+    try:
+        root = folder(str(cwd))
+        project = map_state.load_project(root)
+        if not project.get("planned") or project.get("buildSession"):
+            return []
+        return [inside(root, MAP_DIR)]
+    except (OSError, ValueError, MethodError):
+        return []
 
 
 def _with_etag(result: FlowGetResult) -> FlowGetResult:
