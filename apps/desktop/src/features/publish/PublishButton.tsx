@@ -7,9 +7,10 @@ import { usePublish, usePublishStatus } from '@/shared/server';
 
 import { messages } from './messages';
 import { PublishPanel } from './PublishPanel';
+import { usePublishRequest } from './publishRequest';
 
 /**
- * The top bar's 올리기 (decision 14): a dot while there are changes not online yet (`publish/status`); it opens the
+ * The top bar's 올리기 (decision 14), on a session and on the map: a dot while there are changes not online yet (`publish/status`); it opens the
  * sheet beside it. A project that cannot be put online at all (no web app in it) has no button. A person who is not
  * signed in or has no Node.js yet still sees it: the sheet says what is missing.
  */
@@ -30,7 +31,14 @@ export function PublishButton({
   const t = useMessages(messages);
   const status = usePublishStatus(cwd);
   const flow = usePublish(cwd);
-  const [open, setOpen] = useState(defaultOpen);
+  const [shown, setShown] = useState(defaultOpen);
+  // 인터넷에 올리기 elsewhere (the map's done line) opens this sheet, until it is closed.
+  const asked = usePublishRequest((state) => state.cwd === cwd);
+  const open = shown || asked;
+  const setOpen = (next: boolean) => {
+    if (!next) usePublishRequest.getState().take();
+    setShown(next);
+  };
   const found = status.data;
   // No description or no web adapter: nothing here to put online. An unknown reason still opens a sheet that says so.
   if (!found || found.reason === 'not_web' || found.reason === 'no_description') return null;

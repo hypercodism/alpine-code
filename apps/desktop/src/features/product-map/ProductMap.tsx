@@ -87,6 +87,7 @@ export function ProductMap({
   onSession,
   onShowConversation,
   onOpenApp,
+  onPublish,
   onNewHere,
   onFixConnection,
   demo = false,
@@ -100,6 +101,8 @@ export function ProductMap({
   onShowConversation?: () => void;
   /** Runs and shows the project's app (its development server, in the dock). */
   onOpenApp?: () => void;
+  /** Puts the app online, offered beside 앱 열기 once it is built; absent without Alpine Cloud or a web app. */
+  onPublish?: () => void;
   /** Opens 새 프로젝트 for this folder, which is empty (map-first 41). */
   onNewHere?: (folder: string) => void;
   /** Opens the model connection, where a build stopped by a sign-in, credits or a plan limit is fixed. */
@@ -1188,6 +1191,7 @@ export function ProductMap({
               onNextReview={nextReview}
               onReviewPicks={() => reviewOrder[0] && setReviewing(reviewOrder[0])}
               onOpenApp={() => onOpenApp?.()}
+              onPublish={onPublish}
               onFixConnection={() => onFixConnection?.()}
               onStop={stopWork}
               onLook={showWork}

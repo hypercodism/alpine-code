@@ -31,6 +31,7 @@ export function WorkspaceDock({
   sessionId,
   scope,
   summary,
+  summaryLabel,
   changes,
   showMap = true,
   children,
@@ -40,6 +41,8 @@ export function WorkspaceDock({
   scope: string;
   /** What 요약 shows on this page. */
   summary: ReactNode;
+  /** The first tab's name where it is not a summary (on the map it is the map's conversation: 대화). */
+  summaryLabel?: string;
   /** The 변경 사항 tab (the work result), which stays mounted. */
   changes: DockTab;
   /** False on the map itself, where a small copy of it would only repeat the page. */
@@ -68,7 +71,14 @@ export function WorkspaceDock({
           ) : undefined
         }
         tabs={[
-          { id: SUMMARY_TAB, label: t.summary, icon: LayoutList, divider: true, bare: true, content: summary },
+          {
+            id: SUMMARY_TAB,
+            label: summaryLabel ?? t.summary,
+            icon: LayoutList,
+            divider: true,
+            bare: true,
+            content: summary,
+          },
           {
             id: 'terminal',
             label: t.terminal,

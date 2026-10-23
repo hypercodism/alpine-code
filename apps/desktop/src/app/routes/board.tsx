@@ -3,6 +3,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router';
 
 import { SUMMARY_TAB, WorkspaceDock } from '@/app/WorkspaceDock';
 import { openApp } from '@/features/development-servers';
+import { openPublish, usePublishable } from '@/features/publish/publishRequest';
 import { messages as dockMessages } from '@/features/dock/messages';
 import { showDockTab, useDockExpanded, useDockOpen } from '@/features/dock/state';
 import { useMapTalk } from '@/features/product-map/mapTalk';
@@ -12,7 +13,7 @@ import { MissingProject } from '@/features/rail/MissingProject';
 import { Session } from '@/features/session/Session';
 import { useWorkResultTab } from '@/features/work-result/useWorkResultTab';
 import { useMessages } from '@/shared/i18n';
-import { useProjects, useSession } from '@/shared/server';
+import { useCloudEnabled, useProjects, useSession } from '@/shared/server';
 
 export const Route = createFileRoute('/board')({
   validateSearch: (search: Record<string, unknown>): { project?: string; session?: string } => ({
@@ -36,10 +37,12 @@ function BoardRoute() {
   const scope = `board:${chosen ?? ''}`;
   const [expanded] = useDockExpanded(scope);
   const resultTab = useWorkResultTab(session ?? null, chosen);
+  const cloud = useCloudEnabled();
+  const publishable = usePublishable(project?.path ?? '', cloud && !!project);
   const t = useMessages(dockMessages);
   const m = useMessages(mapMessages);
   const attachedHere = !!session && !!attached.data && attached.data.info.cwd === chosen && !attached.data.deleted;
-  // The map's agent session is its summary, in the dock: one place for the conversation on every page.
+  // The map's conversation is in the dock's first tab, named 대화 here: one place for it on every page.
   const summary = attachedHere ? (
     <div className="flex min-h-0 grow flex-col">
       {/* Another conversation opened beside the map (a card's, one brought over): my words to the map do not go
@@ -73,6 +76,7 @@ function BoardRoute() {
       sessionId={attachedHere ? session : undefined}
       scope={scope}
       summary={summary}
+      summaryLabel={m.conversationTab}
       changes={resultTab}
       showMap={false}
     >
@@ -89,6 +93,7 @@ function BoardRoute() {
           openApp(project.path);
           showDockTab('servers');
         }}
+        onPublish={publishable ? () => openPublish(project.path) : undefined}
         onFixConnection={() => void navigate({ to: '/settings', search: { tab: 'connection' } })}
         onNewHere={(folder) => void navigate({ to: '/', search: { folder } })}
         // An empty id lets go of the session (the map started over).

@@ -4,7 +4,10 @@ import { ArrowLeft, ArrowRight, GitBranch, PanelLeft } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
 import { DockToggle } from '@/features/dock/Dock';
+import { useMapTalk } from '@/features/product-map/mapTalk';
+import { MapStatusWord } from '@/features/product-map/MapStatus';
 import { PublishButton } from '@/features/publish/PublishButton';
+import { usePublishable } from '@/features/publish/publishRequest';
 import { useWorkResult } from '@/features/work-result/useWorkResult';
 import { StatusWord } from '@/shared/components/status';
 import { useMessages } from '@/shared/i18n';
@@ -163,7 +166,10 @@ function SessionPart({ sessionId }: { sessionId: string }) {
   );
 }
 
-/** The project of the product map, and the dock button counting the changed files of the attached session. */
+/**
+ * The project of the product map and where the map stands (기획 중, 만드는 중…), 올리기 when it has a web app to put
+ * online (Alpine Cloud), and the dock button counting the changed files of the attached session.
+ */
 function BoardPart({ project, sessionId }: { project?: string; sessionId: string | null }) {
   const projects = useProjects();
   const result = useWorkResult(sessionId, project);
@@ -171,6 +177,10 @@ function BoardPart({ project, sessionId }: { project?: string; sessionId: string
   const name = project && (listed?.name ?? project.split('/').pop());
   // The board renders no dock for a project that is missing or archived, so the toggle would open nothing.
   const shown = !!listed && !listed.archived;
+  const cloud = useCloudEnabled();
+  const publishable = usePublishable(shown ? (project ?? '') : '', cloud && shown);
+  // The AI's fixes from the sheet go where the map's words go.
+  const { talkTo } = useMapTalk(shown ? (project ?? '') : '');
   return (
     <>
       <Drag className="ml-3 gap-2">
@@ -179,7 +189,13 @@ function BoardPart({ project, sessionId }: { project?: string; sessionId: string
             {name}
           </span>
         )}
+        {shown && project && <MapStatusWord cwd={project} className="ml-1" />}
       </Drag>
+      {publishable && project && name && (
+        <div className="mr-2 shrink-0">
+          <PublishButton cwd={project} name={name} sessionId={talkTo} />
+        </div>
+      )}
       {shown && <DockToggle files={result?.files.length} />}
     </>
   );
