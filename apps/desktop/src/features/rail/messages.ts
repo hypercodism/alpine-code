@@ -41,7 +41,6 @@ export const messages = defineMessages({
     collapseProject: (name: string) => `${name} 접기`,
     expandProject: (name: string) => `${name} 펼치기`,
     openProject: (name: string) => `${name} 열기`,
-    newInProject: (name: string) => `${name}에서 새 세션`,
     busyArchive: '작업이 끝나면 보관할 수 있어요.',
     unreadLabel: '읽지 않은 새 결과',
     thinking: '생각하는 중',
@@ -53,7 +52,7 @@ export const messages = defineMessages({
 
     openMemory: '기억 열기',
     label: '주 메뉴',
-    newSession: '새 세션',
+    newProject: '새 프로젝트',
     agents: '에이전트',
     settings: '설정',
     projects: '프로젝트',
@@ -117,7 +116,6 @@ export const messages = defineMessages({
     collapseProject: (name: string) => `Collapse ${name}`,
     expandProject: (name: string) => `Expand ${name}`,
     openProject: (name: string) => `Open ${name}`,
-    newInProject: (name: string) => `New session in ${name}`,
     busyArchive: 'You can archive when work finishes.',
     unreadLabel: 'Unread result',
     thinking: 'Thinking',
@@ -129,7 +127,7 @@ export const messages = defineMessages({
 
     openMemory: 'Open memory',
     label: 'Main menu',
-    newSession: 'New session',
+    newProject: 'New project',
     agents: 'Agents',
     settings: 'Settings',
     projects: 'Projects',

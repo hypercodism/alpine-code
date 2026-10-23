@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRouter, RouterProvider } from '@tanstack/react-router';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { LocaleProvider } from '@/shared/i18n';
 import { scriptedConnection, ServerProvider, setUpScript } from '@/shared/server';
@@ -29,7 +29,18 @@ function mount() {
   );
 }
 
+beforeEach(() => {
+  // The start screen (새 프로젝트) measures itself.
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+});
 afterEach(() => {
+  vi.unstubAllGlobals();
   cleanup();
   update.ready = null;
 });

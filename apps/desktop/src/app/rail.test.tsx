@@ -124,18 +124,17 @@ describe('independent project browsing', () => {
     await waitFor(() => expect(router.state.location.href).toBe('/board' + q(docs)));
   });
 
-  it('still starts a new session in a project from its + and from the top link', async () => {
+  it('starts nothing in a project from the rail: a project is its map, and 새 프로젝트 is the one new thing', async () => {
     const { router } = mount('/board' + q(app));
-    fireEvent.click(await screen.findByRole('link', { name: 'docs-site에서 새 세션' }));
-    await waitFor(() => expect(router.state.location.href).toBe('/' + q(docs)));
-    expect(
-      within(await rail())
-        .getByRole('link', { name: /새 세션\s*⌘N/ })
-        .getAttribute('href'),
-    ).toBe('/' + q(docs));
+    expect(screen.queryByRole('link', { name: /에서 새 세션/ })).toBeNull();
+    const top = within(await rail()).getByRole('link', { name: /새 프로젝트\s*⌘N/ });
+    expect(top.getAttribute('href')).toBe('/');
+    fireEvent.click(top);
+    await waitFor(() => expect(router.state.location.href).toBe('/'));
+    expect(await screen.findByRole('heading', { name: '무엇을 만들어 볼까요?' })).toBeTruthy();
   });
 
-  it('offers 새로 만들기 first in the project dialog, and it opens the new session in that mode', async () => {
+  it('offers 새로 만들기 first in the project dialog, and it opens 새 프로젝트', async () => {
     const { router } = mount('/session/cart');
     fireEvent.click(await screen.findByRole('button', { name: '프로젝트 추가' }));
     const dialog = await screen.findByRole('dialog');
@@ -146,24 +145,19 @@ describe('independent project browsing', () => {
       '내 컴퓨터의 프로젝트 열기이미 이 컴퓨터에 있는 폴더⌘O',
     ]);
     fireEvent.click(rows[0]!);
-    await waitFor(() => expect(router.state.location.href).toBe('/?new=1'));
+    await waitFor(() => expect(router.state.location.href).toBe('/'));
     expect(await screen.findByRole('heading', { name: '무엇을 만들어 볼까요?' })).toBeTruthy();
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
-  it('keeps project pages when changing project and starts new work in the current project', async () => {
+  it('keeps project pages when changing project, and ⌘N opens 새 프로젝트 from anywhere', async () => {
     const { router } = mount('/board' + q(app));
     fireEvent.click(await screen.findByRole('button', { name: 'docs-site 열기' }));
     await waitFor(() => expect(router.state.location.href).toBe('/board' + q(docs)));
-    expect(
-      within(await rail())
-        .getByRole('link', { name: /새 세션\s*⌘N/ })
-        .getAttribute('href'),
-    ).toBe('/' + q(docs));
     fireEvent.click(within(await rail()).getByRole('link', { name: '설정' }));
     await waitFor(() => expect(router.state.location.pathname).toBe('/settings'));
     fireEvent.keyDown(window, { key: 'n', metaKey: true });
-    await waitFor(() => expect(router.state.location.href).toBe('/' + q(docs)));
+    await waitFor(() => expect(router.state.location.href).toBe('/'));
   });
 
   it('finds a waiting conversation across closed projects with one filter', async () => {
@@ -332,7 +326,7 @@ describe('independent project browsing', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/session/cart'));
   });
 
-  it('remembers project expansion and the last conversation after navigation state is reloaded', async () => {
+  it('remembers project expansion and opens the last project on its map after navigation state is reloaded', async () => {
     mount('/session/readme');
     fireEvent.click(await toggle('alpine-code', false));
     const saved = localStorage.getItem('alpine.navigation.v1')!;
@@ -341,7 +335,7 @@ describe('independent project browsing', () => {
     localStorage.setItem('alpine.navigation.v1', saved);
     await useNavigation.persist.rehydrate();
     const reopened = mount('/');
-    await waitFor(() => expect(reopened.router.state.location.pathname).toBe('/session/readme'));
+    await waitFor(() => expect(reopened.router.state.location.href).toBe('/board' + q(docs)));
     await toggle('alpine-code', true);
     await toggle('docs-site', true);
     expect(useNavigation.getState().lastSessions[docs]).toBe('readme');

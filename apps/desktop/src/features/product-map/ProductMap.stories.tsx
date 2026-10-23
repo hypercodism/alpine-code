@@ -51,6 +51,14 @@ const shopFolders: Script = {
     },
   },
 };
+/** A folder with nothing in it: no code to map, so the map offers to start a new product there. */
+export const EmptyFolder: Story = {
+  parameters: {
+    server: mergeScripts(setUpScript(), flowScript({ nodes: [], flows: [], edges: [] }), {
+      results: { 'files/list': { entries: [], nextOffset: 0, hasMore: false } },
+    }),
+  },
+};
 export const Empty: Story = {
   parameters: { server: mergeScripts(setUpScript(), flowScript({ nodes: [], flows: [], edges: [] }), shopFolders) },
 };

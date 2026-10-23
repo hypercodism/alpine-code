@@ -581,7 +581,7 @@ export function sessionScript(options: SessionScriptOptions = {}): Script {
           throw new ServerError(-32000, 'The model could not be reached', { reason: 'model_failed' });
         return { judgement: standInJudgement(text, locale, pickable, newProject === true) };
       },
-      'projects/create': async ({ id, idea, template, name, agent, mode }, context) => {
+      'projects/create': async ({ id, idea, template, name, folder: chosen, agent, mode }, context) => {
         const script = options.newProject ?? {};
         const pause = () => sleep(script.createMs ?? 700);
         await pause();
@@ -594,11 +594,12 @@ export function sessionScript(options: SessionScriptOptions = {}): Script {
             .toLowerCase()
             .replace(/[^a-z0-9]+/g, '-')
             .replace(/^-+|-+$/g, '') || 'new-app';
-        let folder = base;
-        for (let n = 2; made.has(folder); n++) folder = `${base}-${n}`;
+        let folder = chosen ? (chosen.split('/').filter(Boolean).at(-1) ?? base) : base;
+        for (let n = 2; !chosen && made.has(folder); n++) folder = `${base}-${n}`;
         made.add(folder);
         const project: ProjectInfo = {
-          path: `/Users/me/AlpineCode/${folder}`,
+          // An empty folder the person made is used as it is; otherwise a new one in the clone folder.
+          path: chosen ?? `/Users/me/AlpineCode/${folder}`,
           name: folder,
           branch: 'main',
           lastUsedAt: new Date().toISOString(),

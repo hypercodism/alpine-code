@@ -14,7 +14,7 @@ const APP: Record<ExternalSessionInfo['source'], string> = { claude_code: 'Claud
 const NAMED = 2;
 
 /**
- * The conversations other apps (Claude Code, Codex, …) had in this project, to go on with here: one line saying from
+ * The conversations other apps (Claude Code, Codex, …) had in this project, to go on with here (on its map): one line saying from
  * where and how many, opening the list. Nothing shows when there are none. Picking one brings it over (its messages,
  * tool calls and results) as a session of the project and opens it; one already brought over, and not added to since,
  * opens again instead of being copied twice.

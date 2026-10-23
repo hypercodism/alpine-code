@@ -59,6 +59,7 @@ function BoardRoute() {
         demo={!('__TAURI_INTERNALS__' in window)}
         onShowConversation={() => showDockTab(SUMMARY_TAB)}
         onOpenApp={() => showDockTab('servers')}
+        onNewHere={(folder) => void navigate({ to: '/', search: { folder } })}
         // An empty id lets go of the session (the map started over).
         onSession={(id) =>
           void navigate({

@@ -1002,6 +1002,14 @@ def test_the_map_says_whether_its_build_is_still_working(proj, monkeypatch):
     assert get(proj).build == "ended"
 
 
+def test_a_request_from_the_map_input_is_done_and_keeps_the_map_true(proj):
+    write_map(proj)
+    prepared = prepare(proj, action="request", request="첫 화면 버튼을 크게 해 줘", nodeId=None, flowId=None)
+    assert prepared.prompt.startswith("첫 화면 버튼을 크게 해 줘")
+    assert "keep the map true" in prepared.prompt and "new unique `id`" in prepared.prompt
+    assert "ALREADY implemented" not in prepared.prompt
+
+
 def test_a_planned_map_carries_its_screens_look_and_what_is_left(proj):
     write_map(proj, undecided=["누가 글을 쓰나요"])
     put(proj, "screens/order.html", '<main class="bg-page text-ink">주문</main>')

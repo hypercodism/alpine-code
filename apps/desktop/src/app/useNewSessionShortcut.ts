@@ -1,20 +1,15 @@
 import { useNavigate } from '@tanstack/react-router';
 import { useCallback, useEffect } from 'react';
 
-import { useCurrentProject } from '@/features/rail/currentProject';
 import { inTauri } from '@/shared/platform';
 
 /**
- * Opens a new session in the project the rail shows. ⌘N reaches it through the menu bar in the app, and through this
- * key listener in a plain browser.
+ * Opens 새 프로젝트, the one place a new product starts (map-first 39). ⌘N reaches it through the menu bar in the
+ * app, and through this key listener in a plain browser.
  */
 export function useNewSessionShortcut(): () => void {
   const navigate = useNavigate();
-  const current = useCurrentProject();
-  const newSession = useCallback(
-    () => void navigate({ to: '/', search: current ? { project: current } : {} }),
-    [navigate, current],
-  );
+  const newSession = useCallback(() => void navigate({ to: '/' }), [navigate]);
   useEffect(() => {
     if (inTauri()) return;
     const onKeyDown = (event: KeyboardEvent) => {

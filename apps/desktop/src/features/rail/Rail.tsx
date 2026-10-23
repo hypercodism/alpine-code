@@ -9,14 +9,7 @@ import { ProgressBar, ProjectAddDialog, projectAddMessages } from '@/shared/comp
 import { useMessages } from '@/shared/i18n';
 import { isUnread, useNavigation, visibleSessions, type RailView } from '@/shared/navigation';
 import { revealInFinder } from '@/shared/platform';
-import {
-  useArchiveProject,
-  useCloudEnabled,
-  useOpenProject,
-  useProjects,
-  useSessions,
-  useSetSessionDetails,
-} from '@/shared/server';
+import { useArchiveProject, useOpenProject, useProjects, useSessions, useSetSessionDetails } from '@/shared/server';
 
 import { useCurrentProject } from './currentProject';
 import { DeleteProjectDialog } from './DeleteProjectDialog';
@@ -43,7 +36,6 @@ export function Rail({ open = true }: { open?: boolean }) {
   const sessionMatch = useMatch({ from: '/session/$sessionId', shouldThrow: false });
   const currentId = sessionMatch?.params.sessionId;
   const navigate = useNavigate();
-  const cloud = useCloudEnabled();
   const width = usePanelWidth({ storageKey: 'alpine.rail.width', initial: 288, min: 240, max: 400 });
   const prefs = useNavigation();
   const [view, setView] = useState<RailView>('all');
@@ -149,11 +141,10 @@ export function Rail({ open = true }: { open?: boolean }) {
           </button>
           <Link
             to="/"
-            search={current ? { project: current } : {}}
             className="flex min-h-9 items-center gap-2 rounded-lg bg-interactive px-3 text-body font-medium text-on-fill outline-none hover:bg-interactive-hover focus-visible:ring-2 focus-visible:ring-interactive"
           >
             <SquarePen size={16} aria-hidden="true" />
-            <span className="grow">{t.newSession}</span>
+            <span className="grow">{t.newProject}</span>
             <kbd className="text-meta">⌘N</kbd>
           </Link>
           <div role="group" className="flex flex-wrap gap-1" aria-label={t.filter}>
@@ -344,7 +335,7 @@ export function Rail({ open = true }: { open?: boolean }) {
           open={adding}
           onOpenChange={setAdding}
           onDone={(path) => void navigate({ to: '/', search: { project: path } })}
-          onNew={cloud ? () => void navigate({ to: '/', search: { new: 1 } }) : undefined}
+          onNew={() => void navigate({ to: '/' })}
         />
         <DeleteProjectDialog project={deleting} onClose={() => setDeleting(null)} />
         <DeleteSessionDialog session={deletingSession} onClose={() => setDeletingSession(null)} />
@@ -409,7 +400,6 @@ function ProjectGroup({
       {!project.archived && (
         <>
           <Menu.Item onClick={onPin}>{pinned ? t.unpin : t.pin}</Menu.Item>
-          <Menu.Item render={<Link to="/" search={{ project: project.path }} />}>{t.newSession}</Menu.Item>
           <Menu.Item render={<Link to="/memory" search={{ project: project.path }} />}>{t.openMemory}</Menu.Item>
         </>
       )}
@@ -457,16 +447,6 @@ function ProjectGroup({
             <span className="min-w-0 truncate">{project.name}</span>
             {pinned && <Pin size={12} className="shrink-0 text-interactive" aria-label={t.pinned} />}
           </button>
-          {!project.archived && (
-            <Link
-              to="/"
-              search={{ project: project.path }}
-              aria-label={t.newInProject(project.name)}
-              className={iconButton}
-            >
-              <Plus size={14} aria-hidden="true" />
-            </Link>
-          )}
           <Menu.Root>
             <Menu.Trigger aria-label={t.projectMenu(project.name)} className={iconButton}>
               <Ellipsis size={16} aria-hidden="true" />

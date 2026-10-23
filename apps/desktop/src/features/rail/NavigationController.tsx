@@ -28,11 +28,11 @@ export function NavigationController() {
   useEffect(() => {
     if (restored.current || !sessions || !projects) return;
     restored.current = true;
-    if (!start || start.search.project || start.search.new) return;
-    const prefs = useNavigation.getState();
-    const session = sessions.find((s) => s.id === prefs.lastSessions[prefs.lastProject ?? ''] && !s.archived);
-    if (session && projects.some((p) => p.path === session.cwd && !p.archived)) {
-      void navigate({ to: '/session/$sessionId', params: { sessionId: session.id }, replace: true });
+    if (!start || start.search.project || start.search.folder) return;
+    // Opening the app goes back to the last project, which is its map (map-first 1); without one, 새 프로젝트.
+    const last = useNavigation.getState().lastProject;
+    if (last && projects.some((p) => p.path === last && !p.archived)) {
+      void navigate({ to: '/board', search: { project: last }, replace: true });
     }
   }, [sessions, projects, start, navigate]);
   useEffect(() => {

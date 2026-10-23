@@ -107,7 +107,15 @@ from .storage import (
     Storage,
     file_storage,
 )
-from .templates import TemplateNotFound, available_templates, create_project, safe_name, templates_dir
+from .templates import (
+    FolderNotEmpty,
+    TemplateNotFound,
+    available_templates,
+    create_project,
+    safe_name,
+    start_in,
+    templates_dir,
+)
 from .tool_sources import (
     Builtins,
     Offered,
@@ -172,6 +180,8 @@ __all__ = [
     "WorkOnProject",
     "judge",
     "TemplateNotFound",
+    "FolderNotEmpty",
+    "start_in",
     "available_templates",
     "create_project",
     "safe_name",

@@ -74,6 +74,7 @@ class ErrorData(Message):
         "unsupported",
         "other",
         "not_a_folder",
+        "not_empty",
         "invalid_config",
         "exists",
         "clone_failed",
@@ -2074,9 +2075,10 @@ class FlowNodeResult(Message):
 class FlowPrepareParams(Message):
     cwd: str
     revision: str
-    action: Literal["plan", "build", "discover", "extend", "change", "verify", "sync", "reshape"]
+    action: Literal["plan", "build", "request", "discover", "extend", "change", "verify", "sync", "reshape"]
     """plan: draw a product that does not exist yet from the person's words, then ask what is left to decide. build:
-    build what was planned, in the AI's own order, and check its promises.
+    build what was planned, in the AI's own order, and check its promises. request: anything asked in the map's input
+    about a product that has a map; the AI does it and keeps the map true.
     reshape: change the map's cards and flows as the user asks (split, merge, rename, move, remove), never the
     product's code. Alpine keeps the map as it was, so the user can accept the result or put it back."""
     request: str = Field(default="", max_length=8000)
@@ -2234,6 +2236,9 @@ class ProjectsCreateParams(Message):
     template: TemplateId
     name: str
     """From ``JudgedNew.name``; made safe again here."""
+    folder: str | None = None
+    """An empty folder the person made, to start in instead of a new folder in the clone folder (``name`` is then
+    not used). Fails with ``not_empty`` when it is missing or has files in it."""
     agent: str | None = None
     """As in ``session/new``."""
     mode: Mode | None = None

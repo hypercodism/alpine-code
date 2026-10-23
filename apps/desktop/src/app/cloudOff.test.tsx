@@ -103,19 +103,13 @@ describe('프로젝트 추가', () => {
     return within(await screen.findByRole('dialog')).getAllByRole('button');
   };
 
-  it('lists 새로 만들기 with Alpine Cloud', async () => {
-    mount('/session/work', true);
-    await settle();
-    expect((await open()).map((row) => row.textContent?.slice(0, 5))).toContain('새로 만들');
-  });
-
-  it('lists only 받기 and 열기 without it, as before', async () => {
-    mount('/session/work', false);
-    await settle();
-    expect((await open()).map((row) => row.textContent)).toEqual([
-      '회사·팀 프로젝트 받기GitHub, GitLab 같은 저장소 주소로',
-      '내 컴퓨터의 프로젝트 열기이미 이 컴퓨터에 있는 폴더⌘O',
-    ]);
+  it('lists 새로 만들기 first, with Alpine Cloud or without it (map-first 42)', async () => {
+    for (const cloud of [true, false]) {
+      mount('/session/work', cloud);
+      await settle();
+      expect((await open()).map((row) => row.textContent?.slice(0, 5))).toEqual(['새로 만들', '회사·팀 ', '내 컴퓨터']);
+      cleanup();
+    }
   });
 });
 
@@ -138,10 +132,10 @@ describe('Settings', () => {
   });
 });
 
-describe('the new session', () => {
-  it('says what to change and judges nothing without Alpine Cloud', async () => {
+describe('새 프로젝트', () => {
+  it('asks what to make, with Alpine Cloud or without it (map-first 42)', async () => {
     mount('/', false);
-    await waitFor(() => expect(screen.getByRole('heading', { name: '무엇을 바꿔 볼까요?' })).toBeTruthy());
-    expect(screen.queryByRole('heading', { name: '무엇을 만들어 볼까요?' })).toBeNull();
+    await waitFor(() => expect(screen.getByRole('heading', { name: '무엇을 만들어 볼까요?' })).toBeTruthy());
+    expect(screen.queryByRole('heading', { name: '무엇을 바꿔 볼까요?' })).toBeNull();
   });
 });

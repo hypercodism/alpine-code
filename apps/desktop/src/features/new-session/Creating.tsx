@@ -16,7 +16,7 @@ const ORDER: CreateStep[] = ['folder', 'address', 'agent'];
  * on the idea. The others made nothing: the setup is not there, the settings cannot be read, or something else.
  */
 export interface CreateFailure {
-  kind: 'not_found' | 'invalid_config' | 'other' | 'not_started';
+  kind: 'not_found' | 'invalid_config' | 'not_empty' | 'other' | 'not_started';
   /** What the server said, for whoever has to look into it. */
   detail: string | null;
 }
@@ -68,6 +68,7 @@ export function Creating({
     {
       not_found: t.createNoTemplate,
       invalid_config: t.createBadConfig,
+      not_empty: t.createNotEmpty,
       other: t.createUnknown,
       not_started: t.madeButNotStartedBody,
     }[failure.kind];

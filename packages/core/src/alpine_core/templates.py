@@ -158,6 +158,41 @@ def create_project(template: str, parent: Path, name: str, taken: Iterable[Path]
     return folder
 
 
+class FolderNotEmpty(Exception):
+    """A project is started only in an empty folder; one with files in it is a project to open."""
+
+
+#: Files a folder may hold and still count as empty.
+_EMPTY_ANYWAY = {".DS_Store"}
+
+
+def start_in(template: str, folder: Path) -> Path:
+    """Copies the template into ``folder``, which the person made and which must be empty, and makes it a git
+    repository with the template as its first commit, as ``create_project`` does. Returns the folder, resolved.
+
+    Raises:
+        TemplateNotFound: The templates folder has no such template.
+        FolderNotEmpty: ``folder`` is missing, not a folder, or has files in it.
+        OSError: The folder could not be written, or git failed. What was copied is taken out again.
+    """
+    source = templates_dir() / template
+    if template in ("", ".", "..") or Path(template).name != template or not source.is_dir():
+        raise TemplateNotFound(template)
+    folder = Path(folder).expanduser().resolve()
+    if not folder.is_dir() or any(entry.name not in _EMPTY_ANYWAY for entry in folder.iterdir()):
+        raise FolderNotEmpty(str(folder))
+    try:
+        shutil.copytree(source, folder, symlinks=True, dirs_exist_ok=True, ignore=shutil.ignore_patterns(*_NOT_COPIED))
+        if git_tools_ready():
+            _commit_template(folder, template)
+    except BaseException:
+        for entry in folder.iterdir():
+            if entry.name not in _EMPTY_ANYWAY:
+                shutil.rmtree(entry) if entry.is_dir() and not entry.is_symlink() else entry.unlink()
+        raise
+    return folder
+
+
 def _claim(parent: Path, name: str, taken: Iterable[Path]) -> Path:
     """Makes the first free folder of ``name``, ``name-2``... in ``parent`` and returns it."""
     parent = parent.expanduser().resolve()

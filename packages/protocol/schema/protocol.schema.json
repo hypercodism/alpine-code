@@ -3111,6 +3111,7 @@
             "unsupported",
             "other",
             "not_a_folder",
+            "not_empty",
             "invalid_config",
             "exists",
             "clone_failed",
@@ -4438,6 +4439,7 @@
           "enum": [
             "plan",
             "build",
+            "request",
             "discover",
             "extend",
             "change",
@@ -6607,6 +6609,17 @@
         },
         "name": {
           "type": "string"
+        },
+        "folder": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "agent": {
           "anyOf": [

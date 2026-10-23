@@ -22,12 +22,14 @@ from typing import Any
 
 from alpine_core import (
     ConfigError,
+    FolderNotEmpty,
     ProjectList,
     Settings,
     TemplateNotFound,
     available_templates,
     create_project,
     safe_name,
+    start_in,
 )
 from alpine_core.cloud import (
     AlpineTokens,
@@ -78,11 +80,16 @@ class NewProjects:
     async def _create(self, params: ProjectsCreateParams) -> ProjectsCreateResult:
         if params.template not in await asyncio.to_thread(available_templates):
             raise MethodError(APP_ERROR, f"No template named {params.template!r}", "not_found")
-        parent = _settings().clone_folder
         try:
-            folder = await asyncio.to_thread(create_project, params.template, parent, safe_name(params.name))
+            if params.folder:
+                folder = await asyncio.to_thread(start_in, params.template, Path(params.folder))
+            else:
+                parent = _settings().clone_folder
+                folder = await asyncio.to_thread(create_project, params.template, parent, safe_name(params.name))
         except TemplateNotFound as e:  # taken away since the check above
             raise MethodError(APP_ERROR, f"No template named {params.template!r}", "not_found") from e
+        except FolderNotEmpty as e:
+            raise MethodError(APP_ERROR, f"Not an empty folder: {e}", "not_empty") from e
         except OSError as e:
             raise MethodError(APP_ERROR, f"The project could not be made: {e}", "other") from e
         # Until the app hears about the folder it believes nothing was made, so if putting it on the rail fails
@@ -93,7 +100,7 @@ class NewProjects:
         try:
             project = await asyncio.to_thread(project_info, ProjectList.default().open(folder))
         except BaseException as e:
-            await asyncio.to_thread(_discard, folder)
+            await asyncio.to_thread(_discard, folder, bool(params.folder))
             if isinstance(e, Exception):
                 raise MethodError(APP_ERROR, f"The project could not be made: {e}", "other") from e
             raise
@@ -146,13 +153,19 @@ def _make_app(folder: Path) -> str | None:
         return None
 
 
-def _discard(folder: Path) -> None:
-    """Takes back a folder that was made and not announced: off the rail if it got on, and off the disk."""
+def _discard(folder: Path, theirs: bool = False) -> None:
+    """Takes back a folder that was made and not announced: off the rail if it got on, and off the disk. A folder the
+    person made (``theirs``) stays, empty again."""
     try:
         ProjectList.default().delete(folder)
     except Exception:  # the list is what failed, or it was never written
         pass
-    shutil.rmtree(folder, ignore_errors=True)
+    if not theirs:
+        shutil.rmtree(folder, ignore_errors=True)
+        return
+    for entry in folder.iterdir() if folder.is_dir() else []:
+        if entry.name != ".DS_Store":
+            shutil.rmtree(entry, ignore_errors=True) if entry.is_dir() and not entry.is_symlink() else entry.unlink()
 
 
 def _settings() -> Settings:

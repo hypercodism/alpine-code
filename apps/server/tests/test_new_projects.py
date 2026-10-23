@@ -215,6 +215,53 @@ def test_without_git_the_project_is_still_made_and_the_agent_starts(monkeypatch,
     run(scenario())
 
 
+def test_a_project_starts_in_an_empty_folder_the_person_made(monkeypatch, tmp_path):
+    mine = tmp_path / "Developments" / "devlog"
+    mine.mkdir(parents=True)
+    (mine / ".DS_Store").write_text("")
+
+    async def scenario():
+        harness = Harness(monkeypatch, "ok")
+        result = await harness.create(folder=str(mine), name="ignored")
+        assert Path(result.project.path) == mine.resolve() and (mine / "package.json").exists()
+        assert get_flow(FlowGetParams(cwd=str(mine))).planned
+        await harness.items(result.session_id)
+        await harness.close()
+
+    run(scenario())
+
+
+def test_a_folder_with_files_in_it_is_not_started_in(monkeypatch, tmp_path):
+    theirs = tmp_path / "theirs"
+    theirs.mkdir()
+    (theirs / "notes.md").write_text("mine")
+
+    async def scenario():
+        harness = Harness(monkeypatch, "ok")
+        with pytest.raises(MethodError) as refused:
+            await harness.create(folder=str(theirs))
+        assert refused.value.data.reason == "not_empty"
+        assert [p.name for p in theirs.iterdir()] == ["notes.md"] and harness.changes == []
+
+    run(scenario())
+
+
+def test_a_failure_in_the_persons_folder_empties_it_but_keeps_it(monkeypatch, tmp_path):
+    mine = tmp_path / "mine"
+    mine.mkdir()
+    broken = tmp_path / "gitconfig"
+    broken.write_text("[user\n\tnot a config file\n")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(broken))
+
+    async def scenario():
+        harness = Harness(monkeypatch, "ok")
+        with pytest.raises(MethodError):
+            await harness.create(folder=str(mine))
+        assert mine.is_dir() and list(mine.iterdir()) == []
+
+    run(scenario())
+
+
 def test_a_failure_while_making_the_folder_is_reported_and_leaves_nothing(monkeypatch, repos, tmp_path):
     broken = tmp_path / "gitconfig"
     broken.write_text("[user\n\tnot a config file\n")

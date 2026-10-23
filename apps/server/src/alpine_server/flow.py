@@ -810,7 +810,7 @@ def prepare_flow(params: FlowPrepareParams) -> FlowPrepareResult:
             raise MethodError(APP_ERROR, "Select a feature first", "invalid_flow")
         if params.action == "verify" and node is None and not (flow or params.node_ids):
             raise MethodError(APP_ERROR, "Select a feature or flow first", "invalid_flow")
-        if params.action in ("plan", "change", "extend", "reshape") and not params.request.strip():
+        if params.action in ("plan", "request", "change", "extend", "reshape") and not params.request.strip():
             raise MethodError(APP_ERROR, "Describe the change", "invalid_flow")
         selected = node.id if node else None
         linked = [node.id] if node else []
@@ -1079,6 +1079,10 @@ def _prompt(params: FlowPrepareParams, selected: str | None, board: FlowGetResul
     task = {
         "plan": "Plan a new product on the map from the person's words. Do not build it yet.",
         "build": "Build the planned product on the map, in your own order, and check its promises.",
+        "request": (
+            "Do what the person asks in the product, then keep the map true: change, add or remove the cards, "
+            "promises and journeys your work touched, and check the promises it changed."
+        ),
         "discover": "Map what is ALREADY implemented. Do not implement new product features.",
         "extend": "Implement the new branch attached to the selected feature, preserving existing behavior.",
         "change": "Modify the selected feature as requested, preserving surrounding flows.",

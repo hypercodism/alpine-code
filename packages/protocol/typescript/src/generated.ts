@@ -1006,6 +1006,7 @@ export interface ErrorData {
     | 'unsupported'
     | 'other'
     | 'not_a_folder'
+    | 'not_empty'
     | 'invalid_config'
     | 'exists'
     | 'clone_failed'
@@ -2865,7 +2866,7 @@ export interface FlowNodeResult {
 export interface FlowPrepareParams {
   cwd: string;
   revision: string;
-  action: 'plan' | 'build' | 'discover' | 'extend' | 'change' | 'verify' | 'sync' | 'reshape';
+  action: 'plan' | 'build' | 'request' | 'discover' | 'extend' | 'change' | 'verify' | 'sync' | 'reshape';
   request?: string;
   nodeId?: string | null;
   flowId?: string | null;
@@ -3740,6 +3741,7 @@ export interface ProjectsCreateParams {
   idea: string;
   template: 'blank' | 'web-lite' | 'web-pro' | 'mobile';
   name: string;
+  folder?: string | null;
   agent?: string | null;
   mode?: ('default' | 'accept_edits' | 'auto' | 'yolo') | null;
 }

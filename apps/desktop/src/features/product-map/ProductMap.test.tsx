@@ -94,7 +94,7 @@ const folders: Script = {
   },
 };
 
-function mount(script: Script = {}, onSession = vi.fn(), onShowConversation = vi.fn()) {
+function mount(script: Script = {}, onSession = vi.fn(), onShowConversation = vi.fn(), onNewHere = vi.fn()) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const base = mergeScripts(
     boardScript(),
@@ -114,13 +114,13 @@ function mount(script: Script = {}, onSession = vi.fn(), onShowConversation = vi
       <ServerProvider connection={connection}>
         <LocaleProvider locale="ko">
           <div style={{ height: 900 }}>
-            <ProductMap cwd={cwd} onSession={onSession} onShowConversation={onShowConversation} />
+            <ProductMap cwd={cwd} onSession={onSession} onShowConversation={onShowConversation} onNewHere={onNewHere} />
           </div>
         </LocaleProvider>
       </ServerProvider>
     </QueryClientProvider>,
   );
-  return { ...result, request, onSession, onShowConversation, client };
+  return { ...result, request, onSession, onShowConversation, onNewHere, client };
 }
 beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn();
@@ -143,6 +143,36 @@ const lastPrepare = (request: { mock: { calls: unknown[][] } }) =>
   request.mock.calls.filter(([method]) => method === 'flow/prepare').at(-1)?.[1];
 
 describe('living product map', () => {
+  it('takes words in its input as a request on a map that exists: done, and the map kept true', async () => {
+    const { request } = mount();
+    await loaded();
+    fireEvent.change(screen.getByRole('textbox', { name: '지도에 부탁하기' }), {
+      target: { value: '글 목록에 검색을 넣어 줘' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '보내기' }));
+    await waitFor(() =>
+      expect(lastPrepare(request)).toMatchObject({ action: 'request', request: '글 목록에 검색을 넣어 줘' }),
+    );
+  });
+
+  it('offers to start a new product in an empty folder, and draws nothing there', async () => {
+    const { onNewHere, request } = mount({
+      results: {
+        'flow/get': { revision: 'missing', exists: false, document: {} },
+        'files/list': {
+          entries: [{ name: '.DS_Store', path: '.DS_Store', kind: 'file' }],
+          nextOffset: 0,
+          hasMore: false,
+        },
+      },
+    });
+    expect(await screen.findByRole('heading', { name: '빈 폴더예요' })).toBeTruthy();
+    expect(screen.queryByRole('textbox', { name: '지도에 부탁하기' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '여기서 새로 만들기' }));
+    expect(onNewHere).toHaveBeenCalledWith(cwd);
+    expect(request.mock.calls.some(([method]) => method === 'flow/prepare')).toBe(false);
+  });
+
   it('asks the AI about a card in words and opens the real session', async () => {
     const { request, onSession } = mount();
     const panel = await openStep('장바구니');

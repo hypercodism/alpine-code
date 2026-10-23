@@ -2,9 +2,11 @@ import type { FlowNode, FlowPrepareParams, FlowPrepareResult } from '@alpine/pro
 import { Button, LinkButton, Popover, SlidingPanel } from '@alpine/ui/primitives';
 import clsx from 'clsx';
 import { ChevronRight, CircleX, RotateCcw, Search, Sparkles } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { AgentChip, ModeChip, type Mode } from '@/shared/components/composer';
+import { ImportLink } from '@/shared/components/import-link';
 import { latestTaskForce, roomOf } from '@/shared/components/taskforce';
 import { useMessages } from '@/shared/i18n';
 import {
@@ -24,6 +26,7 @@ import {
   useSetSessionAgent,
   useSetSessionDetails,
   useSetSessionMode,
+  useServer,
   useTaskForceAction,
 } from '@/shared/server';
 
@@ -79,6 +82,7 @@ export function ProductMap({
   onSession,
   onShowConversation,
   onOpenApp,
+  onNewHere,
   demo = false,
   dockOpen = false,
   hidden = false,
@@ -90,6 +94,8 @@ export function ProductMap({
   onShowConversation?: () => void;
   /** Runs and shows the project's app (its development server, in the dock). */
   onOpenApp?: () => void;
+  /** Opens 새 프로젝트 for this folder, which is empty (map-first 41). */
+  onNewHere?: (folder: string) => void;
   demo?: boolean;
   /** Whether the right dock sits beside the map; when it does and the window is narrow, the changes list overlays it. */
   dockOpen?: boolean;
@@ -175,6 +181,15 @@ export function ProductMap({
   };
   const readOnly = !!data?.readOnly;
   const hasMap = !!(document?.nodes?.length || document?.flows?.length);
+  // A folder with nothing in it has no code to map: it is a place to start a new product (map-first 41).
+  const server = useServer();
+  const rootFiles = useQuery({
+    queryKey: ['project-root-files', cwd],
+    queryFn: () => server.request('files/list', { cwd, path: '', limit: 20 }),
+    enabled: !!data && !data.exists,
+    retry: false,
+  });
+  const emptyFolder = !!rootFiles.data && rootFiles.data.entries.every((entry) => entry.name === '.DS_Store');
   const locked = busy || anyActive || readOnly;
   const project = cwd.split('/').pop() ?? cwd;
   // Only which sessions work changes the cards; their other updates (many a second while one runs) must not redraw
@@ -213,7 +228,10 @@ export function ProductMap({
   const askMap = async (text: string, from: DOMRect | null) => {
     const shown = { text: text || t.drawBubble, from, toFirst: !hasMap, at: ++flights.current };
     setFlight(shown);
-    const started = await start('discover', { request: text || t.discoveryRequest });
+    // A map that exists takes the words as a request (do it, keep the map true); none yet, they draw it from the code.
+    const started = hasMap
+      ? await start('request', { request: text })
+      : await start('discover', { request: text || t.discoveryRequest });
     if (!started) setFlight((current) => (current?.at === shown.at ? null : current));
     return started;
   };
@@ -584,6 +602,12 @@ export function ProductMap({
     onSession('');
   };
 
+  // A conversation brought over from another app opens in the dock, as the map's other conversations do.
+  const openImported = (id: string) => {
+    onSession(id);
+    onShowConversation?.();
+  };
+
   const mapMenu = data && (
     <MapMenu
       cwd={cwd}
@@ -677,6 +701,7 @@ export function ProductMap({
               {t.lensChanged(lenses.changed.size)}
             </Chip>
           )}
+          <ImportLink cwd={cwd} onOpen={openImported} />
           {mapMenu}
         </div>
       )}
@@ -855,10 +880,19 @@ export function ProductMap({
           <div className="flex min-w-0 grow items-center justify-center">
             <span aria-hidden className="h-16 w-44 animate-pulse rounded-xl border border-dashed border-line" />
           </div>
+        ) : !hasMap && emptyFolder ? (
+          <div className="flex min-w-0 grow flex-col items-center justify-center gap-3 p-8 text-center">
+            <h2 className="text-title font-semibold">{t.emptyFolder}</h2>
+            <p className="max-w-90 text-body text-fg-muted">{t.emptyFolderLead}</p>
+            <Button variant="primary" onClick={() => onNewHere?.(cwd)}>
+              {t.newHere}
+            </Button>
+          </div>
         ) : !hasMap ? (
           <div className="flex min-w-0 grow flex-col items-center justify-center gap-3 p-8 text-center">
             <h2 className="text-title font-semibold">{t.empty}</h2>
             <p className="max-w-90 text-body text-fg-muted">{demo ? t.demo : t.emptyLead}</p>
+            <ImportLink cwd={cwd} onOpen={openImported} />
             <details className="group mt-1 flex flex-col items-center">
               <summary className="cursor-pointer list-none text-meta text-interactive">{t.scopeBefore}</summary>
               <div className="mt-3 text-left">
@@ -987,7 +1021,7 @@ export function ProductMap({
               onOpenApp={() => onOpenApp?.()}
             />
           )}
-          {data && !readOnly && !board.isError && (
+          {data && !readOnly && !board.isError && !(emptyFolder && !hasMap) && (
             <MapAsk
               empty={!hasMap}
               disabled={busy || (planned ? talking : anyActive)}
