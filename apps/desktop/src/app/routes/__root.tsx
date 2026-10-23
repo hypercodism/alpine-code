@@ -51,6 +51,13 @@ function Root() {
   const [railOpen, toggleRail] = useRailOpen();
   const page = useRouterState({ select: (state) => state.location.pathname + (state.location.search.project ?? '') });
   const onNewSession = useRouterState({ select: (state) => state.location.pathname === '/' });
+  // Opening the app on 새 프로젝트 may be on the way to the last project's map: until that is settled nothing is
+  // drawn there, so neither 새 프로젝트 nor the connect window flashes up first.
+  const [restoring, setRestoring] = useState(true);
+  const restored = useCallback(() => setRestoring(false), []);
+  // What is drawn, not where the address already is: on the way out, 새 프로젝트 is still what would be drawn.
+  const drawingNewSession = useRouterState({ select: (state) => state.matches.at(-1)?.routeId === '/' });
+  const waiting = restoring && drawingNewSession;
   useCloneUpdates();
   const newSession = useNewSessionShortcut();
   useAppMenu(railOpen, { newSession, openFolder, toggleRail });
@@ -61,12 +68,12 @@ function Root() {
         <Rail open={railOpen} />
         <div className="mr-2 mb-2 flex min-w-0 grow overflow-hidden rounded-xl border border-line bg-canvas">
           <div key={page} className="motion-page flex min-h-0 min-w-0 grow">
-            <Outlet />
+            {!waiting && <Outlet />}
           </div>
         </div>
       </div>
-      <NavigationController />
-      <FirstRun auto={onNewSession} />
+      <NavigationController onRestored={restored} />
+      <FirstRun auto={onNewSession && !restoring} />
       <DroppedSkillsDialog outcome={dropped} onClose={closeDropped} />
     </div>
   );

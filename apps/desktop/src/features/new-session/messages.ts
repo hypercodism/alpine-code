@@ -2,7 +2,6 @@ import { defineMessages } from '@/shared/i18n';
 
 export const messages = defineMessages({
   ko: {
-    // Without Alpine Cloud there is no new project to make: the screen only asks what to change.
     newHeading: '무엇을 만들어 볼까요?',
     newPlaceholder: '만들고 싶은 앱을 적어 주세요',
 
@@ -54,11 +53,34 @@ export const messages = defineMessages({
     wherePickTitle: '프로젝트를 시작할 빈 폴더 고르기',
     createUnknown: '프로젝트를 만들지 못했어요. 잠시 뒤에 다시 만들어 보세요.',
     madeButNotStarted: '프로젝트는 만들었어요',
-    madeButNotStartedBody: 'AI를 시작하지 못했어요. 그 프로젝트에서 같은 내용을 다시 보내 주세요.',
+    madeButNotStartedBody:
+      'AI가 기획을 시작하지 못했어요. 다시 시작을 누르면 같은 아이디어로 지도에 기획을 다시 그려요.',
     back: '돌아가기',
     openProject: '프로젝트 열기',
     proSignInReason: '실시간 웹앱을 쓰려면 Alpine 계정이 필요해요 (무료)',
     proUpgradeReason: '실시간 웹앱은 Pro에서 만들 수 있어요. 웹앱은 지금처럼 무료로 만들 수 있어요.',
+    liteShortLocal: '대부분의 앱에 충분해요.',
+    litePoint1Local: '로그인과 데이터 저장이 처음부터 들어 있어요',
+    localNoteOff: '이 Mac에 만들어요.',
+    edit: '고치기',
+    editLabel: '보낸 글 고치기',
+    unavailable: '구성을 받지 못했어요',
+    unavailableUnreachable:
+      '새 프로젝트에 쓸 구성을 인터넷에서 받아 오지 못했어요. 인터넷 연결을 확인한 뒤 다시 해 보세요.',
+    unavailableMissing:
+      '받을 수 있는 구성을 찾지 못했어요. 잠시 뒤에 다시 해 보시고, 계속 안 되면 Alpine Code를 최신 버전으로 업데이트해 주세요.',
+    unavailableNoGit:
+      '구성을 받으려면 Apple 개발 도구가 필요해요. git이 들어 있는 무료 도구이고, 한 번만 설치하면 돼요 (10분쯤).',
+    unavailableNoGitElsewhere: '구성을 받으려면 git이 필요해요. git을 설치한 뒤 다시 해 보세요.',
+    installTools: '설치하기',
+    installStarted: 'Apple 설치 창에서 ‘설치’를 눌러 주세요. 끝나면 다시 해 보기를 누르면 돼요.',
+    getGit: 'git 내려받기',
+    retry: '다시 해 보기',
+    folderHasFiles: (name: string) =>
+      `‘${name}’ 폴더에는 이미 파일이 있어요. 새 프로젝트는 빈 폴더에만 만들 수 있어요.`,
+    openAsProject: '프로젝트로 열기',
+    dismiss: '닫기',
+    restart: '다시 시작',
   },
   en: {
     newHeading: 'What do you want to make?',
@@ -112,10 +134,31 @@ export const messages = defineMessages({
     wherePickTitle: 'Pick an empty folder to start the project in',
     createUnknown: "The project couldn't be made. Try again in a moment.",
     madeButNotStarted: 'The project is made',
-    madeButNotStartedBody: "The AI didn't start. Send the same thing again from that project.",
+    madeButNotStartedBody: "The AI didn't start planning. Start again to plan the same idea on the map.",
     back: 'Go back',
     openProject: 'Open the project',
     proSignInReason: 'A realtime web app needs an Alpine account (free)',
     proUpgradeReason: 'Realtime web apps are part of Pro. A web app is still free to make.',
+    liteShortLocal: 'Enough for most apps.',
+    litePoint1Local: 'Sign-in and saved data are there from the start',
+    localNoteOff: 'Made on this Mac.',
+    edit: 'Edit',
+    editLabel: 'Edit what you sent',
+    unavailable: "Couldn't get the setups",
+    unavailableUnreachable:
+      "The setups for a new project couldn't be fetched. Check your internet connection and try again.",
+    unavailableMissing: 'No setups were found. Try again in a moment; if it keeps happening, update Alpine Code.',
+    unavailableNoGit:
+      "Getting the setups needs Apple's developer tools. They are free, have git in them, and install once (about 10 minutes).",
+    unavailableNoGitElsewhere: 'Getting the setups needs git. Install git, then try again.',
+    installTools: 'Install',
+    installStarted: "Click ‘Install’ in Apple's window. When it is done, try again.",
+    getGit: 'Get git',
+    retry: 'Try again',
+    folderHasFiles: (name: string) =>
+      `‘${name}’ already has files in it. A new project starts only in an empty folder.`,
+    openAsProject: 'Open as a project',
+    dismiss: 'Close',
+    restart: 'Start again',
   },
 });

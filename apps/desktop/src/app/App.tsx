@@ -3,6 +3,7 @@ import { useState } from 'react';
 
 import {
   chatScript,
+  cloudScript,
   EXAMPLE_MAP,
   flowScript,
   mergeScripts,
@@ -10,6 +11,7 @@ import {
   READ_ONLY_MAP,
   STUDIO_MAP,
   tauriConnection,
+  type NewProjectScript,
   type ServerConnection,
 } from '@/shared/server';
 
@@ -37,7 +39,29 @@ function connect(): ServerConnection {
         : cwd.endsWith('/infra-terraform')
           ? READ_ONLY_MAP
           : {};
-  return scriptedConnection(mergeScripts(chatScript({ stepMs: 400, wordMs: 80 }), flowScript(map)));
+  const demo = demoOptions();
+  return scriptedConnection(
+    mergeScripts(
+      chatScript({ stepMs: 400, wordMs: 80, newProject: demo.newProject }),
+      flowScript(map),
+      demo.cloudOff ? cloudScript({ enabled: false }) : {},
+    ),
+  );
+}
+
+/**
+ * For walking a path the demo does not take by itself (setups that cannot be fetched, a project whose AI did not
+ * start, Alpine Cloud off): `alpine.demo` in localStorage, as `{ "newProject": {...}, "cloudOff": true }`.
+ */
+function demoOptions(): { newProject?: NewProjectScript; cloudOff?: boolean } {
+  try {
+    return JSON.parse(localStorage.getItem('alpine.demo') ?? '{}') as {
+      newProject?: NewProjectScript;
+      cloudOff?: boolean;
+    };
+  } catch {
+    return {};
+  }
 }
 
 export function App() {

@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useDockOpen, useDockTab } from '@/features/dock/state';
+import { useNavigation } from '@/shared/navigation';
 import { LocaleProvider } from '@/shared/i18n';
 import {
   cloudScript,
@@ -134,6 +135,8 @@ describe('Settings', () => {
 
 describe('새 프로젝트', () => {
   it('asks what to make, with Alpine Cloud or without it (map-first 42)', async () => {
+    // Opening the app goes back to the last project's map; with none, it is 새 프로젝트.
+    useNavigation.setState({ lastProject: null });
     mount('/', false);
     await waitFor(() => expect(screen.getByRole('heading', { name: '무엇을 만들어 볼까요?' })).toBeTruthy());
     expect(screen.queryByRole('heading', { name: '무엇을 바꿔 볼까요?' })).toBeNull();
