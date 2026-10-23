@@ -158,7 +158,7 @@ export const messages = defineMessages({
     productMapContext: 'Map context attached to this task',
     untitled: 'Untitled session',
     conversation: 'Conversation',
-    notFound: "We can't find this session. It may have been deleted",
+    notFound: "We can't find this conversation. It may have been deleted",
     commandsLeft: (n: number) => `${n} commands are still running after the stop`,
     commandsShow: 'Show',
     loadFailed: "Couldn't load this conversation",

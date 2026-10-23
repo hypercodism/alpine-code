@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router';
 import { memo, useMemo } from 'react';
 
 import { agentMessages, agentName, Character, toolLabel } from '@/shared/components/agent';
+import { useConnectPrompt, useNoModel } from '@/shared/components/connect';
 import { Markdown } from '@/shared/components/markdown';
 import { skillTitle } from '@/shared/components/skills';
 import { TaskForceCard } from '@/shared/components/taskforce';
@@ -283,7 +284,8 @@ function ConnectionLink() {
 
 /**
  * The run failed: the core's words (English, and for whoever looks into it) fold away, and the last run of the
- * conversation can be asked again, with what I last sent.
+ * conversation can be asked again, with what I last sent. With no model connected, asking again opens the connect
+ * sheet instead, as sending does.
  */
 function FailedLine({
   sessionId,
@@ -296,6 +298,8 @@ function FailedLine({
 }) {
   const t = useMessages(messages);
   const send = useSendMessage();
+  const ask = useConnectPrompt((state) => state.ask);
+  const unconnected = useNoModel();
   return (
     <div className={quiet}>
       <span>{t.stopped_failed}</span>
@@ -305,7 +309,7 @@ function FailedLine({
           <LinkButton
             className="min-h-5 px-0.5"
             disabled={send.isPending}
-            onClick={() => send.mutate({ sessionId, text: retry })}
+            onClick={() => (unconnected ? ask() : send.mutate({ sessionId, text: retry }))}
           >
             {t.retry}
           </LinkButton>

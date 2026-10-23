@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 
+import { useConnections } from '@/shared/server';
+
 interface ConnectPrompt {
   /** 'Later' was chosen; the first-run sheet stays closed until someone asks again. */
   dismissed: boolean;
@@ -22,3 +24,12 @@ export const useConnectPrompt = create<ConnectPrompt>((set) => ({
   ask: () => set({ dismissed: false, asked: true }),
   answered: () => set({ asked: false }),
 }));
+
+/**
+ * Nothing connected and no default model, so whatever asks for a model opens the connect sheet instead. Only when the
+ * list says so: a list that could not be read leaves it to the server, whose answer says why.
+ */
+export function useNoModel() {
+  const data = useConnections().data;
+  return !!data && data.connections.length === 0 && data.defaultModel === null;
+}

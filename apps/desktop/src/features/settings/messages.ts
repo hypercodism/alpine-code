@@ -9,8 +9,7 @@ export const messages = defineMessages({
     connection: '모델 연결',
     language: '언어',
     safety: '기본 안전',
-    safetyLead:
-      'AI가 처음 일하는 프로젝트부터 이대로 해요. 이미 일하던 프로젝트는 지도 입력창의 안전 칩에서 바꿔 주세요.',
+    safetyLead: '새로 시작하는 대화부터 이대로 해요. AI가 이미 일하던 지도는 지도 입력창의 안전 칩을 따라요.',
     cloneFolder: '프로젝트를 두는 곳',
     cloneFolderLead: '새로 만드는 프로젝트와 받은 프로젝트가 이 폴더 안에 생겨요.',
     cloneFolderPick: '프로젝트를 둘 폴더 고르기',
@@ -79,8 +78,8 @@ export const messages = defineMessages({
     noModel: '찾는 모델이 없어요',
     defaultModel: '기본 모델',
     newSession: '기본 모델',
-    defaultModelLead: 'AI가 처음 일하는 프로젝트와 작업 승인 검토에 쓸 모델을 골라요.',
-    appliesToNewSessions: '바꾼 기본 모델은 AI가 처음 일하는 프로젝트부터 써요. 이미 일하던 프로젝트는 그대로예요.',
+    defaultModelLead: 'AI가 새로 시작하는 대화와 작업 승인 검토에 쓸 모델을 골라요.',
+    appliesToNewSessions: '바꾼 기본 모델은 새로 시작하는 대화부터 써요. 이미 하던 대화는 그대로예요.',
     chooseModel: '모델을 골라 주세요',
     reviewModel: '작업 승인 검토 모델',
     sameAsSession: '대화에서 사용 중인 모델과 동일',
@@ -94,7 +93,7 @@ export const messages = defineMessages({
     language: 'Language',
     safety: 'Default safety',
     safetyLead:
-      'Used from the next project the AI starts working on. For a project it already works on, change it with the safety chip under the map input.',
+      'Used from the next new conversation. A map the AI already works on follows the safety chip under the map input.',
     cloneFolder: 'Where projects go',
     cloneFolderLead: 'New projects and projects you get are made in this folder.',
     cloneFolderPick: 'Choose where projects go',
@@ -142,8 +141,7 @@ export const messages = defineMessages({
     removeLead: 'The connection and key saved on this computer are removed. Connect again to use it later.',
     removeAccountLead:
       'The sign-in saved on this computer is removed, signing out first if it is still signed in. Connect again to use it later.',
-    removeDefault: (model: string) =>
-      `The default model for new sessions (${model}) is cleared too. Choose another one.`,
+    removeDefault: (model: string) => `The default model (${model}) is cleared too. Choose another one.`,
     cancel: 'Cancel',
     connectionsLoading: 'Loading connections…',
     connectionsFailed: 'Could not load the connections.',
@@ -164,9 +162,9 @@ export const messages = defineMessages({
     noModel: 'No model found',
     defaultModel: 'Default model',
     newSession: 'Default model',
-    defaultModelLead: 'Choose the model for projects the AI starts working on, and for action approval reviews.',
+    defaultModelLead: 'Choose the model for new conversations, and for action approval reviews.',
     appliesToNewSessions:
-      'A new default model is used from the next project the AI starts working on; projects it already works on keep theirs.',
+      'A new default model is used from the next new conversation; conversations already going keep theirs.',
     chooseModel: 'Choose a model',
     reviewModel: 'Action approval model',
     sameAsSession: "Same as the chat's current model",

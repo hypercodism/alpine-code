@@ -14,8 +14,9 @@ const atWork = (status: SessionInfo['status'] | undefined) => status === 'runnin
  * No one needs to watch the map while the AI works on it (map-first decision 18): the system says when a project's
  * map conversation or a build of its plan needs me or is over. Waiting for my yes, or for my answer to a question it
  * asked, is said whenever that map is not in front (the window in the back, or another screen); finishing or
- * stopping, while the window is in the back. The app coming forward after that (a click on the notification brings
- * it) opens the map that was told about.
+ * stopping, while the window is in the back. When the window was in the back and the map asked for me, the app
+ * coming forward after that (a click on the notification brings it) opens that map; told while I work in the window,
+ * nothing moves me.
  */
 export function useMapNotifications() {
   const t = useMessages(messages);
@@ -38,17 +39,15 @@ export function useMapNotifications() {
       if (was === undefined || was === session.status) continue;
       const away = !document.hasFocus();
       const hidden = away || onMap !== session.cwd;
-      const body =
-        session.status === 'waiting'
-          ? hidden && t.mapNeedsYes
-          : atWork(was) && !atWork(session.status)
-            ? asking.has(session.id)
-              ? hidden && t.mapAsks
-              : away && (session.status === 'failed' ? t.mapStopped : t.mapWorkDone)
-            : false;
+      const ended = atWork(was) && !atWork(session.status);
+      // Waiting for my yes, or for my answer to a question it asked.
+      const needsMe = session.status === 'waiting' ? t.mapNeedsYes : ended && asking.has(session.id) && t.mapAsks;
+      const body = needsMe
+        ? hidden && needsMe
+        : ended && away && (session.status === 'failed' ? t.mapStopped : t.mapWorkDone);
       if (!body) continue;
       const project = projects?.find((p) => p.path === session.cwd)?.name ?? session.cwd.split('/').pop() ?? '';
-      told.current = session.cwd;
+      if (needsMe && away) told.current = session.cwd;
       void notify(project, body);
     }
     before.current = now;

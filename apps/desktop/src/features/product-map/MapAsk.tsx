@@ -1,9 +1,8 @@
 import { ArrowUp } from 'lucide-react';
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 
-import { useConnectPrompt } from '@/shared/components/connect';
+import { useConnectPrompt, useNoModel } from '@/shared/components/connect';
 import { useMessages } from '@/shared/i18n';
-import { useConnections } from '@/shared/server';
 
 import { messages } from './messages';
 
@@ -35,11 +34,8 @@ export function MapAsk({
   const [text, setText] = useState('');
   const form = useRef<HTMLFormElement>(null);
   const canSend = !disabled && (empty || !!text.trim());
-  const connections = useConnections();
   const ask = useConnectPrompt((state) => state.ask);
-  // Only when the list says so: a list that could not be read leaves it to the server, whose answer says why.
-  const unconnected =
-    !!connections.data && connections.data.connections.length === 0 && connections.data.defaultModel === null;
+  const unconnected = useNoModel();
   const send = async () => {
     if (!canSend) return;
     if (unconnected) return ask();

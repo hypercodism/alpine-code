@@ -9,22 +9,25 @@ import { ServerError, useAddSkill } from '@/shared/server';
 import { messages } from './messages';
 
 /**
- * What dropping something on the window came to: skills added, several to pick from, why adding failed, or files
- * that are neither a skill nor a folder (`refused`, by name), which nothing takes yet.
+ * What dropping something on the window came to: skills added, several to pick from, why adding failed, files that
+ * are neither a skill nor a folder (`refused`, by name), which nothing takes yet, or a folder that could not be opened
+ * for another reason (`unopened`).
  */
 export type DropOutcome =
   | { kind: 'added'; names: string[] }
   | { kind: 'choose'; result: SkillsAddResult }
   | { kind: 'failed'; message: string }
-  | { kind: 'refused'; names: string[] };
+  | { kind: 'refused'; names: string[] }
+  | { kind: 'unopened'; name: string };
 
 /** A path that can only be a skill: an archive or a SKILL.md. A folder is a skill when a SKILL.md is in it. */
 const SKILL_FILE = /\.(zip|skill)$|(^|\/)SKILL\.md$/i;
 
 /**
  * Takes what was dropped on the window: skills (a `.zip`, a `.skill`, a SKILL.md or a folder with one) are added,
- * anything else goes to `onFolder`, which opens it as a project and resolves whether it was one. Resolves with what to
- * tell, or `null` when there is nothing to tell (a folder opened as a project shows itself).
+ * anything else goes to `onFolder`, which opens it as a project and resolves whether it was one (and rejects when it
+ * could not tell). Resolves with what to tell, or `null` when there is nothing to tell (a folder opened as a project
+ * shows itself).
  */
 export function useSkillDrop(onFolder: (path: string) => Promise<boolean>) {
   const { mutateAsync } = useAddSkill();
@@ -42,7 +45,10 @@ export function useSkillDrop(onFolder: (path: string) => Promise<boolean>) {
         } catch (reason) {
           const notThere = reason instanceof ServerError && reason.data?.reason === 'not_found';
           if (!notThere || SKILL_FILE.test(path)) return { kind: 'failed', message: skillError(reason, s) };
-          if (!(await onFolder(path))) refused.push(path.split('/').pop() || path);
+          const name = path.split('/').pop() || path;
+          const folder = await onFolder(path).catch(() => null);
+          if (folder === null) return { kind: 'unopened', name };
+          if (!folder) refused.push(name);
         }
       }
       if (refused.length > 0) return { kind: 'refused', names: refused };
@@ -62,10 +68,17 @@ export function DroppedSkillsDialog({ outcome, onClose }: { outcome: DropOutcome
   return (
     <Dialog.Root open={outcome !== null} onOpenChange={(open) => !open && (onClose(), setError(null))}>
       <Dialog.Popup size={outcome?.kind === 'choose' ? 'md' : 'sm'}>
-        <Dialog.Title>{outcome?.kind === 'refused' ? t.droppedFileTitle : s.droppedTitle}</Dialog.Title>
+        <Dialog.Title>
+          {outcome?.kind === 'refused'
+            ? t.droppedFileTitle
+            : outcome?.kind === 'unopened'
+              ? t.droppedFolderTitle
+              : s.droppedTitle}
+        </Dialog.Title>
         {outcome?.kind === 'refused' && (
           <Dialog.Description>{t.droppedFileBody(outcome.names.join(', '))}</Dialog.Description>
         )}
+        {outcome?.kind === 'unopened' && <Dialog.Description>{t.droppedFolderBody(outcome.name)}</Dialog.Description>}
         {outcome?.kind === 'added' && (
           <Dialog.Description>
             {s.droppedOne(outcome.names.map((name) => skillTitle(name, locale)).join(', '))}

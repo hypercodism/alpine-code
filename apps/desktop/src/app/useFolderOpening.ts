@@ -2,7 +2,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { useCallback, useEffect, useState } from 'react';
 
 import { inTauri, onPathsDropped, useOpenFolder } from '@/shared/platform';
-import { useOpenProject } from '@/shared/server';
+import { ServerError, useOpenProject } from '@/shared/server';
 
 import { useSkillDrop, type DropOutcome } from './DroppedSkills';
 
@@ -18,7 +18,8 @@ export function useFolderOpening(): [DropOutcome | null, () => void, () => void]
   const openFolder = useOpenFolder(show);
   const { mutateAsync: openProject } = useOpenProject();
   const [dropped, setDropped] = useState<DropOutcome | null>(null);
-  // A dropped file that is not a skill is refused by the server (not a folder): the drop says so.
+  // A dropped file that is not a skill is refused by the server (not a folder): the drop says so. Any other failure
+  // is not about what was dropped, and is passed on.
   const openAsProject = useCallback(
     (path: string) =>
       openProject(path).then(
@@ -26,7 +27,10 @@ export function useFolderOpening(): [DropOutcome | null, () => void, () => void]
           show(project.path);
           return true;
         },
-        () => false,
+        (reason: unknown) => {
+          if (reason instanceof ServerError && reason.data?.reason === 'not_a_folder') return false;
+          throw reason;
+        },
       ),
     [openProject, show],
   );

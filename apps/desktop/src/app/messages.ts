@@ -27,6 +27,8 @@ export const messages = defineMessages({
     droppedFileTitle: '이 파일은 받을 수 없어요',
     droppedFileBody: (names: string) =>
       `${names}: 파일을 대화에 붙이는 건 아직 안 돼요. 끌어다 놓을 수 있는 건 프로젝트로 열 폴더나 스킬(.zip, .skill, SKILL.md)이에요.`,
+    droppedFolderTitle: '폴더를 열지 못했어요',
+    droppedFolderBody: (name: string) => `${name}: 잠시 뒤에 다시 끌어다 놓아 주세요.`,
   },
   en: {
     productMap: 'Product map',
@@ -55,6 +57,8 @@ export const messages = defineMessages({
     droppedFileTitle: "This file can't be taken",
     droppedFileBody: (names: string) =>
       `${names}: attaching files to a conversation isn't possible yet. You can drop a folder to open as a project, or a skill (.zip, .skill, SKILL.md).`,
+    droppedFolderTitle: "Couldn't open the folder",
+    droppedFolderBody: (name: string) => `${name}: try dropping it again in a moment.`,
   },
 });
 

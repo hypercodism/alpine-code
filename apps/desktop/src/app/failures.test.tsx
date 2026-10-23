@@ -257,6 +257,26 @@ describe('a conversation that stopped (#83, #86)', () => {
     await waitFor(() => expect(sent).toHaveBeenCalledWith('테스트를 고쳐 줘'));
   });
 
+  it('opens the connect sheet instead of asking again when nothing is connected', async () => {
+    const sent = vi.fn();
+    mount(
+      '/session/old',
+      {
+        results: {
+          ...nothingConnected.results,
+          'session/send': ({ text }) => {
+            sent(text);
+            return {};
+          },
+        },
+      },
+      [{ info: sessionInfo({ id: 'old', cwd: app, title: '예전 대화' }), items: failed }],
+    );
+    fireEvent.click(await screen.findByRole('button', { name: '다시 시도' }));
+    expect(within(await screen.findByRole('dialog')).getByText('AI를 어떻게 쓸까요?')).toBeTruthy();
+    expect(sent).not.toHaveBeenCalled();
+  });
+
   it('leads to the model connection when the model sign-in ended', async () => {
     const { router } = mount('/session/old', {}, [
       {
@@ -349,6 +369,38 @@ describe('a question the AI asked on a map (#63, #73, #8, #25, #39)', () => {
     );
   });
 
+  it('leaves me where I am when the window comes forward after a notice I got while working in it', async () => {
+    const focused = vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    const { router, push } = mount('/session/old', {}, [
+      { info: sessionInfo({ id: 'old', cwd: docs, title: '예전 대화' }) },
+      { info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', status: 'running' }) },
+    ]);
+    await projectRow('alpine-code');
+    push(status(50, 'waiting'));
+    await waitFor(() => expect(platform.notify).toHaveBeenCalled());
+    // A Finder dialog, or another app, takes the window's focus for a while and gives it back.
+    focused.mockReturnValue(false);
+    act(() => void window.dispatchEvent(new Event('blur')));
+    focused.mockReturnValue(true);
+    act(() => void window.dispatchEvent(new Event('focus')));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(router.state.location.pathname).toBe('/session/old');
+  });
+
+  it('does not move me to a map whose work only ended while I was away', async () => {
+    vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+    const { router, push } = mount('/session/old', {}, [
+      { info: sessionInfo({ id: 'old', cwd: docs, title: '예전 대화' }) },
+      { info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', status: 'running' }) },
+    ]);
+    await projectRow('alpine-code');
+    push(status(50, 'idle'));
+    await waitFor(() => expect(platform.notify).toHaveBeenCalled());
+    act(() => void window.dispatchEvent(new Event('focus')));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(router.state.location.pathname).toBe('/session/old');
+  });
+
   it('says nothing about the map I am looking at while the window is in front', async () => {
     vi.spyOn(document, 'hasFocus').mockReturnValue(true);
     const { push } = mount('/board' + q(app), {}, [
@@ -372,6 +424,25 @@ describe('dropping something on the window (#85)', () => {
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText('이 파일은 받을 수 없어요')).toBeTruthy();
     expect(within(dialog).getByText(/photo\.png: 파일을 대화에 붙이는 건 아직 안 돼요/)).toBeTruthy();
+  });
+
+  it('does not call a folder a file when it could not be opened for another reason', async () => {
+    platform.dropped = () => {};
+    mount('/board' + q(docs), {
+      results: {
+        'skills/add': () => {
+          throw new ServerError(-32000, 'not found', { reason: 'not_found' });
+        },
+        'projects/open': () => {
+          throw new ServerError(-32000, 'boom');
+        },
+      },
+    });
+    await waitFor(() => expect(platform.dropped).not.toBeNull());
+    await act(async () => platform.dropped!(['/Users/me/shop']));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('폴더를 열지 못했어요')).toBeTruthy();
+    expect(within(dialog).queryByText('이 파일은 받을 수 없어요')).toBeNull();
   });
 });
 

@@ -1,9 +1,8 @@
 import { create } from 'zustand';
 
-import type { Item } from './sessionState';
+import { ASK_USER } from '@/shared/questions';
 
-/** The tool the agent asks me a question with (`shared/questions`); its turn ends there, so the session is idle. */
-const ASK_USER = 'ask_user';
+import type { Item } from './sessionState';
 
 /**
  * The sessions whose AI asked me something and waits for my answer: its turn is over (idle), so its status alone
