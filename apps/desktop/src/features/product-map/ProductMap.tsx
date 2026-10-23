@@ -10,6 +10,7 @@ import { ImportLink } from '@/shared/components/import-link';
 import { latestTaskForce, roomOf } from '@/shared/components/taskforce';
 import { useMessages } from '@/shared/i18n';
 import {
+  SESSION_RUNNING,
   ServerError,
   useAgents,
   useCancelSession,
@@ -18,6 +19,7 @@ import {
   usePrepareFlow,
   useProductMap,
   useProjects,
+  useResumeTaskForce,
   useReviewFlow,
   useSendMessage,
   useSession,
@@ -39,14 +41,15 @@ import { changedCards } from './FlowTree';
 import { toTreeMap } from './flowTreeData';
 import { flowTreeMessages } from './flowTreeMessages';
 import { JourneyMap } from './JourneyMap';
-import { PlanBar, type PlanReview } from './PlanBar';
-import { buildActivity, pendingQuestion, planPhase } from './planData';
+import { Bar, PlanBar, Working, type PlanReview, type PlanTeamAnswer } from './PlanBar';
+import { buildActivity, lastReply, pendingQuestion, planPhase, stopReason, TEAM_WORKING } from './planData';
 import { mapLookCss } from './planLook';
 import { planMessages } from './planMessages';
 import { AskFlight, MapAsk } from './MapAsk';
 import { DeleteMap, MapMenu, ScopeEditor } from './MapSettings';
 import { Unmapped } from './Unmapped';
 import { messages } from './messages';
+import { useLaterWords, useMapTalk } from './mapTalk';
 import { mapOf, matchingIds, searchOrder } from './model';
 
 type Action = FlowPrepareParams['action'];
@@ -63,6 +66,8 @@ const MIN_MAP_WIDTH = 560;
 const PANEL_WIDTH = 384;
 const DAY = 86_400_000;
 const DRAWING_KEY = 'alpine.product-map.drawing';
+const REPLY_KEY = 'alpine.product-map.reply';
+const atWork = (info?: { status: string } | null) => info?.status === 'running' || info?.status === 'waiting';
 /** Whether the daily check has not run for a day (or ever). */
 const due = (lastRun?: string | null) => {
   const at = lastRun ? Date.parse(lastRun) : 0;
@@ -83,6 +88,7 @@ export function ProductMap({
   onShowConversation,
   onOpenApp,
   onNewHere,
+  onFixConnection,
   demo = false,
   dockOpen = false,
   hidden = false,
@@ -96,6 +102,8 @@ export function ProductMap({
   onOpenApp?: () => void;
   /** Opens 새 프로젝트 for this folder, which is empty (map-first 41). */
   onNewHere?: (folder: string) => void;
+  /** Opens the model connection, where a build stopped by a sign-in, credits or a plan limit is fixed. */
+  onFixConnection?: () => void;
   demo?: boolean;
   /** Whether the right dock sits beside the map; when it does and the window is narrow, the changes list overlays it. */
   dockOpen?: boolean;
@@ -107,7 +115,6 @@ export function ProductMap({
   const plan = useMessages(planMessages);
   const board = useProductMap(cwd);
   const sessions = useSessions().data;
-  const live = useSession(sessionId);
   const create = useNewSession();
   const prepare = usePrepareFlow();
   const send = useSendMessage();
@@ -115,6 +122,7 @@ export function ProductMap({
   const review = useReviewFlow();
   const cancel = useCancelSession();
   const teamAction = useTaskForceAction();
+  const resumeTeam = useResumeTaskForce();
   // The session drawing the map from scratch (or continuing it), so the canvas can show it growing. Remembered, so
   // coming back while it still draws shows the same.
   const drawingKey = `${DRAWING_KEY}:${cwd}`;
@@ -167,10 +175,21 @@ export function ProductMap({
   const attempt = useRef<{ key: string; session: string; prepared?: FlowPrepareResult } | null>(null);
   const data = board.data;
   const document = data && mapOf(data);
-  const active = live.data?.info.status === 'running' || live.data?.info.status === 'waiting';
-  // Any session of this project that is working, not only the one shown.
-  const anyActive =
-    active || (sessions ?? []).some((s) => s.cwd === cwd && (s.status === 'running' || s.status === 'waiting'));
+  // Where the map talks and who does its work now: the build while it is unfinished, else the map's own conversation
+  // (or, before the map has one, the session the page attached, as an older map's drawing was).
+  const { mapConversation, buildSessionId, buildWorking, buildItems, buildTeam, building, talkTo } = useMapTalk(cwd);
+  const workId = talkTo ?? sessionId;
+  const work = useSession(workId);
+  const workInfo = work.data?.info;
+  const workTeam = work.data ? latestTaskForce(work.data.items) : null;
+  // A TF the work started keeps working while the session itself waits for it.
+  const workBusy = atWork(workInfo) || (!!workTeam && TEAM_WORKING.has(workTeam.status));
+  // Other conversations of this project at work (an older one on the rail, one opened beside the map): the map waits
+  // for them, and says so.
+  const others = (sessions ?? []).filter(
+    (s) => s.cwd === cwd && s.id !== workId && s.id !== buildSessionId && s.id !== mapConversation?.id && atWork(s),
+  );
+  const anyActive = workBusy || others.length > 0;
   const reasons: Record<string, string> = {
     flow_conflict: t.conflict,
     map_read_only: t.readOnlyBanner,
@@ -189,7 +208,10 @@ export function ProductMap({
     enabled: !!data && !data.exists,
     retry: false,
   });
-  const emptyFolder = !!rootFiles.data && rootFiles.data.entries.every((entry) => entry.name === '.DS_Store');
+  // Hidden files alone (.git of a repository with nothing in it yet, .DS_Store) leave a folder empty.
+  const emptyFolder = !!rootFiles.data && rootFiles.data.entries.every((entry) => entry.name.startsWith('.'));
+  // Until the folder is read, it is neither empty nor a project to draw from (unless the AI already draws it).
+  const checkingFolder = !!data && !data.exists && rootFiles.isPending && !workBusy && !busy;
   const locked = busy || anyActive || readOnly;
   const project = cwd.split('/').pop() ?? cwd;
   // Only which sessions work changes the cards; their other updates (many a second while one runs) must not redraw
@@ -226,6 +248,11 @@ export function ProductMap({
   }, [flight, landed]);
   const flights = useRef(0);
   const askMap = async (text: string, from: DOMRect | null) => {
+    // While the AI works, a request waits and goes once the work is over.
+    if (hasMap && text && (anyActive || busy)) {
+      later.add(null, text);
+      return true;
+    }
     const shown = { text: text || t.drawBubble, from, toFirst: !hasMap, at: ++flights.current };
     setFlight(shown);
     // A map that exists takes the words as a request (do it, keep the map true); none yet, they draw it from the code.
@@ -236,56 +263,46 @@ export function ProductMap({
     return started;
   };
 
-  // A TF the drawing session started keeps drawing while the session itself waits for it.
-  const team = live.data ? latestTaskForce(live.data.items) : null;
-  const teamWorking = team?.status === 'running' || team?.status === 'over' || team?.status === 'stopping';
-  // The map's conversation lives in the right panel. It opens there by itself when it needs me or a TF begins: a TF
-  // proposed (its 시작 is there) or set off, or the AI waiting for my answer. Once per such moment.
+  // The map's conversation lives in the right panel. It opens there by itself when the work needs me or a TF begins:
+  // a TF proposed (its 시작 is there) or set off, or the AI waiting for my OK. Once per such moment.
   const calling =
-    live.data?.info.status === 'waiting'
-      ? `wait:${live.data.items.length}`
-      : team && (team.status === 'proposed' || team.status === 'running')
-        ? `team:${team.id}:${team.status}`
+    workInfo?.status === 'waiting'
+      ? `wait:${workId}:${work.data?.items.length}`
+      : workTeam && (workTeam.status === 'proposed' || workTeam.status === 'running')
+        ? `team:${workTeam.id}:${workTeam.status}`
         : null;
   const called = useRef<string | null>(null);
-  const openConversation = useEffectEvent(() => onShowConversation?.());
+  const showWork = () => {
+    if (workId && workId !== sessionId) onSession(workId);
+    onShowConversation?.();
+  };
+  const openConversation = useEffectEvent(showWork);
   useEffect(() => {
     if (calling && calling !== called.current) openConversation();
     called.current = calling;
   }, [calling]);
-  // Only drawing can run on a project with no map yet, so a working session there is the drawing (also after a reload).
-  const drawing = (active || teamWorking) && (!hasMap || drawingSession === sessionId);
-  const drawingLine = drawing && (
-    <span role="status" className="flex min-w-0 items-center gap-2 text-meta text-fg-muted">
-      <span aria-hidden className="size-2 shrink-0 animate-pulse rounded-full bg-interactive" />
-      <span className="truncate">
-        {hasMap ? t.drawingFound(document?.flows?.length ?? 0, document?.nodes?.length ?? 0) : t.drawingFirst}
-      </span>
-      {sessionId && (
-        <button
-          type="button"
-          onClick={() => {
-            // Stopping the drawing stops its TF too, not only the session that asked for it.
-            if (team && teamWorking) teamAction.mutate({ action: 'stop', sessionId, runId: team.id });
-            cancel.mutate(sessionId);
-          }}
-          className="shrink-0 cursor-pointer rounded-md px-1.5 text-fg-muted hover:bg-hover hover:text-fg"
-        >
-          {t.stopDrawing}
-        </button>
-      )}
-    </span>
-  );
+  // Only drawing can run on a project with no map yet, so working there is the drawing (also after a reload). A plan
+  // says how it stands in its own bar.
+  const drawing = workBusy && (!hasMap || drawingSession === workId);
+  // Stops the map's work now, with the TF it started.
+  const stopWork = () => {
+    if (!workId) return;
+    if (workTeam && TEAM_WORKING.has(workTeam.status))
+      teamAction.mutate({ action: 'stop', sessionId: workId, runId: workTeam.id });
+    cancel.mutate(workId);
+  };
 
   const nodeOf = (id: string) => document?.nodes?.find((n) => n.id === id) ?? null;
-  // The project's map conversation (newest first in the list), kept going across every request to the map.
-  const mapConversation = (sessions ?? []).find((s) => s.cwd === cwd && s.purpose === 'map' && !s.archived) ?? null;
   const conversation = useSession(mapConversation?.id ?? null);
-  const conversationWorking = mapConversation?.status === 'running' || mapConversation?.status === 'waiting';
-  // My words to the map's conversation, as they are: answers to its questions and anything else about the plan.
+  const conversationWorking = atWork(mapConversation);
+  // My words to the conversation the map talks to, as they are: answers to its questions and anything else about the
+  // plan. A conversation at work takes them when its turn is over, so they wait until then and are never lost.
+  const later = useLaterWords(cwd);
   const say = (text: string) => {
-    const to = talkTo ?? mapConversation?.id;
-    if (to) send.mutate({ sessionId: to, text });
+    const to = talkTo ?? sessionId;
+    if (!to || !text) return false;
+    later.add(to, text);
+    return true;
   };
 
   // A product being planned on this map (it began as a plan): the question its conversation waits on, where the plan
@@ -297,25 +314,23 @@ export function ProductMap({
     [planned, conversationWorking, conversationItems],
   );
   const question = pending?.question ?? null;
-  // A build is a conversation of its own (map-first 36): the map follows it and the TF it proposes or runs.
-  const buildSessionId = planned ? (data?.buildSession ?? null) : null;
-  const buildConversation = useSession(buildSessionId);
-  const buildInfo = (sessions ?? []).find((s) => s.id === buildSessionId);
-  const buildWorking = buildInfo?.status === 'running' || buildInfo?.status === 'waiting';
-  const buildItems = buildConversation.data?.items;
-  const buildTeam = buildItems ? latestTaskForce(buildItems) : null;
+  // A build is a conversation of its own (map-first 36): the map follows it and the TF it proposes or runs. While it
+  // is unfinished the map's one input goes to it, which fixes things itself (map-first 37).
   const phase =
     planned && data
       ? planPhase(data, conversationWorking, !!question, { working: buildWorking, team: buildTeam?.status ?? null })
       : null;
-  // While a build is unfinished, the map's one input goes to the build, which fixes things itself (map-first 37).
-  const building = phase === 'building' || phase === 'team' || phase === 'stopped';
-  const talkTo = building ? buildSessionId : (mapConversation?.id ?? null);
   const talking = building ? buildWorking : conversationWorking;
+  // A build that stopped can have asked something (rare: no sensible default), and its run says why it stopped.
+  const buildQuestion = useMemo(
+    () => (phase === 'stopped' ? (pendingQuestion(buildItems ?? [])?.question ?? null) : null),
+    [phase, buildItems],
+  );
+  const shownQuestion = phase === 'stopped' ? buildQuestion : question;
   const [lookPreview, setLookPreview] = useState<{ question: string; option: number } | null>(null);
-  const previewing = question && lookPreview?.question === question.id ? lookPreview.option : 0;
+  const previewing = shownQuestion && lookPreview?.question === shownQuestion.id ? lookPreview.option : 0;
   // Looking at a look option restyles every screen on the map at once; until then the map wears its own look.
-  const look = question?.options[previewing]?.look ?? (data?.look ? mapLookCss(data.look) : undefined);
+  const look = shownQuestion?.options[previewing]?.look ?? (data?.look ? mapLookCss(data.look) : undefined);
   const activity =
     phase === 'building' && data
       ? (buildActivity(buildItems ?? [], data, {
@@ -326,11 +341,32 @@ export function ProductMap({
           thinking: plan.activityThinking,
         }) ?? { text: plan.activityThinking, touching: [] })
       : null;
-  const touchingKey = activity?.touching.join(' ') ?? '';
+  // The same facts for work on a map that is not a plan (a request, a change, a check): what the AI does now, in a line
+  // above the input with 멈추기, and the cards it touches.
+  const workActivity =
+    !planned && workBusy && data
+      ? buildActivity(work.data?.items ?? [], data, {
+          onCard: t.workOnCard,
+          editing: plan.activityEditing,
+          running: plan.activityRunning,
+          reading: plan.activityReading,
+          thinking: plan.activityThinking,
+        })
+      : null;
+  const workText = drawing
+    ? hasMap
+      ? t.drawingFound(document?.flows?.length ?? 0, document?.nodes?.length ?? 0)
+      : t.drawingFirst
+    : (workActivity?.text ?? plan.activityThinking);
+  const touchingKey = (activity ?? workActivity)?.touching.join(' ') ?? '';
   const touching = useMemo(() => new Set(touchingKey.split(' ').filter(Boolean)), [touchingKey]);
-  // A question the AI answered on its own, opened from its card to answer again.
+  // A question the AI answered on its own, opened from its card to answer again; from the done line, one after
+  // another through every card the AI decided on.
   const [reviewing, setReviewing] = useState<string | null>(null);
   const aiPick = (cardId: string) => treeMap?.cards[cardId]?.picks?.findLast((pick) => pick.by === 'ai');
+  const aiPicked = Object.values(treeMap?.cards ?? {}).filter((card) => card.picks?.some((pick) => pick.by === 'ai'));
+  const reviewOrder = aiPicked.map((card) => card.id);
+  const reviewAt = reviewing ? reviewOrder.indexOf(reviewing) : -1;
   const reviewPick = reviewing ? aiPick(reviewing) : undefined;
   const pickReview: PlanReview | null =
     reviewing && reviewPick
@@ -343,8 +379,19 @@ export function ProductMap({
             text: reviewPick.question,
             options: (reviewPick.options.length ? reviewPick.options : [reviewPick.answer]).map((label) => ({ label })),
           },
+          position: reviewAt >= 0 && reviewOrder.length > 1 ? { index: reviewAt + 1, total: reviewOrder.length } : null,
         }
       : null;
+  const nextReview = () => setReviewing(reviewAt >= 0 ? (reviewOrder[reviewAt + 1] ?? null) : null);
+  // Another answer to a question the AI decided: while building it goes to the build, which redoes that part; once
+  // built it is a change to that card, like a card's own "부탁하기".
+  const changeDecision = (answer: string) => {
+    if (!pickReview || !reviewing) return;
+    const words = plan.changeDecisionMessage(pickReview.card, pickReview.question.text, answer);
+    if (phase !== 'built') say(words);
+    else if (anyActive || busy) later.add(null, words, reviewing);
+    else void start('change', { node: nodeOf(reviewing), request: words });
+  };
   // "이대로 만들기" starts the build in a new conversation that reads only the map; 이어서 만들기 continues that one.
   const startBuild = async (request: string) => {
     if (!data || lock.current) return;
@@ -381,10 +428,18 @@ export function ProductMap({
       setBusy(false);
     }
   };
-  const aiPicked = Object.values(treeMap?.cards ?? {}).filter((card) => card.picks?.some((pick) => pick.by === 'ai'));
+  // A build whose TF was cut off (the app closed) goes on where the TF was; any other stopped build is asked to go on.
+  const continueBuild = () =>
+    buildTeam?.status === 'interrupted' && buildSessionId
+      ? resumeTeam.mutate({ sessionId: buildSessionId, runId: buildTeam.id, fresh: false })
+      : void startBuild(plan.continueRequest);
+  const answerTeam = (answer: PlanTeamAnswer) =>
+    buildTeam &&
+    buildSessionId &&
+    teamAction.mutate({ action: answer, sessionId: buildSessionId, runId: buildTeam.id });
   const promisesAll = Object.values(treeMap?.cards ?? {}).flatMap((card) => card.promises);
-  // Who does the map's work: the conversation's agent once it exists, until then my pick for it (else the project's
-  // last agent, as a new conversation would take).
+  // Who does the map's work: the conversation the map talks to once it exists (the build while it is unfinished),
+  // until then my pick for it (else the project's last agent, as a new conversation would take).
   const agents = useAgents().data?.agents;
   const defaultModel = useConnections().data?.defaultModel ?? null;
   const lastAgent = useProjects().data?.projects.find((p) => p.path === cwd)?.lastAgent ?? null;
@@ -392,25 +447,34 @@ export function ProductMap({
   const setAgent = useSetSessionAgent();
   const wantedAgent = newAgent ?? lastAgent ?? 'default';
   const pickedAgent = agents?.some((a) => a.id === wantedAgent) ? wantedAgent : 'default';
+  const talkInfo = (sessions ?? []).find((s) => s.id === talkTo) ?? (talkTo === workId ? workInfo : null) ?? null;
+  // The plan's conversation follows a change made while the build talks, so the two never work by different rules.
+  const alsoMap = mapConversation && mapConversation.id !== talkInfo?.id ? mapConversation : null;
   // How much the map's agents may do without asking (a TF's agents follow it too): the conversation's, until it
   // exists my pick for it.
   const [newMode, setNewMode] = useState<Mode | null>(null);
   const setMode = useSetSessionMode();
   const modeChip = (
     <ModeChip
-      mode={mapConversation?.mode ?? newMode ?? 'default'}
-      onChange={(mode) =>
-        mapConversation ? setMode.mutate({ sessionId: mapConversation.id, mode }) : setNewMode(mode)
-      }
+      mode={talkInfo?.mode ?? newMode ?? 'default'}
+      onChange={(mode) => {
+        if (!talkInfo) return setNewMode(mode);
+        setMode.mutate({ sessionId: talkInfo.id, mode });
+        if (alsoMap) setMode.mutate({ sessionId: alsoMap.id, mode });
+      }}
     />
   );
-  const agentChip = mapConversation ? (
+  const agentChip = talkInfo ? (
     <AgentChip
       context="session"
-      agentId={mapConversation.agent ?? 'default'}
-      model={mapConversation.model}
-      disabled={anyActive || setAgent.isPending}
-      onChange={(agent) => setAgent.mutate({ sessionId: mapConversation.id, agent })}
+      agentId={talkInfo.agent ?? 'default'}
+      model={talkInfo.model}
+      // An agent takes over between turns: it waits while the conversation works.
+      disabled={atWork(talkInfo) || setAgent.isPending}
+      onChange={(agent) => {
+        setAgent.mutate({ sessionId: talkInfo.id, agent });
+        if (alsoMap && !atWork(alsoMap)) setAgent.mutate({ sessionId: alsoMap.id, agent });
+      }}
     />
   ) : (
     <AgentChip
@@ -494,6 +558,65 @@ export function ProductMap({
       setBusy(false);
     }
   };
+
+  // Words that waited for the AI go, oldest first, once what they go to is free: a conversation between its turns, a
+  // request to the map once nothing in the project works.
+  const next = later.words[0];
+  const nextBusy = next
+    ? next.to === null
+      ? anyActive || busy
+      : next.to === workId
+        ? workBusy
+        : atWork((sessions ?? []).find((s) => s.id === next.to))
+    : false;
+  const [nudge, setNudge] = useState(0);
+  const sending = useRef<string | null>(null);
+  useEffect(() => {
+    if (!next || next.failed || nextBusy || sending.current === next.id) return;
+    sending.current = next.id;
+    const word = next;
+    const done = () => (sending.current = null);
+    if (word.to === null) {
+      // A request is prepared when it goes; if it fails, the error above the map offers to try again.
+      const node = word.node ? nodeOf(word.node) : null;
+      void (node ? start('change', { node, request: word.text }) : start('request', { request: word.text })).finally(
+        () => {
+          later.drop(word.id);
+          done();
+        },
+      );
+      return;
+    }
+    send.mutate(
+      { sessionId: word.to, text: word.text },
+      {
+        onSuccess: () => {
+          later.drop(word.id);
+          onSession(word.to!);
+          done();
+        },
+        onError: (error) => {
+          done();
+          // It started working a moment before: it goes when this turn is over.
+          if (error instanceof ServerError && error.code === SESSION_RUNNING)
+            setTimeout(() => setNudge((n) => n + 1), 1000);
+          else later.fail(word.id, true);
+        },
+      },
+    );
+    // `start`, `send` and `later` are new on every render; what decides a send is the word and whether it can go.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [next?.id, next?.failed, nextBusy, nudge]);
+  // Words shown as waiting: those that cannot go yet, or could not be sent.
+  const waitingWords = later.words.filter(
+    (word) =>
+      word.failed ||
+      (word.to === null
+        ? anyActive || busy
+        : word.to === workId
+          ? workBusy
+          : atWork((sessions ?? []).find((s) => s.id === word.to))),
+  );
 
   const syncMap = () => void start('sync', { request: t.syncRequest });
   const continueMap = () => void start('discover', { request: t.continueRequest });
@@ -608,13 +731,48 @@ export function ProductMap({
     onShowConversation?.();
   };
 
+  // The AI's last answer, above the input until I close it (map-first 3): on a map, and on a plan once built or when
+  // it ended without a question.
+  const replyKey = `${REPLY_KEY}:${cwd}`;
+  const [seenReply, setSeenReply] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(replyKey);
+    } catch {
+      return null;
+    }
+  });
+  const reply = !workBusy && !building && !busy ? lastReply(work.data?.items ?? []) : null;
+  const showReply =
+    !!reply && reply.id !== seenReply && (!planned || phase === 'built' || (phase === 'asking' && !question));
+  const closeReply = () => {
+    if (!reply) return;
+    setSeenReply(reply.id);
+    try {
+      localStorage.setItem(replyKey, reply.id);
+    } catch {
+      // Closed for this visit only.
+    }
+  };
+  // Words from the map's one input: another answer while a decision of the AI is open, the plan's conversation (or
+  // the build's) while it is a plan, else a request to the map.
+  const sendWords = async (text: string, from: DOMRect | null) => {
+    if (pickReview && text) {
+      changeDecision(text);
+      nextReview();
+      return true;
+    }
+    if (planned && phase !== 'built') return say(text);
+    return askMap(text, from);
+  };
+  const waitsForWork = planned && phase !== 'built' ? workBusy : hasMap && anyActive;
+
   const mapMenu = data && (
     <MapMenu
       cwd={cwd}
       board={data}
       readOnly={readOnly}
       unseen={unseen}
-      canStart={!(busy || active || board.isError || readOnly)}
+      canStart={!(busy || workBusy || board.isError || readOnly)}
       onChanges={data.changes?.length ? openChanges : undefined}
       onRediscover={() => setConfirmRebuild(true)}
       onScope={() => setScopeOpen(true)}
@@ -628,9 +786,9 @@ export function ProductMap({
     <main ref={area} className="flex min-h-0 min-w-0 grow flex-col bg-canvas contain-inline-size" aria-label={t.title}>
       {/* Before the first card the map may already exist (being drawn, or stopped early): its menu (scope, delete)
           is here too, so a map is never out of reach. */}
-      {!hasMap && data && (drawing || data.exists) && (
+      {!hasMap && data && (workBusy || data.exists) && (
         <div className="flex min-h-11 shrink-0 items-center gap-2 border-b border-line px-3 py-1.5">
-          <span className="min-w-0 grow">{drawingLine}</span>
+          <span className="grow" />
           {mapMenu}
         </div>
       )}
@@ -676,7 +834,6 @@ export function ProductMap({
               )}
             </span>
           )}
-          {drawingLine && <span className="min-w-0">{drawingLine}</span>}
           <span className="grow" />
           {phase === 'asking' && !!data.undecided?.length && (
             <span className="inline-flex h-7 shrink-0 items-center rounded-full border border-line px-2.5 text-meta text-attention">
@@ -761,7 +918,7 @@ export function ProductMap({
       {confirmRebuild && (
         <div className="flex flex-wrap items-center gap-3 border-b border-line bg-canvas-sunken px-5 py-3 text-body">
           <span className="min-w-0 grow">{t.rediscoverConfirm}</span>
-          <Button variant="primary" disabled={busy || active || readOnly} onClick={() => void start('discover')}>
+          <Button variant="primary" disabled={busy || workBusy || readOnly} onClick={() => void start('discover')}>
             {busy ? t.starting : t.rediscoverStart}
           </Button>
           <Button onClick={() => setConfirmRebuild(false)}>{t.cancel}</Button>
@@ -880,6 +1037,8 @@ export function ProductMap({
           <div className="flex min-w-0 grow items-center justify-center">
             <span aria-hidden className="h-16 w-44 animate-pulse rounded-xl border border-dashed border-line" />
           </div>
+        ) : !hasMap && checkingFolder ? (
+          <p className="p-8 text-body text-fg-muted">{t.checkingFolder}</p>
         ) : !hasMap && emptyFolder ? (
           <div className="flex min-w-0 grow flex-col items-center justify-center gap-3 p-8 text-center">
             <h2 className="text-title font-semibold">{t.emptyFolder}</h2>
@@ -946,11 +1105,15 @@ export function ProductMap({
                       <CardAsk
                         key={cardId}
                         locked={locked}
+                        // Words are taken while the AI works: they go when it is free.
+                        askLocked={busy || readOnly}
                         // While planning or building, a word about a card goes to that conversation (map-first 37).
                         onAsk={(request) =>
                           planned && phase !== 'built'
-                            ? Promise.resolve(say(plan.cardRequest(node.title, request))).then(() => true)
-                            : start('change', { node, request })
+                            ? Promise.resolve(say(plan.cardRequest(node.title, request)))
+                            : anyActive
+                              ? Promise.resolve(later.add(null, request, node.id)).then(() => true)
+                              : start('change', { node, request })
                         }
                         onRecheck={() => void start('verify', { node })}
                       />
@@ -975,8 +1138,8 @@ export function ProductMap({
             <PlanBar
               phase={phase}
               thinking={talking && phase === 'asking'}
-              question={question}
-              about={question?.about ? (treeMap?.cards[question.about]?.title ?? null) : null}
+              question={shownQuestion}
+              about={shownQuestion?.about ? (treeMap?.cards[shownQuestion.about]?.title ?? null) : null}
               preview={previewing}
               sample={
                 pending?.sample ||
@@ -984,6 +1147,8 @@ export function ProductMap({
                 ''
               }
               activity={activity}
+              waiting={workInfo?.status === 'waiting'}
+              left={data?.undecided?.length ?? 0}
               review={pickReview}
               built={{
                 checked: promisesAll.filter((p) => p.status === 'passed').length,
@@ -993,46 +1158,117 @@ export function ProductMap({
                 done: (data?.document?.nodes ?? []).filter((node) => node.phase === 'built').length,
               }}
               team={
-                buildTeam?.status === 'proposed'
-                  ? { title: buildTeam.title, agents: roomOf(buildTeam).planned, minutes: buildTeam.minutes }
+                buildTeam?.status === 'proposed' || buildTeam?.status === 'over'
+                  ? {
+                      status: buildTeam.status,
+                      title: buildTeam.title,
+                      agents: roomOf(buildTeam).planned,
+                      minutes: buildTeam.minutes,
+                      needed: buildTeam.needed,
+                    }
                   : null
               }
-              onTeam={(go) =>
-                buildTeam &&
-                buildSessionId &&
-                teamAction.mutate({ action: go ? 'start' : 'decline', sessionId: buildSessionId, runId: buildTeam.id })
-              }
-              onContinue={() => void startBuild(plan.continueRequest)}
+              stop={{ reason: stopReason(buildItems ?? []), team: buildTeam?.status === 'interrupted' }}
+              onTeam={answerTeam}
+              onContinue={continueBuild}
               onAnswer={(option) => {
-                const label = question?.options[option]?.label;
+                const label = shownQuestion?.options[option]?.label;
                 if (label) say(label);
               }}
-              onPreview={(option) => question && setLookPreview({ question: question.id, option })}
+              onPreview={(option) => shownQuestion && setLookPreview({ question: shownQuestion.id, option })}
               onDecideRest={() => say(plan.decideRestMessage)}
+              onAskOn={() => say(plan.askOnMessage)}
+              onDrawOn={() => say(plan.drawOnMessage)}
               onBuild={() => void startBuild(t.buildRequest)}
               onDecide={(option) => {
                 const label = pickReview?.question.options[option]?.label;
-                if (pickReview && label)
-                  say(plan.changeDecisionMessage(pickReview.card, pickReview.question.text, label));
-                setReviewing(null);
+                // The answer it already has needs nothing sent.
+                if (label && option !== pickReview?.picked) changeDecision(label);
+                nextReview();
               }}
               onCloseReview={() => setReviewing(null)}
-              onReviewPicks={() => aiPicked[0] && setReviewing(aiPicked[0].id)}
+              onNextReview={nextReview}
+              onReviewPicks={() => reviewOrder[0] && setReviewing(reviewOrder[0])}
               onOpenApp={() => onOpenApp?.()}
+              onFixConnection={() => onFixConnection?.()}
+              onStop={stopWork}
+              onLook={showWork}
             />
           )}
-          {data && !readOnly && !board.isError && !(emptyFolder && !hasMap) && (
+          {!planned &&
+            workBusy &&
+            (workInfo?.status === 'waiting' ? (
+              <Bar title={t.workWaiting} hint={t.workWaitingHint}>
+                <Button variant="primary" onClick={showWork}>
+                  {t.workLook}
+                </Button>
+                <Button onClick={stopWork}>{t.stopDrawing}</Button>
+              </Bar>
+            ) : (
+              <Working key={workText} text={workText} stop={t.stopDrawing} onStop={stopWork} />
+            ))}
+          {!workBusy && others.length > 0 && (
+            <p className="pointer-events-auto flex flex-wrap items-center gap-x-2 self-center rounded-full bg-canvas-raised px-3 py-1 text-meta text-fg-muted shadow-overlay">
+              <span>{t.otherWorking}</span>
+              <LinkButton
+                className="min-h-5 px-0.5"
+                onClick={() => {
+                  onSession(others[0]!.id);
+                  onShowConversation?.();
+                }}
+              >
+                {t.otherWorkingShow}
+              </LinkButton>
+            </p>
+          )}
+          {showReply && reply && (
+            <section
+              aria-label={t.replyFrom}
+              className="pointer-events-auto motion-step flex items-start gap-3 rounded-xl border border-line bg-canvas-raised p-3 shadow-overlay"
+            >
+              <p className="line-clamp-3 min-w-0 grow text-body whitespace-pre-line text-fg">{reply.text}</p>
+              <span className="flex shrink-0 items-center gap-2">
+                <LinkButton className="min-h-5 px-0.5" onClick={showWork}>
+                  {t.showConversation}
+                </LinkButton>
+                <LinkButton className="min-h-5 px-0.5" onClick={closeReply}>
+                  {t.replyClose}
+                </LinkButton>
+              </span>
+            </section>
+          )}
+          {waitingWords.length > 0 && (
+            <section
+              aria-label={t.laterTitle}
+              className="pointer-events-auto motion-step flex flex-col gap-1.5 rounded-xl border border-line bg-canvas-raised p-3 shadow-overlay"
+            >
+              <p className="text-meta text-fg-muted">{t.laterTitle}</p>
+              <ul className="flex flex-col gap-1">
+                {waitingWords.map((word) => (
+                  <li key={word.id} className="flex items-baseline gap-2 text-body">
+                    <span className="min-w-0 grow truncate">{word.text}</span>
+                    {word.failed && (
+                      <>
+                        <span className="shrink-0 text-meta text-danger">{t.laterFailed}</span>
+                        <LinkButton className="min-h-5 px-0.5" onClick={() => later.fail(word.id, false)}>
+                          {t.laterRetry}
+                        </LinkButton>
+                      </>
+                    )}
+                    <LinkButton className="min-h-5 px-0.5" onClick={() => later.drop(word.id)}>
+                      {t.laterCancel}
+                    </LinkButton>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+          {data && !readOnly && !board.isError && !checkingFolder && !(emptyFolder && !hasMap) && (
             <MapAsk
               empty={!hasMap}
-              disabled={busy || (planned ? talking : anyActive)}
-              onSend={
-                planned
-                  ? async (text) => {
-                      if (text) say(text);
-                      return !!text;
-                    }
-                  : askMap
-              }
+              disabled={busy || (!hasMap && !planned && anyActive)}
+              placeholder={waitsForWork ? t.busyAsk : undefined}
+              onSend={sendWords}
               agent={
                 <>
                   {agentChip}

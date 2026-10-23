@@ -1,5 +1,7 @@
+import type { RunStoppedItem } from '@alpine/protocol';
 import { Button, LinkButton } from '@alpine/ui/primitives';
 import clsx from 'clsx';
+import type { ReactNode } from 'react';
 
 import { HtmlFrame } from '@/shared/components/html-frame';
 import { useMessages } from '@/shared/i18n';
@@ -13,13 +15,38 @@ export interface PlanReview {
   card: string;
   question: PlanQuestion;
   picked: number;
+  /** Where it is among the AI's own picks (1-based), when there are several to go through. */
+  position: { index: number; total: number } | null;
 }
+
+/** The build's TF while it waits for the person: its yes (`proposed`), or more agents than planned (`over`). */
+export interface PlanTeam {
+  status: 'proposed' | 'over';
+  title: string;
+  agents: number;
+  minutes: number;
+  /** How many agents it needs once over; `null` when it did not say. */
+  needed: number | null;
+}
+
+/** Why a build stopped with cards left, when the facts say: the run's own reason, a question it asked, its TF cut off. */
+export interface PlanStop {
+  reason: RunStoppedItem['reason'] | null;
+  /** The build's TF was cut off (the app closed): continuing resumes it. */
+  team: boolean;
+}
+
+/** What the person can say to the build's TF from the map, as on its card in the conversation. */
+export type PlanTeamAnswer = 'start' | 'decline' | 'allowMore' | 'takeResults';
+
+/** Stop reasons the person fixes in the model connection, not by continuing. */
+const CONNECTION = new Set<RunStoppedItem['reason']>(['signed_out', 'credits_exhausted', 'plan_limit']);
 
 /**
  * What a planned map says just above its input, from facts only: the question the AI waits on (on the card it
- * changes), "이대로 만들기" once nothing is left, what the AI does now while it builds, and once built, what was
- * checked and what the AI decided on its own. A question the AI answered while building can be opened from its card
- * and answered again here.
+ * changes), "이대로 만들기" once nothing is left, what the AI does now while it builds (with 멈추기, and a call to look
+ * when it waits for my OK), and once built, what was checked and what the AI decided on its own. A question the AI
+ * answered while building can be opened from its card and answered again here, one after another.
  */
 export function PlanBar({
   phase,
@@ -29,23 +56,33 @@ export function PlanBar({
   preview,
   sample,
   activity,
+  waiting,
+  left,
   review,
   built,
   team,
+  stop,
   onAnswer,
   onPreview,
   onDecideRest,
+  onAskOn,
+  onDrawOn,
   onBuild,
   onDecide,
   onCloseReview,
+  onNextReview,
   onReviewPicks,
   onOpenApp,
   onTeam,
   onContinue,
+  onFixConnection,
+  onStop,
+  onLook,
 }: {
   phase: PlanPhase;
   /** The AI is changing the map after an answer. */
   thinking: boolean;
+  /** The question waiting: the plan's while planning, the build's once it stopped. */
   question: PlanQuestion | null;
   /** The title of the card the question is about. */
   about: string | null;
@@ -54,22 +91,36 @@ export function PlanBar({
   /** The screen the look options show themselves with. */
   sample: string;
   activity: PlanActivity | null;
+  /** The AI at work waits for my OK on something it wants to do. */
+  waiting: boolean;
+  /** How many product decisions are still open. */
+  left: number;
   review: PlanReview | null;
   built: { checked: number; total: number; aiPicks: number; cards: number; done: number };
-  /** The TF the build proposed, waiting for the person's yes. */
-  team: { title: string; agents: number; minutes: number } | null;
+  /** The build's TF while it waits for the person. */
+  team: PlanTeam | null;
+  stop: PlanStop;
   onAnswer: (option: number) => void;
   onPreview: (option: number) => void;
   onDecideRest: () => void;
+  /** Asks the AI to go on asking what is left. */
+  onAskOn: () => void;
+  /** Asks the AI to go on drawing a plan that stopped before its first card. */
+  onDrawOn: () => void;
   onBuild: () => void;
   onDecide: (option: number) => void;
   onCloseReview: () => void;
+  onNextReview: () => void;
   onReviewPicks: () => void;
   onOpenApp: () => void;
-  /** The person's answer to the TF the build proposed: start it, or let one AI build alone. */
-  onTeam: (start: boolean) => void;
+  onTeam: (answer: PlanTeamAnswer) => void;
   /** Continues a build that stopped with cards left. */
   onContinue: () => void;
+  onFixConnection: () => void;
+  /** Stops what the AI is doing now. */
+  onStop: () => void;
+  /** Shows the conversation at work, where what it waits on is. */
+  onLook: () => void;
 }) {
   const t = useMessages(messages);
   if (review)
@@ -82,12 +133,24 @@ export function PlanBar({
         picked={review.picked}
         preview={0}
         sample={sample}
+        position={review.position}
         onAnswer={onDecide}
         onPreview={onPreview}
         onClose={onCloseReview}
+        onNext={onNextReview}
       />
     );
-  if (phase === 'drawing' || thinking) return <Working text={phase === 'drawing' ? t.drawingLine : t.thinkingLine} />;
+  if (waiting && (phase === 'building' || phase === 'drawing' || thinking))
+    return (
+      <Bar title={t.waitingTitle} hint={t.waitingHint}>
+        <Button variant="primary" onClick={onLook}>
+          {t.waitingLook}
+        </Button>
+        <Button onClick={onStop}>{t.stop}</Button>
+      </Bar>
+    );
+  if (phase === 'drawing' || thinking)
+    return <Working text={phase === 'drawing' ? t.drawingLine : t.thinkingLine} stop={t.stop} onStop={onStop} />;
   if (phase === 'asking' && question)
     return (
       <Question
@@ -101,44 +164,87 @@ export function PlanBar({
         onDecideRest={onDecideRest}
       />
     );
+  // The AI ended its turn without a question (stopped, failed, or just talked): what is left stays answerable.
+  if (phase === 'asking' && built.cards === 0)
+    return (
+      <Bar title={t.noMapTitle}>
+        <Button variant="primary" onClick={onDrawOn}>
+          {t.drawOn}
+        </Button>
+      </Bar>
+    );
+  if (phase === 'asking' && left > 0)
+    return (
+      <Bar title={t.leftTitle(left)} hint={t.leftHint}>
+        <Button variant="primary" onClick={onAskOn}>
+          {t.askOn}
+        </Button>
+        <Button onClick={onDecideRest}>{t.decideRest}</Button>
+      </Bar>
+    );
   if (phase === 'ready')
     return (
-      <section className="pointer-events-auto motion-step flex items-center gap-3 rounded-xl border border-line bg-canvas-raised p-3 shadow-overlay">
-        <div className="flex min-w-0 grow flex-col">
-          <p className="text-reading text-fg">{t.ready}</p>
-          <p className="text-meta text-fg-muted">{t.readyHint}</p>
-        </div>
+      <Bar title={t.ready} hint={t.readyHint}>
         <Button variant="primary" onClick={onBuild}>
           {t.build}
         </Button>
-      </section>
+      </Bar>
     );
-  if (phase === 'building' && activity) return <Working key={activity.text} text={activity.text} hint={t.leaveHint} />;
-  if (phase === 'team' && team)
+  if (phase === 'building' && activity)
+    return <Working key={activity.text} text={activity.text} hint={t.leaveHint} stop={t.stop} onStop={onStop} />;
+  if (phase === 'team' && team?.status === 'proposed')
     return (
-      <section className="pointer-events-auto motion-step flex items-center gap-3 rounded-xl border border-line bg-canvas-raised p-3 shadow-overlay">
-        <div className="flex min-w-0 grow flex-col">
-          <p className="text-reading text-fg">{t.teamTitle(team.agents)}</p>
-          <p className="text-meta text-fg-muted">{t.teamHint(team.title, team.minutes)}</p>
-        </div>
-        <Button variant="primary" onClick={() => onTeam(true)}>
+      <Bar title={t.teamTitle(team.agents)} hint={t.teamHint(team.title, team.minutes)}>
+        <Button variant="primary" onClick={() => onTeam('start')}>
           {t.teamStart}
         </Button>
-        <Button onClick={() => onTeam(false)}>{t.teamAlone}</Button>
-      </section>
+        <Button onClick={() => onTeam('decline')}>{t.teamAlone}</Button>
+      </Bar>
     );
-  if (phase === 'stopped')
+  if (phase === 'team' && team?.status === 'over')
     return (
-      <section className="pointer-events-auto motion-step flex items-center gap-3 rounded-xl border border-line bg-canvas-raised p-3 shadow-overlay">
-        <div className="flex min-w-0 grow flex-col">
-          <p className="text-reading text-fg">{t.stoppedTitle}</p>
-          <p className="text-meta text-fg-muted">{t.stoppedCards(built.done, built.cards)}</p>
-        </div>
-        <Button variant="primary" onClick={onContinue}>
+      <Bar
+        title={team.needed !== null ? t.teamOverTitle(team.agents, team.needed) : t.teamOverHint}
+        hint={team.needed !== null ? t.teamOverHint : undefined}
+      >
+        {team.needed !== null && (
+          <Button variant="primary" onClick={() => onTeam('allowMore')}>
+            {t.teamOverContinue(team.needed - team.agents)}
+          </Button>
+        )}
+        <Button onClick={() => onTeam('takeResults')}>{t.takeResults}</Button>
+      </Bar>
+    );
+  if (phase === 'stopped' && question)
+    return (
+      <Question
+        key={question.id}
+        question={question}
+        about={about}
+        lead={t.stoppedQuestion}
+        preview={preview}
+        sample={sample}
+        onAnswer={onAnswer}
+        onPreview={onPreview}
+      />
+    );
+  if (phase === 'stopped') {
+    const why = stop.reason && stop.reason !== 'interrupted' ? t[`stoppedWhy_${stop.reason}`] : null;
+    const connection = !!stop.reason && CONNECTION.has(stop.reason);
+    return (
+      <Bar title={t.stoppedTitle} hint={[why, t.stoppedCards(built.done, built.cards)].filter(Boolean).join(' · ')}>
+        {connection && (
+          <Button variant="primary" onClick={onFixConnection}>
+            {t.fixConnection}
+          </Button>
+        )}
+        <Button variant={connection ? undefined : 'primary'} onClick={onContinue}>
           {t.continueBuild}
         </Button>
-      </section>
+        {stop.team && <LinkButton onClick={() => onTeam('takeResults')}>{t.takeResults}</LinkButton>}
+      </Bar>
     );
+  }
   if (phase === 'built')
     return (
       <section className="pointer-events-auto motion-step flex items-center gap-3 rounded-xl border border-line bg-canvas-raised p-3 shadow-overlay">
@@ -164,6 +270,19 @@ export function PlanBar({
   return null;
 }
 
+/** One line of where the plan (or the map's work) stands and the answers to it. */
+export function Bar({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
+  return (
+    <section className="pointer-events-auto motion-step flex flex-wrap items-center gap-3 rounded-xl border border-line bg-canvas-raised p-3 shadow-overlay">
+      <div className="flex min-w-0 grow basis-60 flex-col">
+        <p className="text-reading text-fg">{title}</p>
+        {hint && <p className="text-meta text-fg-muted">{hint}</p>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
 /**
  * One question: what it is about, the question, the answers. While planning the AI's pick comes first, marked; for a
  * question the AI answered while building, the answer it went with is marked instead and the question can be closed.
@@ -176,10 +295,12 @@ function Question({
   picked,
   preview,
   sample,
+  position,
   onAnswer,
   onPreview,
   onDecideRest,
   onClose,
+  onNext,
 }: {
   question: PlanQuestion;
   about: string | null;
@@ -187,10 +308,13 @@ function Question({
   picked?: number;
   preview: number;
   sample: string;
+  /** Where this one is among several to go through. */
+  position?: { index: number; total: number } | null;
   onAnswer: (option: number) => void;
   onPreview: (option: number) => void;
   onDecideRest?: () => void;
   onClose?: () => void;
+  onNext?: () => void;
 }) {
   const t = useMessages(messages);
   const looks = question.options.every((o) => o.look);
@@ -201,7 +325,12 @@ function Question({
       className="pointer-events-auto motion-step flex flex-col gap-3 rounded-xl border border-line bg-canvas-raised p-3 shadow-overlay"
     >
       <div className="flex flex-col">
-        {about && <p className="text-meta text-fg-muted">{about}</p>}
+        {(about || position) && (
+          <p className="flex gap-2 text-meta text-fg-muted">
+            <span className="min-w-0 grow">{about}</span>
+            {position && <span className="tabular-nums">{t.position(position.index, position.total)}</span>}
+          </p>
+        )}
         <p className="text-reading text-fg">{question.text}</p>
         {lead && <p className="text-meta text-fg-muted">{lead}</p>}
       </div>
@@ -267,7 +396,12 @@ function Question({
             {t.lookPick}
           </Button>
         ) : onClose ? (
-          <LinkButton onClick={onClose}>{t.close}</LinkButton>
+          <>
+            {position && position.index < position.total && onNext && (
+              <LinkButton onClick={onNext}>{t.next}</LinkButton>
+            )}
+            <LinkButton onClick={onClose}>{t.close}</LinkButton>
+          </>
         ) : (
           onDecideRest && <LinkButton onClick={onDecideRest}>{t.decideRest}</LinkButton>
         )}
@@ -276,13 +410,41 @@ function Question({
   );
 }
 
-/** What the AI is doing while there is nothing to answer, and, while building, that no one needs to watch. */
-function Working({ text, hint }: { text: string; hint?: string }) {
+/**
+ * What the AI is doing while there is nothing to answer, and, while building, that no one needs to watch; with
+ * `onStop`, the way to stop it.
+ */
+export function Working({
+  text,
+  hint,
+  stop,
+  onStop,
+}: {
+  text: string;
+  hint?: string;
+  stop?: string;
+  onStop?: () => void;
+}) {
   return (
-    <p className="pointer-events-auto motion-step flex items-center gap-2 self-center rounded-full bg-canvas-raised px-3 py-1 text-meta shadow-overlay">
-      <span className="size-1.5 animate-pulse rounded-full bg-interactive" aria-hidden />
-      <span className="text-fg">{text}</span>
-      {hint && <span className="text-fg-muted">· {hint}</span>}
+    <p
+      role="status"
+      className={clsx(
+        'pointer-events-auto motion-step flex max-w-full items-center gap-2 self-center rounded-full bg-canvas-raised py-1 pl-3 text-meta shadow-overlay',
+        onStop ? 'pr-1' : 'pr-3',
+      )}
+    >
+      <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-interactive" aria-hidden />
+      <span className="min-w-0 truncate text-fg">{text}</span>
+      {hint && <span className="shrink-0 text-fg-muted">· {hint}</span>}
+      {onStop && (
+        <button
+          type="button"
+          onClick={onStop}
+          className="shrink-0 cursor-pointer rounded-full px-2 text-fg-muted hover:bg-hover hover:text-fg"
+        >
+          {stop}
+        </button>
+      )}
     </p>
   );
 }

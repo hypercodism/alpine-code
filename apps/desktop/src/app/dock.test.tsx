@@ -121,13 +121,37 @@ afterEach(() => {
 });
 
 describe('right dock on the routes', () => {
-  it('opens actual execution state when the running conversation is stopped', async () => {
-    mount('/session/work', { results: { 'processes/list': { processes: [] } } }, true);
+  it('stops without opening the dock, and leads to the commands only while some still run', async () => {
+    const command: TerminalProcess = {
+      id: 'dev',
+      command: 'pnpm dev',
+      cwd,
+      sessionId: 'work',
+      title: 'pnpm dev',
+      pty: false,
+      pid: 42,
+      status: 'running',
+      exitCode: null,
+      cancelled: false,
+      createdAt: 1,
+      outputSize: 0,
+    };
+    mount('/session/work', { results: { 'processes/list': { processes: [command] } } }, true);
     fireEvent.click(await screen.findByRole('button', { name: '멈추기' }));
+    expect(await screen.findByText('멈춘 뒤에도 실행 중인 명령이 1개 있어요')).toBeTruthy();
+    expect(screen.queryByRole('complementary', { name: '오른쪽 창' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '보기' }));
     const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
     // A rarer place, under ⋮: the ⋮ button stands for it while it is shown.
     expect(within(dock).queryByRole('tab', { name: '에이전트 실행' })).toBeNull();
     expect(await within(dock).findByRole('region', { name: '에이전트 실행' })).toBeTruthy();
+  });
+
+  it('says nothing after a stop when no command is left', async () => {
+    mount('/session/work', { results: { 'processes/list': { processes: [] } } }, true);
+    fireEvent.click(await screen.findByRole('button', { name: '멈추기' }));
+    await waitFor(() => expect(screen.queryByText(/실행 중인 명령이/)).toBeNull());
+    expect(screen.queryByRole('complementary', { name: '오른쪽 창' })).toBeNull();
   });
 
   it('opens the actual source viewer from a changed file and exposes the project execution tools', async () => {
