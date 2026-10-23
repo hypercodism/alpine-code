@@ -23,9 +23,10 @@ export const Route = createFileRoute('/board')({
 function BoardRoute() {
   const { project: chosen, session: asked } = Route.useSearch();
   const projects = useProjects();
+  const project = projects.data?.projects.find((p) => p.path === chosen && !p.archived);
   // Without one in the address, the map shows the conversation its input goes to: its own, or while a build is
-  // unfinished, the build's (map-first 37).
-  const { talkTo } = useMapTalk(chosen ?? '');
+  // unfinished, the build's (map-first 37). No project here (none chosen, or one removed), no map to ask about.
+  const { talkTo } = useMapTalk(project?.path ?? '');
   const session = asked ?? talkTo ?? undefined;
   const navigate = useNavigate();
   const attached = useSession(session ?? null);
@@ -35,7 +36,6 @@ function BoardRoute() {
   const resultTab = useWorkResultTab(session ?? null, chosen);
   const t = useMessages(dockMessages);
   const m = useMessages(mapMessages);
-  const project = projects.data?.projects.find((p) => p.path === chosen && !p.archived);
   const attachedHere = !!session && !!attached.data && attached.data.info.cwd === chosen && !attached.data.deleted;
   // The map's agent session is its summary, in the dock: one place for the conversation on every page.
   const summary = attachedHere ? (

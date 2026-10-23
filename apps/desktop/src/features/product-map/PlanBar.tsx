@@ -40,7 +40,7 @@ export interface PlanStop {
 export type PlanTeamAnswer = 'start' | 'decline' | 'allowMore' | 'takeResults';
 
 /** Stop reasons the person fixes in the model connection, not by continuing. */
-const CONNECTION = new Set<RunStoppedItem['reason']>(['signed_out', 'credits_exhausted', 'plan_limit']);
+export const CONNECTION = new Set<RunStoppedItem['reason']>(['signed_out', 'credits_exhausted', 'plan_limit']);
 
 /**
  * What a planned map says just above its input, from facts only: the question the AI waits on (on the card it

@@ -138,7 +138,9 @@ describe('right dock on the routes', () => {
     };
     mount('/session/work', { results: { 'processes/list': { processes: [command] } } }, true);
     fireEvent.click(await screen.findByRole('button', { name: '멈추기' }));
-    expect(await screen.findByText('멈춘 뒤에도 실행 중인 명령이 1개 있어요')).toBeTruthy();
+    // Not while the stop ends the run's own commands, only a moment after: an ordinary stop shows nothing by.
+    expect(screen.queryByText('멈춘 뒤에도 실행 중인 명령이 1개 있어요')).toBeNull();
+    expect(await screen.findByText('멈춘 뒤에도 실행 중인 명령이 1개 있어요', {}, { timeout: 3000 })).toBeTruthy();
     expect(screen.queryByRole('complementary', { name: '오른쪽 창' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '보기' }));
     const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });

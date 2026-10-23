@@ -41,7 +41,7 @@ import { changedCards } from './FlowTree';
 import { toTreeMap } from './flowTreeData';
 import { flowTreeMessages } from './flowTreeMessages';
 import { JourneyMap } from './JourneyMap';
-import { Bar, PlanBar, Working, type PlanReview, type PlanTeamAnswer } from './PlanBar';
+import { Bar, CONNECTION, PlanBar, Working, type PlanReview, type PlanTeamAnswer } from './PlanBar';
 import { buildActivity, lastReply, pendingQuestion, planPhase, stopReason, TEAM_WORKING } from './planData';
 import { mapLookCss } from './planLook';
 import { planMessages } from './planMessages';
@@ -49,7 +49,7 @@ import { AskFlight, MapAsk } from './MapAsk';
 import { DeleteMap, MapMenu, ScopeEditor } from './MapSettings';
 import { Unmapped } from './Unmapped';
 import { messages } from './messages';
-import { useLaterWords, useMapTalk } from './mapTalk';
+import { type LaterWord, useLaterWords, useMapTalk } from './mapTalk';
 import { mapOf, matchingIds, searchOrder } from './model';
 
 type Action = FlowPrepareParams['action'];
@@ -561,19 +561,17 @@ export function ProductMap({
   };
 
   // Words that waited for the AI go, oldest first, once what they go to is free: a conversation between its turns, a
-  // request to the map once nothing in the project works.
-  const next = later.words[0];
-  const nextBusy = next
-    ? next.to === null
-      ? anyActive || busy
-      : next.to === workId
-        ? workBusy
-        : atWork((sessions ?? []).find((s) => s.id === next.to))
-    : false;
+  // request to the map once nothing in the project works. Each place keeps its own order, so words that could not go
+  // (or failed) hold back only later words to the same place, and say so; the rest go on.
+  const targetBusy = (to: string | null) =>
+    to === null ? anyActive || busy : to === workId ? workBusy : atWork((sessions ?? []).find((s) => s.id === to));
+  const held = (word: LaterWord, index: number) =>
+    !!word.failed || targetBusy(word.to) || later.words.slice(0, index).some((before) => before.to === word.to);
+  const next = later.words.find((word, index) => !held(word, index));
   const [nudge, setNudge] = useState(0);
   const sending = useRef<string | null>(null);
   useEffect(() => {
-    if (!next || next.failed || nextBusy || sending.current === next.id) return;
+    if (!next || sending.current) return;
     sending.current = next.id;
     const word = next;
     const done = () => (sending.current = null);
@@ -605,19 +603,12 @@ export function ProductMap({
         },
       },
     );
-    // `start`, `send` and `later` are new on every render; what decides a send is the word and whether it can go.
+    // `start`, `send` and `later` are new on every render; what decides a send is the word that can go now.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [next?.id, next?.failed, nextBusy, nudge]);
-  // Words shown as waiting: those that cannot go yet, or could not be sent.
-  const waitingWords = later.words.filter(
-    (word) =>
-      word.failed ||
-      (word.to === null
-        ? anyActive || busy
-        : word.to === workId
-          ? workBusy
-          : atWork((sessions ?? []).find((s) => s.id === word.to))),
-  );
+  }, [next?.id, nudge]);
+  // Words shown as waiting: every one that cannot go yet (its place at work, or words before it to the same place
+  // still waiting), and those that could not be sent.
+  const waitingWords = later.words.filter((word, index) => held(word, index));
 
   const syncMap = () => void start('sync', { request: t.syncRequest });
   const continueMap = () => void start('discover', { request: t.continueRequest });
@@ -743,17 +734,23 @@ export function ProductMap({
     }
   });
   const reply = !workBusy && !building && !busy ? lastReply(work.data?.items ?? []) : null;
-  const showReply =
-    !!reply && reply.id !== seenReply && (!planned || phase === 'built' || (phase === 'asking' && !question));
-  const closeReply = () => {
-    if (!reply) return;
-    setSeenReply(reply.id);
+  const replyTime = !planned || phase === 'built' || (phase === 'asking' && !question);
+  const showReply = !!reply && reply.id !== seenReply && replyTime;
+  const markReplySeen = (id: string) => {
+    setSeenReply(id);
     try {
-      localStorage.setItem(replyKey, reply.id);
+      localStorage.setItem(replyKey, id);
     } catch {
       // Closed for this visit only.
     }
   };
+  const closeReply = () => reply && markReplySeen(reply.id);
+  // While a plan is decided and built, the plan's conversation answers nothing above the input; what it said last is
+  // behind me, and must not come back as the answer once the product is built (the map talks there again).
+  const passedReply = reply && !replyTime && reply.id !== seenReply ? reply.id : null;
+  if (passedReply) markReplySeen(passedReply);
+  const replyStop = reply?.stopped;
+  const replyText = reply ? (reply.stopped ? plan[`stoppedWhy_${reply.stopped}`] : reply.text) : '';
   // Words from the map's one input: another answer while a decision of the AI is open, the plan's conversation (or
   // the build's) while it is a plan, else a request to the map.
   const sendWords = async (text: string, from: DOMRect | null) => {
@@ -1227,8 +1224,14 @@ export function ProductMap({
               aria-label={t.replyFrom}
               className="pointer-events-auto motion-step flex items-start gap-3 rounded-xl border border-line bg-canvas-raised p-3 shadow-overlay"
             >
-              <p className="line-clamp-3 min-w-0 grow text-body whitespace-pre-line text-fg">{reply.text}</p>
+              <p className="line-clamp-3 min-w-0 grow text-body whitespace-pre-line text-fg">{replyText}</p>
               <span className="flex shrink-0 items-center gap-2">
+                {/* Stopped on the model connection (sign-in, credits, a plan's limit): fixed there, not here. */}
+                {replyStop && CONNECTION.has(replyStop) && (
+                  <LinkButton className="min-h-5 px-0.5" onClick={() => onFixConnection?.()}>
+                    {plan.fixConnection}
+                  </LinkButton>
+                )}
                 <LinkButton className="min-h-5 px-0.5" onClick={showWork}>
                   {t.showConversation}
                 </LinkButton>

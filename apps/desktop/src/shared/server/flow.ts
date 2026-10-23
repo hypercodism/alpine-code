@@ -34,6 +34,8 @@ export function useProductMap(cwd: string) {
     refetchInterval: 3000,
     refetchIntervalInBackground: false,
     retry: false,
+    // No project, no map: nothing to ask the server.
+    enabled: !!cwd,
   });
 }
 

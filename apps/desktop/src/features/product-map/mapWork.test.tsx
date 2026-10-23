@@ -25,6 +25,8 @@ import { boardScript, bookingBoard } from './testBoard';
 
 const cwd = '/project';
 const said = (id: string, text: string): Item => ({ id, kind: 'user_message', text });
+const reply = (id: string, text: string): Item => ({ id, kind: 'agent_message', text, agent: null });
+const signedOut: Item = { id: 'stop-1', kind: 'run_stopped', reason: 'signed_out', message: null };
 const ask = (id: string, question: string, labels: string[]): Item => ({
   id,
   kind: 'tool_call',
@@ -152,11 +154,53 @@ describe('work asked of a map that exists (#4, #9, #10)', () => {
     await waitFor(() =>
       expect(request.mock.calls.find(([method]) => method === 'session/cancel')?.[1]).toEqual({ sessionId: 'map-1' }),
     );
-    // Once over, the AI's last words stay above the input with the way to the whole conversation.
+    // Stopped part way, what it said so far is no answer: the line above the input says it stopped, with the way to
+    // the whole conversation.
     const reply = await screen.findByRole('region', { name: 'AI의 답' });
-    expect(within(reply).getByText('Let me look at the project first.')).toBeTruthy();
+    expect(within(reply).getByText('중간에 멈췄어요')).toBeTruthy();
+    expect(within(reply).queryByText('Let me look at the project first.')).toBeNull();
     fireEvent.click(within(reply).getByRole('button', { name: '닫기' }));
     expect(screen.queryByRole('region', { name: 'AI의 답' })).toBeNull();
+  });
+
+  it('shows the answer of a turn that ended, and why one stopped on the model connection (#10, #36)', async () => {
+    const answered = [
+      said('u1', '[map] request: 결제 버튼 색 바꿔 줘'),
+      reply('a1', '결제 버튼을 파란색으로 바꿨어요.'),
+    ];
+    mount(bookingBoard(), { mapItems: answered });
+    expect(
+      within(await screen.findByRole('region', { name: 'AI의 답' })).getByText('결제 버튼을 파란색으로 바꿨어요.'),
+    ).toBeTruthy();
+    cleanup();
+    const { onFixConnection } = mount(bookingBoard(), {
+      mapItems: [...answered, said('u2', '[map] request: 검색 넣어 줘'), reply('a2', '먼저 코드를 볼게요.'), signedOut],
+    });
+    const stopped = await screen.findByRole('region', { name: 'AI의 답' });
+    expect(within(stopped).getByText('모델 로그인이 끝나서 멈췄어요')).toBeTruthy();
+    fireEvent.click(within(stopped).getByRole('button', { name: '모델 연결 열기' }));
+    expect(onFixConnection).toHaveBeenCalled();
+  });
+
+  it('sends words to a free conversation even when earlier words could not be sent, and shows them all (#34)', async () => {
+    // Kept from before: words to a conversation that is gone now, then words to the map's own conversation.
+    localStorage.setItem(
+      `alpine.product-map.later:${cwd}`,
+      JSON.stringify([
+        { id: 'w1', to: 'gone', text: '첫 번째 말' },
+        { id: 'w2', to: 'gone', text: '두 번째 말' },
+        { id: 'w3', to: 'map-1', text: '지도 대화에 할 말' },
+      ]),
+    );
+    const { request } = mount(bookingBoard());
+    await waitFor(() => expect(sent(request, 'map-1')).toEqual(['지도 대화에 할 말']));
+    const waiting = await screen.findByRole('region', { name: 'AI가 지금 일을 마치면 전할게요' });
+    // The first could not go and says so; the one after it to the same place waits behind it, and is shown too.
+    await waitFor(() => expect(within(waiting).getByText('보내지 못했어요')).toBeTruthy());
+    expect(within(waiting).getByText('첫 번째 말')).toBeTruthy();
+    expect(within(waiting).getByText('두 번째 말')).toBeTruthy();
+    expect(within(waiting).queryByText('지도 대화에 할 말')).toBeNull();
+    expect(sent(request, 'gone')).toEqual(['첫 번째 말']);
   });
 
   it('says why the map waits when another conversation works, leads there, and keeps my words for later (#29, #60)', async () => {
@@ -313,6 +357,19 @@ describe('a planned product on its map', () => {
       }),
     );
     expect(request.mock.calls.some(([method]) => method === 'flow/prepare')).toBe(false);
+  });
+
+  it("once built, does not bring back what the plan's conversation said last as the answer (#10)", async () => {
+    const planning = [said('u1', '개발 블로그 만들어 줘'), reply('a1', '이제 정할 것이 없어요. 만들 준비가 됐어요.')];
+    mount(blog('asking', { undecided: [] }), { mapItems: planning });
+    expect(await screen.findByRole('button', { name: '이대로 만들기' })).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'AI의 답' })).toBeNull();
+    // Built afterwards (the map comes back after the build): the planning words stay behind.
+    cleanup();
+    mount(blog('built'), { mapItems: planning });
+    expect(await screen.findByText('다 만들었어요')).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'AI의 답' })).toBeNull();
+    expect(screen.queryByText('이제 정할 것이 없어요. 만들 준비가 됐어요.')).toBeNull();
   });
 
   it('takes words as a request once built (#33)', async () => {

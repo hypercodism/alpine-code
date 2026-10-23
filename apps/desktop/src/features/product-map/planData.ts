@@ -166,12 +166,17 @@ export function stopReason(items: Item[]): RunStoppedItem['reason'] | null {
 
 /**
  * The AI's last words in a conversation, once its turn is over: what it said after my last message, unless it ended
- * the turn with a question (which the map shows as a question). `null` while there is none.
+ * the turn with a question (which the map shows as a question). A turn that stopped before its end has no answer, only
+ * why it stopped (`stopped`, with the stop's own id). `null` while there is none.
  */
-export function lastReply(items: Item[]): { id: string; text: string } | null {
+export function lastReply(
+  items: Item[],
+): { id: string; text: string; stopped?: undefined } | { id: string; stopped: RunStoppedItem['reason'] } | null {
   const start = items.findLastIndex((item) => item.kind === 'user_message');
   if (start < 0) return null;
   const turn = items.slice(start + 1);
+  const stop = turn.findLast((item) => item.kind === 'run_stopped');
+  if (stop?.kind === 'run_stopped') return { id: stop.id, stopped: stop.reason };
   if (turn.some((item) => item.kind === 'tool_call' && item.name === ASK_USER)) return null;
   const reply = turn.findLast((item) => item.kind === 'agent_message' && !!item.text.trim());
   return reply?.kind === 'agent_message' ? { id: reply.id, text: reply.text.trim() } : null;
