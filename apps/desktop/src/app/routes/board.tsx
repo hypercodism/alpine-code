@@ -7,6 +7,7 @@ import { showDockTab, useDockExpanded, useDockOpen } from '@/features/dock/state
 import { useMapTalk } from '@/features/product-map/mapTalk';
 import { messages as mapMessages } from '@/features/product-map/messages';
 import { ProductMap } from '@/features/product-map/ProductMap';
+import { MissingProject } from '@/features/rail/MissingProject';
 import { Session } from '@/features/session/Session';
 import { useWorkResultTab } from '@/features/work-result/useWorkResultTab';
 import { useMessages } from '@/shared/i18n';
@@ -59,7 +60,12 @@ function BoardRoute() {
   ) : (
     <p className="px-5 text-body text-fg-muted">{t.mapSummaryEmpty}</p>
   );
-  if (!project) return <div className="p-8 text-body text-fg-muted">{projects.isLoading ? '…' : (chosen ?? '—')}</div>;
+  if (!project)
+    return projects.data && chosen ? (
+      <MissingProject path={chosen} archived={projects.data.projects.some((p) => p.path === chosen && p.archived)} />
+    ) : (
+      <div className="p-8 text-body text-fg-muted">{projects.isLoading ? '…' : (chosen ?? '—')}</div>
+    );
   return (
     <WorkspaceDock
       cwd={project.path}

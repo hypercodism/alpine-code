@@ -7,14 +7,14 @@ import { useState, type KeyboardEvent } from 'react';
 
 import { agentMessages, agentName } from '@/shared/components/agent';
 import { useMessages } from '@/shared/i18n';
-import { useDeleteAgent, useSaveAgent, useSessions } from '@/shared/server';
+import { useDeleteAgent, useProjects, useSaveAgent, useSessions } from '@/shared/server';
 
 import { CharacterPicker } from './CharacterPicker';
 import { agentsMessages } from './messages';
 
 /**
  * Board 에이전트 화면, the header: the character, the name and description (bare text, edited in place from one
- * pencil), whether the last change is saved, the agent's menu and 이 에이전트로 새 세션.
+ * pencil), whether the last change is saved, the agent's menu and 이 에이전트로 새 프로젝트.
  */
 export function AgentHeader({
   agent,
@@ -188,6 +188,8 @@ export function WorkingLine({ agentId }: { agentId: string }) {
   const sessions = (useSessions().data ?? []).filter(
     (s) => s.agent === agentId && (s.status === 'running' || s.status === 'waiting'),
   );
+  const projects = useProjects().data?.projects;
+  const projectName = (cwd: string) => projects?.find((p) => p.path === cwd)?.name ?? cwd.split('/').pop() ?? cwd;
   const first = sessions[0];
   if (!first) return null;
   return (
@@ -200,13 +202,24 @@ export function WorkingLine({ agentId }: { agentId: string }) {
       </span>
       <span>{t.working}</span>
       <span>·</span>
-      <Link
-        to="/session/$sessionId"
-        params={{ sessionId: first.id }}
-        className="text-interactive hover:text-interactive-hover hover:underline"
-      >
-        {first.title || t.untitledSession}
-      </Link>
+      {/* The map's own conversations are seen on the map, as the project. */}
+      {first.purpose ? (
+        <Link
+          to="/board"
+          search={{ project: first.cwd, ...(first.purpose === 'build' ? { session: first.id } : {}) }}
+          className="text-interactive hover:text-interactive-hover hover:underline"
+        >
+          {projectName(first.cwd)}
+        </Link>
+      ) : (
+        <Link
+          to="/session/$sessionId"
+          params={{ sessionId: first.id }}
+          className="text-interactive hover:text-interactive-hover hover:underline"
+        >
+          {first.title || t.untitledSession}
+        </Link>
+      )}
       {sessions.length > 1 && <span>{t.workingMore(sessions.length - 1)}</span>}
       <span className="min-w-50 flex-1 text-right text-meta text-fg-muted">{t.workingNote}</span>
     </div>

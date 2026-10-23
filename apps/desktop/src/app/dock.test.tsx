@@ -271,14 +271,14 @@ describe('right dock on the routes', () => {
 
   it('shows no dock button for a project that is not listed', async () => {
     mount('/board?project=' + encodeURIComponent('/Users/me/gone'));
-    expect(await screen.findByText('/Users/me/gone')).toBeTruthy();
+    expect(await screen.findByText('gone 프로젝트가 목록에 없어요')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /오른쪽 창/ })).toBeNull();
   });
 
   it('shows no dock button for an archived project, which the board renders without a dock', async () => {
     const archived = PROJECTS.map((p) => (p.path === cwd ? { ...p, archived: true } : p));
     mount(board('work'), { results: { 'projects/list': { projects: archived, clones: [] } } });
-    expect(await screen.findByText(cwd)).toBeTruthy();
+    expect(await screen.findByText('alpine-code 프로젝트는 보관했어요')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /오른쪽 창/ })).toBeNull();
   });
 
