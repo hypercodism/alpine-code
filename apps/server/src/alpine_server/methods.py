@@ -39,6 +39,7 @@ from alpine_core import (
     set_review_model as save_review_model,
 )
 from alpine_core.chatgpt import account_of, is_chatgpt
+from alpine_core.chatgpt import sign_out as chatgpt_sign_out
 from alpine_core.cloud import auth as cloud_auth
 from alpine_core.cloud import is_alpine
 from alpine_core.cloud import settings as cloud_settings
@@ -165,6 +166,10 @@ def add_connection(params: ConnectionsAddParams) -> ConnectionsAddResult:
 
 def remove(params: ConnectionsRemoveParams) -> ConnectionsRemoveResult:
     settings = _settings()
+    connection = settings.connections.get(params.connection)
+    if connection is not None and is_chatgpt(connection) and settings.secrets is not None:
+        # A ChatGPT account still signed in is signed out at OpenAI first, as 로그아웃 does: its tokens go next.
+        chatgpt_sign_out(connection, settings.secrets)
     try:
         if not remove_connection(params.connection):
             raise MethodError(INVALID_PARAMS, f"No connection named {params.connection!r}")

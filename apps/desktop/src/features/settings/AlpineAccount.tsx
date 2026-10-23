@@ -16,7 +16,6 @@ export function AlpineAccount() {
   const t = useMessages(messages);
   const format = useFormat();
   const status = useCloudStatus().data;
-  const signOut = useCloudSignOut();
   const portal = usePortal();
   const [sheet, setSheet] = useState<'sign-in' | 'sign-out' | 'upgrade' | null>(null);
   if (!status) return null;
@@ -88,29 +87,45 @@ export function AlpineAccount() {
           <UpgradeSheet onClose={() => setSheet(null)} onDone={() => setSheet(null)} />
         </Dialog.Popup>
       </Dialog.Root>
-      <Dialog.Root open={sheet === 'sign-out'} onOpenChange={(open) => !open && setSheet(null)}>
-        <Dialog.Popup size="sm" role="alertdialog">
-          <div className="flex flex-col gap-2">
-            <Dialog.Title>{t.signOutTitle}</Dialog.Title>
-            <Dialog.Description>{t.signOutLead}</Dialog.Description>
-          </div>
-          {signOut.error && (
-            <p role="alert" className="text-meta text-danger">
-              {signOut.error.message}
-            </p>
-          )}
-          <div className="flex items-center justify-end gap-2 pt-2">
-            <Dialog.Close render={<Button />}>{t.cancel}</Dialog.Close>
-            <Button
-              variant="danger"
-              disabled={signOut.isPending}
-              onClick={() => signOut.mutate(undefined, { onSuccess: () => setSheet(null) })}
-            >
-              {t.alpineSignOut}
-            </Button>
-          </div>
-        </Dialog.Popup>
-      </Dialog.Root>
+      <AlpineSignOutDialog open={sheet === 'sign-out'} onClose={() => setSheet(null)} />
     </>
+  );
+}
+
+/**
+ * Signing out of Alpine, after saying what stops with it. The same everywhere: Settings › General and the Alpine row
+ * of the model connections both ask here.
+ */
+export function AlpineSignOutDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const t = useMessages(messages);
+  const signOut = useCloudSignOut();
+  const close = () => {
+    signOut.reset();
+    onClose();
+  };
+  return (
+    <Dialog.Root open={open} onOpenChange={(next) => !next && close()}>
+      <Dialog.Popup size="sm" role="alertdialog">
+        <div className="flex flex-col gap-2">
+          <Dialog.Title>{t.signOutTitle}</Dialog.Title>
+          <Dialog.Description>{t.signOutLead}</Dialog.Description>
+        </div>
+        {signOut.error && (
+          <p role="alert" className="text-meta text-danger">
+            {signOut.error.message}
+          </p>
+        )}
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <Dialog.Close render={<Button />}>{t.cancel}</Dialog.Close>
+          <Button
+            variant="danger"
+            disabled={signOut.isPending}
+            onClick={() => signOut.mutate(undefined, { onSuccess: close })}
+          >
+            {t.alpineSignOut}
+          </Button>
+        </div>
+      </Dialog.Popup>
+    </Dialog.Root>
   );
 }

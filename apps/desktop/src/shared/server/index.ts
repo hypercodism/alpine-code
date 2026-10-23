@@ -82,6 +82,7 @@ export {
 } from './queries';
 export { useTools } from './tools';
 export {
+  ALPINE_CONNECTION,
   CHATGPT_CONNECTION,
   CONNECTED,
   chatScript,
