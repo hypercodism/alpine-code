@@ -90,11 +90,19 @@ pub fn install_if_ready(app: &AppHandle) {
     }
 }
 
-/// Installs the waiting version, if there is one.
+/// Installs the waiting version, if there is one. It stays waiting until it is in: after a failed install the
+/// button that offers it is still there, and pressing it again tries the install again instead of restarting into
+/// the old version as if there were nothing to install.
 fn install(app: &AppHandle) -> Result<(), String> {
-    let ready = app.try_state::<Updates>().and_then(|updates| updates.ready.lock().ok()?.take());
-    match ready {
-        Some((update, bytes)) => update.install(bytes).map_err(|e| e.to_string()),
-        None => Ok(()),
+    let Some(updates) = app.try_state::<Updates>() else {
+        return Ok(());
+    };
+    let Ok(mut slot) = updates.ready.lock() else {
+        return Ok(());
+    };
+    if let Some((update, bytes)) = slot.as_ref() {
+        update.install(bytes).map_err(|e| e.to_string())?;
+        *slot = None;
     }
+    Ok(())
 }
