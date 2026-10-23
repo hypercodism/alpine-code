@@ -3,6 +3,7 @@ import { defineMessages } from '@/shared/i18n';
 export const messages = defineMessages({
   ko: {
     productMap: '제품 지도',
+    openMapOf: (name: string) => `${name} 지도로 가기`,
     showSidebar: '사이드바 열기',
     hideSidebar: '사이드바 닫기',
     back: '뒤로',
@@ -10,12 +11,12 @@ export const messages = defineMessages({
     noBranch: '작업 갈래 없음',
     branch: '작업 갈래',
     summary: '요약',
-    preview: '미리보기',
+    preview: '앱 미리보기',
     data: '데이터',
     source: '파일',
     terminal: '터미널',
     servers: '개발 서버',
-    processes: '에이전트 실행',
+    processes: 'AI가 실행한 명령',
     mapWorkDone: 'AI가 지도의 일을 마쳤어요. 열어서 확인해 보세요.',
     mapStopped: 'AI가 지도의 일을 하다 멈췄어요. 열어서 이유를 확인해 보세요.',
     mapAsks: 'AI가 물어볼 게 있어요. 열어서 답해 주면 이어서 해요.',
@@ -32,6 +33,7 @@ export const messages = defineMessages({
   },
   en: {
     productMap: 'Product map',
+    openMapOf: (name: string) => `Go to the map of ${name}`,
     showSidebar: 'Show sidebar',
     hideSidebar: 'Hide sidebar',
     back: 'Back',

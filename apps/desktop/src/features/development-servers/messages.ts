@@ -11,10 +11,14 @@ export const messages = defineMessages({
     openFailed: '앱을 열지 못했어요. 이유는 고급의 실행 기록에 있어요.',
     openFailedFix: '앱을 열지 못했어요. AI가 실행 기록을 보고 고칠 수 있어요.',
     askFix: 'AI에게 고쳐 달라고 하기',
-    fixRequest: (command: string, log: string) =>
-      `미리보기에서 앱 열기가 실패했어요. 아래 실행 기록을 보고 앱이 열리도록 고쳐 주세요.\n\n실행 명령: ${command}\n\n${log}`,
+    fixRequest: (command: string, port: number, log: string) =>
+      `미리보기에서 앱 열기가 실패했어요. 아래 실행 기록을 보고 앱이 열리도록 고쳐 주세요. 앱은 PORT 환경변수로 받은 포트(${port})에서 열려야 해요.\n\n실행 명령: ${command}\n\n${log}`,
     appStopped: '앱이 꺼져 있어요.',
     unknown: '이 프로젝트를 여는 방법을 찾지 못했어요. 아래 고급에서 실행 명령을 적어 주세요.',
+    unknownFix: '이 프로젝트를 여는 방법을 아직 몰라요. AI에게 맡기면 앱을 열 수 있게 준비해요.',
+    askSetup: 'AI에게 열 수 있게 해 달라고 하기',
+    setupRequest:
+      '미리보기에서 앱 열기를 눌렀는데 이 프로젝트를 여는 방법을 찾지 못했어요. Alpine은 package.json의 dev나 start 스크립트, 또는 맨 위 폴더의 index.html로 앱을 열어요. 앱은 PORT 환경변수로 받은 포트에서 열려야 해요. 이 프로젝트가 그렇게 열리도록 준비해 주세요.',
     advanced: '고급',
     command: '실행 명령',
     port: '포트',
@@ -49,10 +53,15 @@ export const messages = defineMessages({
     openFailed: 'The app could not be opened. The reason is in the output under Advanced.',
     openFailedFix: 'The app could not be opened. The AI can read its output and fix it.',
     askFix: 'Ask the AI to fix it',
-    fixRequest: (command: string, log: string) =>
-      `Opening the app in the preview failed. Read the output below and fix it so the app opens.\n\nCommand: ${command}\n\n${log}`,
+    fixRequest: (command: string, port: number, log: string) =>
+      `Opening the app in the preview failed. Read the output below and fix it so the app opens. The app must open on the port it gets in the PORT environment variable (${port}).\n\nCommand: ${command}\n\n${log}`,
     appStopped: 'The app is not running.',
     unknown: 'Could not tell how this project runs. Enter its command under Advanced below.',
+    unknownFix:
+      "Alpine doesn't know how to open this project yet. Hand it to the AI and it gets the app ready to open.",
+    askSetup: 'Ask the AI to make it open',
+    setupRequest:
+      'Opening the app in the preview found no way to run this project. Alpine opens an app with the dev or start script in package.json, or index.html at the top of the folder. The app must open on the port it gets in the PORT environment variable. Get this project ready to open that way.',
     advanced: 'Advanced',
     command: 'Command',
     port: 'Port',

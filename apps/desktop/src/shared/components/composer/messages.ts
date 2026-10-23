@@ -22,7 +22,7 @@ export const messages = defineMessages({
     running: '이미 작업하는 중이에요. 끝나면 다시 보내 주세요',
     failed: '보내지 못했어요. 잠시 뒤에 다시 시도해 주세요',
     chipLabel: (name: string) => `에이전트: ${name}`,
-    chipNew: '이 세션에 투입할 에이전트 · 세션 중에도 바꿀 수 있어요',
+    chipNew: '이 일을 맡을 에이전트 · 일하는 중에도 바꿀 수 있어요',
     chipSession: '바꾸면 새 에이전트가 지금까지의 대화를 이어서 읽어요',
     lastUsed: '이 프로젝트에서 마지막으로 씀',
     newAgent: '새 에이전트',

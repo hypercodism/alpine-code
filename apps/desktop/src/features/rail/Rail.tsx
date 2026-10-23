@@ -285,7 +285,7 @@ export function Rail({ open = true }: { open?: boolean }) {
           })}
           {projects.isSuccess && sessionsQuery.isSuccess && listed.length === 0 && (
             <div className="flex flex-col items-start gap-2 px-2 py-3">
-              <p className="text-body text-fg-muted">{t.emptyView}</p>
+              <p className="text-body text-fg-muted">{known.length === 0 ? t.noProjects : t.emptyView}</p>
               {view !== 'all' && (
                 <button
                   type="button"
@@ -562,14 +562,16 @@ function projectState(sessions: SessionInfo[], asking: ReadonlySet<string>): Pro
 function MapRecordRow({ session }: { session: SessionInfo }) {
   const t = useMessages(messages);
   const format = useFormat();
+  const label = session.purpose === 'build' ? t.buildRecord : t.oldMapTalk;
   return (
     <Link
       to="/board"
       search={{ project: session.cwd, session: session.id }}
-      title={session.title || undefined}
+      // Its own title is the model's, often English: the row says when it began instead.
+      title={t.recordStarted(label, format.date(new Date(session.createdAt)))}
       className="flex min-h-10 w-full cursor-pointer flex-col gap-0.5 rounded-lg py-1.5 pr-8 pl-2 text-left text-body text-fg-muted outline-none hover:bg-hover focus-visible:ring-2 focus-visible:ring-interactive data-[status=active]:bg-selected data-[status=active]:text-fg"
     >
-      <span className="min-w-0 truncate">{session.purpose === 'build' ? t.buildRecord : t.oldMapTalk}</span>
+      <span className="min-w-0 truncate">{label}</span>
       <span className="flex min-w-0 items-center gap-2 text-meta">
         {session.status !== 'idle' ? (
           <StatusWord status={session.status} />

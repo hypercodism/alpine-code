@@ -421,7 +421,7 @@ describe('the top row', () => {
     await loaded();
     const again = screen.getByRole('button', { name: '다시 확인 1' });
     const failed = screen.getByRole('button', { name: '실패 1' });
-    expect(screen.getByRole('button', { name: '바뀐 것 2' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '바뀐 카드 2' })).toBeTruthy();
     expect(again.getAttribute('aria-pressed')).toBe('false');
     fireEvent.click(again);
     expect(again.getAttribute('aria-pressed')).toBe('true');
@@ -449,7 +449,7 @@ describe('the top row', () => {
     await loaded();
     expect(screen.queryByRole('button', { name: /^실패 \d/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /^다시 확인 \d/ })).toBeNull();
-    expect(screen.queryByRole('button', { name: /^바뀐 것 \d/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^바뀐 카드 \d/ })).toBeNull();
   });
   it('counts changes since the last visit and opens them in a side panel', async () => {
     localStorage.setItem(`alpine:product-map:seen:${cwd}`, '2026-10-01T00:00:00Z');
@@ -470,13 +470,13 @@ describe('the top row', () => {
     const trigger = await screen.findByRole('button', { name: '지도 메뉴' });
     // A dot on the menu says the history has something new.
     expect(trigger.querySelector('.rounded-full')).toBeTruthy();
-    fireEvent.click(await menuItem('바뀐 기록 · 새로 1개'));
-    const panel = await screen.findByRole('complementary', { name: '최근 변경' });
+    fireEvent.click(await menuItem('지도 기록 · 새로 1개'));
+    const panel = await screen.findByRole('complementary', { name: '지도 기록' });
     expect(within(panel).getByText(/10월 10일 · 결제 · 확인 실패/)).toBeTruthy();
     expect(within(panel).getByText('쿠폰이 반영되지 않아요.')).toBeTruthy();
     // Opening marks everything as seen.
     await waitFor(() => expect(trigger.querySelector('.rounded-full')).toBeNull());
-    expect(await menuItem('바뀐 기록')).toBeTruthy();
+    expect(await menuItem('지도 기록')).toBeTruthy();
     fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
     expect(Date.parse(localStorage.getItem(`alpine:product-map:seen:${cwd}`)!)).toBeGreaterThan(
       Date.parse('2026-10-11'),
@@ -496,8 +496,8 @@ describe('the top row', () => {
         ];
       }),
     );
-    fireEvent.click(await menuItem(/^바뀐 기록/));
-    const panel = await screen.findByRole('complementary', { name: '최근 변경' });
+    fireEvent.click(await menuItem(/^지도 기록/));
+    const panel = await screen.findByRole('complementary', { name: '지도 기록' });
     expect(within(panel).queryByText(/planned/)).toBeNull();
     expect(within(panel).getByText(/결제 · 안 고치기로 함/)).toBeTruthy();
     expect(within(panel).getByText(/회원 주문 · 다시 돌려 봄 · 같은 결과/)).toBeTruthy();
@@ -510,8 +510,8 @@ describe('the top row', () => {
         ];
       }),
     );
-    fireEvent.click(await menuItem(/^바뀐 기록/));
-    const panel = await screen.findByRole('complementary', { name: '최근 변경' });
+    fireEvent.click(await menuItem(/^지도 기록/));
+    const panel = await screen.findByRole('complementary', { name: '지도 기록' });
     expect(within(panel).getByText('예정 → 구현됨')).toBeTruthy();
   });
   it('shows the notice row only when something wants a look', async () => {
@@ -527,7 +527,7 @@ describe('the top row', () => {
     await loaded();
     // Code changes without git are not counted.
     expect(notices()).toBeNull();
-    expect(screen.queryByText('지도에 아직 없는 코드 변경')).toBeNull();
+    expect(screen.queryByText('지도에 아직 담기지 않은 코드')).toBeNull();
     cleanup();
     mount(
       withBoard((board) => {
@@ -537,7 +537,7 @@ describe('the top row', () => {
     );
     await loaded();
     const row = notices()!;
-    expect(within(row).getByRole('button', { name: /^지도에 아직 없는 코드 변경/ })).toBeTruthy();
+    expect(within(row).getByRole('button', { name: /^지도에 아직 담기지 않은 코드/ })).toBeTruthy();
     expect(within(row).getByRole('button', { name: /^AI가 지운 카드 1개/ })).toBeTruthy();
     expect(within(row).queryByText(/고친 약속/)).toBeNull();
     expect(within(row).queryByText('아직 그리지 않은 것')).toBeNull();
@@ -870,7 +870,7 @@ describe('map upkeep', () => {
       }),
     );
     await loaded();
-    const row = within(notices()!).getByRole('button', { name: /^지도에 아직 없는 코드 변경/ });
+    const row = within(notices()!).getByRole('button', { name: /^지도에 아직 담기지 않은 코드/ });
     expect(row.textContent).toContain('5');
     // The changes not counted are folded inside its popover, not on the map.
     expect(screen.queryByText('범위 밖 변경 2개')).toBeNull();
@@ -899,7 +899,7 @@ describe('map upkeep', () => {
     const buttons = within(notices()!).getAllByRole('button');
     const row = within(notices()!).getByRole('button', { name: /^아직 그리지 않은 것/ });
     expect(buttons.indexOf(row)).toBeGreaterThan(
-      buttons.indexOf(within(notices()!).getByRole('button', { name: /^지도에 아직 없는 코드 변경/ })),
+      buttons.indexOf(within(notices()!).getByRole('button', { name: /^지도에 아직 담기지 않은 코드/ })),
     );
     expect(row.textContent).toContain('2');
     fireEvent.click(row);
@@ -995,7 +995,7 @@ describe('map upkeep', () => {
     );
     fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
-    fireEvent.click(within(notices()!).getByRole('button', { name: /^지도에 아직 없는 코드 변경/ }));
+    fireEvent.click(within(notices()!).getByRole('button', { name: /^지도에 아직 담기지 않은 코드/ }));
     expect(((await screen.findByRole('button', { name: '지도 맞추기' })) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.keyDown(globalThis.document.body, { key: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('button', { name: '지도 맞추기' })).toBeNull());
@@ -1061,7 +1061,7 @@ describe('map upkeep', () => {
     const { request } = mount(mergeScripts(boardScript(board), folders));
     await loaded();
     // The AI's exclusions sit under the changes they hide, not in the settings.
-    fireEvent.click(within(notices()!).getByRole('button', { name: /^지도에 아직 없는 코드 변경/ }));
+    fireEvent.click(within(notices()!).getByRole('button', { name: /^지도에 아직 담기지 않은 코드/ }));
     const excluded = (await screen.findByText('제외된 변경 4개')).closest('details')!;
     expect(within(excluded).getByText('fixtures/**')).toBeTruthy();
     fireEvent.keyDown(globalThis.document.body, { key: 'Escape' });

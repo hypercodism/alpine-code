@@ -40,4 +40,15 @@ describe('checking for updates from the menu', () => {
     expect(update.restart).toHaveBeenCalledOnce();
     expect(dialog.message).toHaveBeenCalledWith(t.restartFailed, expect.objectContaining({ kind: 'warning' }));
   });
+
+  it('asks once however many times it is pressed while it checks and downloads (#50)', async () => {
+    let found!: (result: { readonly kind: 'ready'; readonly version: '0.2.0' }) => void;
+    update.check.mockImplementationOnce(() => new Promise((resolve) => (found = resolve)));
+    const first = checkByHand(latest(false), '0.1.0');
+    const again = checkByHand(latest(false), '0.1.0');
+    found({ kind: 'ready', version: '0.2.0' });
+    await Promise.all([first, again]);
+    expect(update.check).toHaveBeenCalledOnce();
+    expect(dialog.ask).toHaveBeenCalledOnce();
+  });
 });

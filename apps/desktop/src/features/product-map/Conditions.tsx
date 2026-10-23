@@ -292,7 +292,7 @@ function IssueActions({
   promise: PromiseState;
   disabled: boolean;
   onAction: (action: PromiseAction, reason?: string, done?: () => void) => void;
-  onRecheck: () => void;
+  onRecheck?: () => void;
   onNotARule: () => void;
   /** Ask the agent to make the product keep this promise. */
   onFix?: () => void;
@@ -337,7 +337,7 @@ function IssueActions({
           </Button>
         </div>
       )}
-      {issue === 'maybe_fixed' && (
+      {issue === 'maybe_fixed' && onRecheck && (
         <div className="flex flex-wrap items-center gap-2">
           <p className="text-meta text-attention">{t.issueMaybeFixedAsk}</p>
           <Button variant="primary" disabled={disabled} onClick={onRecheck}>
@@ -518,8 +518,8 @@ export function Conditions({
   readOnly?: boolean;
   /** A session of the project is working: sentences wait, since its agent may be writing the same card. */
   editLocked?: boolean;
-  /** Asks for this feature to be checked again. */
-  onRecheck: () => void;
+  /** Asks for this feature to be checked again; absent on a plan not built yet (no code to check). */
+  onRecheck?: () => void;
   /** The user says an AI-guessed rule is not a rule: ask the agent to fix or remove it. */
   onNotARule: (conditionId: string) => void;
   /** Ask the agent to make the product keep this card's failing promises. */
@@ -692,7 +692,7 @@ export function Conditions({
                           {t.decidedElsewhere}
                         </span>
                       )}
-                      {waiting && (
+                      {waiting && onRecheck && (
                         <Button disabled={disabled || editLocked} onClick={inSummary(onRecheck)}>
                           {t.askCheck}
                         </Button>

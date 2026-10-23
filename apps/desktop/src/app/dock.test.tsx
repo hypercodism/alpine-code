@@ -145,8 +145,8 @@ describe('right dock on the routes', () => {
     fireEvent.click(screen.getByRole('button', { name: '보기' }));
     const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
     // A rarer place, under ⋮: the ⋮ button stands for it while it is shown.
-    expect(within(dock).queryByRole('tab', { name: '에이전트 실행' })).toBeNull();
-    expect(await within(dock).findByRole('region', { name: '에이전트 실행' })).toBeTruthy();
+    expect(within(dock).queryByRole('tab', { name: 'AI가 실행한 명령' })).toBeNull();
+    expect(await within(dock).findByRole('region', { name: 'AI가 실행한 명령' })).toBeTruthy();
   });
 
   it('says nothing after a stop when no command is left', async () => {
@@ -194,22 +194,22 @@ describe('right dock on the routes', () => {
     });
     fireEvent.click(await screen.findByRole('button', { name: '오른쪽 창 열기, 바뀐 파일 1개' }));
     const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
-    fireEvent.click(within(dock).getByRole('tab', { name: '변경 사항' }));
+    fireEvent.click(within(dock).getByRole('tab', { name: '바뀐 파일' }));
     fireEvent.click(await within(dock).findByRole('button', { name: /Cart\.tsx/ }));
-    expect(within(dock).getByRole('tab', { name: '변경 사항', selected: true })).toBeTruthy();
+    expect(within(dock).getByRole('tab', { name: '바뀐 파일', selected: true })).toBeTruthy();
     expect(within(dock).getByRole('region', { name: 'Cart.tsx 바뀐 내용' })).toBeTruthy();
     fireEvent.click(await within(dock).findByRole('button', { name: '전체 파일 보기' }));
     expect(within(dock).getByRole('tab', { name: '파일', selected: true })).toBeTruthy();
     expect(await within(dock).findByText('export const cart = true;')).toBeTruthy();
-    fireEvent.click(within(dock).getByRole('button', { name: '변경 사항으로 돌아가기' }));
+    fireEvent.click(within(dock).getByRole('button', { name: '바뀐 파일로 돌아가기' }));
     expect(within(dock).getByRole('region', { name: 'Cart.tsx 바뀐 내용' })).toBeTruthy();
-    expect(within(dock).getByRole('tab', { name: '변경 사항', selected: true })).toBeTruthy();
+    expect(within(dock).getByRole('tab', { name: '바뀐 파일', selected: true })).toBeTruthy();
     fireEvent.click(within(dock).getByRole('tab', { name: '터미널' }));
     expect(await within(dock).findByRole('textbox', { name: '터미널 입력: 셸 1' })).toBeTruthy();
     expect(launches).toBe(1);
     fireEvent.click(within(dock).getByRole('button', { name: '터미널 메뉴' }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: '개발 서버 실행…' }));
-    expect(await within(dock).findByRole('tab', { name: '미리보기', selected: true })).toBeTruthy();
+    fireEvent.click(await screen.findByRole('menuitem', { name: '앱 미리보기 열기…' }));
+    expect(await within(dock).findByRole('tab', { name: '앱 미리보기', selected: true })).toBeTruthy();
     expect(await within(dock).findByRole('button', { name: '서버 실행' })).toBeTruthy();
     fireEvent.click(within(dock).getByRole('tab', { name: '터미널' }));
     expect(await within(dock).findByRole('textbox', { name: '터미널 입력: 셸 1' })).toBeTruthy();
@@ -222,7 +222,7 @@ describe('right dock on the routes', () => {
     const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
     expect(within(dock).getByRole('tab', { name: '요약', selected: true })).toBeTruthy();
     fireEvent.click(await within(dock).findByRole('button', { name: /바뀐 파일/ }));
-    expect(within(dock).getByRole('tab', { name: '변경 사항', selected: true })).toBeTruthy();
+    expect(within(dock).getByRole('tab', { name: '바뀐 파일', selected: true })).toBeTruthy();
     expect(await within(dock).findByRole('button', { name: /Cart\.tsx/ })).toBeTruthy();
     fireEvent.click(await toggle());
     await waitFor(() => expect(screen.queryByRole('complementary', { name: '오른쪽 창' })).toBeNull());
@@ -237,7 +237,7 @@ describe('right dock on the routes', () => {
     expect(within(dock).getByRole('tab', { name: '대화' }).getAttribute('aria-selected')).toBe('true');
     // The map has its own input for it, so the conversation here has none: one place to type.
     expect(within(dock).queryByRole('textbox')).toBeNull();
-    fireEvent.click(within(dock).getByRole('tab', { name: '변경 사항' }));
+    fireEvent.click(within(dock).getByRole('tab', { name: '바뀐 파일' }));
     expect(await within(dock).findByRole('button', { name: /Cart\.tsx/ })).toBeTruthy();
   });
 
@@ -303,8 +303,8 @@ describe('right dock on the routes', () => {
       flowScript(() => STUDIO_MAP),
     );
     fireEvent.click(await screen.findByRole('button', { name: '지도 메뉴' }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: /^바뀐 기록/ }));
-    const panel = await screen.findByRole('complementary', { name: '최근 변경' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: /^지도 기록/ }));
+    const panel = await screen.findByRole('complementary', { name: '지도 기록' });
     expect(panel.closest('[data-overlay]') !== null).toBe(overlaid);
     expect(screen.getByRole('complementary', { name: '오른쪽 창' })).toBeTruthy();
   });
@@ -329,6 +329,6 @@ it('shows a discovered server under 미리보기', async () => {
     },
   });
   fireEvent.click(await screen.findByRole('button', { name: '오른쪽 창 열기, 바뀐 파일 1개' }));
-  fireEvent.click(await screen.findByRole('tab', { name: '미리보기' }));
+  fireEvent.click(await screen.findByRole('tab', { name: '앱 미리보기' }));
   expect(await screen.findByTitle('미리보기')).toBeTruthy();
 });

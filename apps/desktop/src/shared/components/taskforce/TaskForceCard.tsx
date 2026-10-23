@@ -122,7 +122,7 @@ export function TaskForceCard({
         )}
         {(item.status === 'running' || item.status === 'stopping') && (
           <>
-            <Button onClick={onShowAgents}>{t.showAgents}</Button>
+            {onShowAgents && <Button onClick={onShowAgents}>{t.showAgents}</Button>}
             {item.status === 'running' && (
               <Button disabled={busy} onClick={() => run('stop')}>
                 {t.stop}
@@ -150,9 +150,9 @@ export function TaskForceCard({
             </LinkButton>
           </>
         )}
-        {(item.status === 'done' || item.status === 'stopped' || item.status === 'failed') && total > 0 && (
-          <Button onClick={onShowAgents}>{t.showAgents}</Button>
-        )}
+        {(item.status === 'done' || item.status === 'stopped' || item.status === 'failed') &&
+          total > 0 &&
+          onShowAgents && <Button onClick={onShowAgents}>{t.showAgents}</Button>}
       </div>
     </section>
   );

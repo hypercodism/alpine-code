@@ -3,7 +3,7 @@ import { defineMessages } from '@/shared/i18n';
 export const messages = defineMessages({
   ko: {
     title: '터미널',
-    developmentServer: '개발 서버 실행…',
+    developmentServer: '앱 미리보기 열기…',
     newTerminal: '새 터미널',
     shell: '셸',
     processes: '다른 터미널',

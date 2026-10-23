@@ -102,7 +102,7 @@ describe('앱 열기 (#7)', () => {
     const { request } = mount('built');
     fireEvent.click(await screen.findByRole('button', { name: '앱 열기' }));
     const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
-    expect(within(dock).getByRole('tab', { name: '미리보기', selected: true })).toBeTruthy();
+    expect(within(dock).getByRole('tab', { name: '앱 미리보기', selected: true })).toBeTruthy();
     expect(await within(dock).findByTitle('미리보기', {}, { timeout: 3000 })).toBeTruthy();
     expect(request).toHaveBeenCalledWith('devServers/open', expect.objectContaining({ cwd }));
     expect(request.mock.calls.some(([method]) => method === 'devServers/start')).toBe(false);
@@ -112,13 +112,21 @@ describe('앱 열기 (#7)', () => {
     expect(within(advanced).getByRole('textbox', { hidden: true })).toBeTruthy();
   });
 
-  it('asks for the command under 고급 when nothing in the project says how it runs', async () => {
-    mount('built', { results: { 'devServers/open': { server: null } } });
+  it('hands it to the AI, not me, when nothing in the project says how it runs', async () => {
+    const { request } = mount('built', { results: { 'devServers/open': { server: null } } });
     fireEvent.click(await screen.findByRole('button', { name: '앱 열기' }));
     const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
-    expect(await within(dock).findByText(/여는 방법을 찾지 못했어요/)).toBeTruthy();
-    expect(within(dock).getByText('고급').closest('details')!.open).toBe(true);
-    expect(within(dock).getByRole('button', { name: '서버 실행' })).toBeTruthy();
+    expect(await within(dock).findByText(/여는 방법을 아직 몰라요/)).toBeTruthy();
+    // The command form stays folded: no one is asked to type a command.
+    expect(within(dock).getByText('고급').closest('details')!.open).toBe(false);
+    // Once the AI has made it ready, the app is opened again from here.
+    expect(within(dock).getByRole('button', { name: '다시 열기' })).toBeTruthy();
+    fireEvent.click(within(dock).getByRole('button', { name: 'AI에게 열 수 있게 해 달라고 하기' }));
+    await vi.waitFor(() => {
+      const sent = request.mock.calls.find(([, params]) => JSON.stringify(params ?? {}).includes('PORT 환경변수'));
+      expect(sent?.[0]).toBe('flow/prepare');
+    });
+    expect(within(dock).getByRole('tab', { name: '대화', selected: true })).toBeTruthy();
   });
 });
 

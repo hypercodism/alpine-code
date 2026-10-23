@@ -1,5 +1,6 @@
 import { LinkButton } from '@alpine/ui/primitives';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { useState } from 'react';
 
 import { SUMMARY_TAB, WorkspaceDock } from '@/app/WorkspaceDock';
 import { openApp } from '@/features/development-servers';
@@ -11,10 +12,12 @@ import { useMapTalk } from '@/features/product-map/mapTalk';
 import { messages as mapMessages } from '@/features/product-map/messages';
 import { ProductMap } from '@/features/product-map/ProductMap';
 import { MissingProject } from '@/features/rail/MissingProject';
+import { RecordItems } from '@/features/session/RecordItems';
 import { Session } from '@/features/session/Session';
+import { useTaskForceTab } from '@/features/taskforce/useTaskForceTab';
 import { useWorkResultTab } from '@/features/work-result/useWorkResultTab';
 import { useMessages } from '@/shared/i18n';
-import { useCloudEnabled, useProjects, useSession } from '@/shared/server';
+import { useCloudEnabled, useProjects, useSession, type Item } from '@/shared/server';
 
 export const Route = createFileRoute('/board')({
   validateSearch: (search: Record<string, unknown>): { project?: string; session?: string } => ({
@@ -23,6 +26,10 @@ export const Route = createFileRoute('/board')({
   }),
   component: BoardRoute,
 });
+
+function renderRecord(items: Item[]) {
+  return <RecordItems items={items} />;
+}
 
 function BoardRoute() {
   const { project: chosen, session: asked } = Route.useSearch();
@@ -43,6 +50,10 @@ function BoardRoute() {
   const t = useMessages(dockMessages);
   const m = useMessages(mapMessages);
   const attachedHere = !!session && !!attached.data && attached.data.info.cwd === chosen && !attached.data.deleted;
+  // The conversation's AI 팀 (a TF), opened from its card in the conversation's place, with the way back.
+  const team = useTaskForceTab(attachedHere ? session : null, renderRecord);
+  const [teamOf, setTeamOf] = useState<string | null>(null);
+  const teamShown = !!team && teamOf === session;
   // The map's conversation is in the dock's first tab, named 대화 here: one place for it on every page.
   const summary = attachedHere ? (
     <div className="flex min-h-0 grow flex-col">
@@ -59,8 +70,33 @@ function BoardRoute() {
           </LinkButton>
         </p>
       )}
-      {/* The map has its own input for this conversation; here it only reads. */}
-      <Session key={session} sessionId={session} compact readOnly onInspectProcesses={() => showDockTab('processes')} />
+      {teamShown ? (
+        <div className="flex min-h-0 grow flex-col overflow-y-auto">
+          <p className="border-b border-line px-4 py-2 text-meta">
+            <LinkButton className="min-h-5 px-0.5" onClick={() => setTeamOf(null)}>
+              {m.backToConversation}
+            </LinkButton>
+          </p>
+          {team.content}
+        </div>
+      ) : (
+        // The map has its own input for this conversation; here it only reads.
+        <Session
+          key={session}
+          sessionId={session}
+          compact
+          readOnly
+          onInspectProcesses={() => showDockTab('processes')}
+          onShowTaskForce={
+            team
+              ? () => {
+                  setTeamOf(session);
+                  showDockTab(SUMMARY_TAB);
+                }
+              : undefined
+          }
+        />
+      )}
     </div>
   ) : (
     <p className="px-5 text-body text-fg-muted">{t.mapSummaryEmpty}</p>
@@ -101,6 +137,7 @@ function BoardRoute() {
         }}
         onPublish={publishable ? () => openPublish(project.path) : undefined}
         onFixConnection={() => void navigate({ to: '/settings', search: { tab: 'connection' } })}
+        onMemory={() => void navigate({ to: '/memory', search: { project: project.path } })}
         onNewHere={(folder) => void navigate({ to: '/', search: { folder } })}
         // An empty id lets go of the session (the map started over).
         onSession={(id) =>

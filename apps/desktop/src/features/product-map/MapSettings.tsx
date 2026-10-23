@@ -179,12 +179,14 @@ export function MapMenu({
   readOnly,
   unseen,
   canStart,
+  planning = false,
   onChanges,
   onRediscover,
   onScope,
   onDelete,
   recheck,
   onRecheck,
+  onMemory,
 }: {
   cwd: string;
   board: FlowGetResult;
@@ -192,6 +194,8 @@ export function MapMenu({
   unseen: number;
   /** Whether a new run may start now (nothing else working, map writable). */
   canStart: boolean;
+  /** A plan not built yet: no code to find more in, check daily or scope, so only its history and delete are here. */
+  planning?: boolean;
   onChanges?: () => void;
   onRediscover: () => void;
   onScope: () => void;
@@ -199,6 +203,8 @@ export function MapMenu({
   /** How many features changed since their check; they can all be checked again from here. */
   recheck: number;
   onRecheck: () => void;
+  /** Opens what the AI keeps in mind about this project. */
+  onMemory?: () => void;
 }) {
   const t = useMessages(messages);
   const schedule = useSetSchedule();
@@ -214,29 +220,34 @@ export function MapMenu({
       </Menu.Trigger>
       <Menu.Popup align="end">
         {onChanges && <Menu.Item onClick={onChanges}>{t.menuChanges(unseen)}</Menu.Item>}
-        <Menu.Item disabled={!canStart} onClick={onRediscover}>
-          {t.rediscover}
-        </Menu.Item>
-        {recheck > 0 && (
-          <Menu.Item disabled={!canStart} onClick={onRecheck}>
-            {t.recheckAll(recheck)}
-          </Menu.Item>
+        {onMemory && <Menu.Item onClick={onMemory}>{t.menuMemory}</Menu.Item>}
+        {!planning && (
+          <>
+            <Menu.Item disabled={!canStart} onClick={onRediscover}>
+              {t.rediscover}
+            </Menu.Item>
+            {recheck > 0 && (
+              <Menu.Item disabled={!canStart} onClick={onRecheck}>
+                {t.recheckAll(recheck)}
+              </Menu.Item>
+            )}
+            <Menu.Separator />
+            <Menu.Item
+              role="menuitemcheckbox"
+              aria-checked={daily.enabled ?? false}
+              disabled={readOnly || schedule.isPending}
+              closeOnClick={false}
+              onClick={() => schedule.mutate({ cwd, enabled: !daily.enabled, limit: daily.limit ?? 20 })}
+            >
+              <span className="grow">{t.menuDaily}</span>
+              <Check size={14} aria-hidden className={daily.enabled ? 'text-interactive' : 'invisible'} />
+            </Menu.Item>
+            <Menu.Item onClick={onScope}>{t.menuScope}</Menu.Item>
+          </>
         )}
-        <Menu.Separator />
-        <Menu.Item
-          role="menuitemcheckbox"
-          aria-checked={daily.enabled ?? false}
-          disabled={readOnly || schedule.isPending}
-          closeOnClick={false}
-          onClick={() => schedule.mutate({ cwd, enabled: !daily.enabled, limit: daily.limit ?? 20 })}
-        >
-          <span className="grow">{t.menuDaily}</span>
-          <Check size={14} aria-hidden className={daily.enabled ? 'text-interactive' : 'invisible'} />
-        </Menu.Item>
-        <Menu.Item onClick={onScope}>{t.menuScope}</Menu.Item>
         {!readOnly && (
           <>
-            <Menu.Separator />
+            {(!planning || onChanges || onMemory) && <Menu.Separator />}
             <Menu.Item onClick={onDelete} className="text-danger">
               {t.deleteMap}
             </Menu.Item>

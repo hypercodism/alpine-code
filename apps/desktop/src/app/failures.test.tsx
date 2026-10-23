@@ -227,7 +227,7 @@ describe('Settings › 모델 연결 while it cannot be read (#51)', () => {
     expect(await screen.findByText('연결 정보를 불러오지 못했어요.')).toBeTruthy();
     fails = false;
     fireEvent.click(screen.getByRole('button', { name: '다시 시도' }));
-    expect(await screen.findByRole('button', { name: '공급자 추가' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: '연결 추가' })).toBeTruthy();
   });
 });
 

@@ -2,10 +2,10 @@ import { defineMessages } from '@/shared/i18n';
 export const messages = defineMessages({
   ko: {
     title: '파일',
-    localFolder: '로컬 폴더',
+    localFolder: '이 컴퓨터의 폴더',
     tree: '프로젝트 파일',
     backToTree: '파일 목록',
-    backToChanges: '변경 사항으로 돌아가기',
+    backToChanges: '바뀐 파일로 돌아가기',
     refreshTree: '파일 목록 새로고침',
     folderLoading: '불러오는 중…',
     folderEmpty: '빈 폴더',

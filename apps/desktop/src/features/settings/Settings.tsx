@@ -152,11 +152,7 @@ function General({ onReviewModel }: { onReviewModel: () => void }) {
       )}
       {cloud && <AlpineAccount />}
       <dt className="text-fg-muted">{t.server}</dt>
-      <dd>
-        {server.data
-          ? t.serverVersion(server.data.server.name, server.data.server.version, server.data.protocolVersion)
-          : server.isError && t.serverUnavailable}
-      </dd>
+      <dd>{server.data ? t.serverVersion(server.data.server.version) : server.isError && t.serverUnavailable}</dd>
     </dl>
   );
 }

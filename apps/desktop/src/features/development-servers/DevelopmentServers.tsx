@@ -58,7 +58,8 @@ export function DevelopmentServers({
       {
         onSuccess: (result) => {
           if (result.server) setSelected(result.server.id);
-          else setAdvanced(true);
+          // With no one to hand it to, the command is the person's to give.
+          else if (!onAskFix) setAdvanced(true);
         },
       },
     );
@@ -84,7 +85,7 @@ export function DevelopmentServers({
   const askFix = () => {
     const output = current && !current.external ? (logs.data?.text ?? '').slice(-FIX_LOG) : '';
     const reason = output.trim() || actions.open.error?.message || '';
-    onAskFix?.(m.fixRequest(current?.command ?? '', stripAnsi(reason).trim()));
+    onAskFix?.(m.fixRequest(current?.command ?? '', current?.port ?? 0, stripAnsi(reason).trim()));
   };
 
   return (
@@ -131,7 +132,9 @@ export function DevelopmentServers({
         <div className="flex flex-col items-start gap-3">
           <p role={failed || unknown ? 'alert' : undefined} className="text-body text-fg-muted">
             {unknown
-              ? m.unknown
+              ? onAskFix
+                ? m.unknownFix
+                : m.unknown
               : failed
                 ? onAskFix
                   ? m.openFailedFix
@@ -141,14 +144,20 @@ export function DevelopmentServers({
                   : m.lead}
           </p>
           <div className="flex flex-wrap gap-2">
-            {failed && onAskFix && (
+            {failed && !unknown && onAskFix && (
               <Button variant="primary" onClick={askFix}>
                 {m.askFix}
               </Button>
             )}
-            {!unknown && (
-              <Button variant={failed && onAskFix ? undefined : 'primary'} disabled={busy} onClick={open}>
-                {failed ? m.openAgain : m.openApp}
+            {/* Nothing says how it runs: the AI makes it run the way 앱 열기 knows, rather than me typing a command. */}
+            {unknown && onAskFix && (
+              <Button variant="primary" onClick={() => onAskFix(m.setupRequest)}>
+                {m.askSetup}
+              </Button>
+            )}
+            {(!unknown || onAskFix) && (
+              <Button variant={(failed || unknown) && onAskFix ? undefined : 'primary'} disabled={busy} onClick={open}>
+                {failed || unknown ? m.openAgain : m.openApp}
               </Button>
             )}
           </div>

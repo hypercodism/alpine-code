@@ -179,6 +179,7 @@ export function Session({
             items={state.items}
             activeIds={state.activeIds}
             onShowTaskForce={onShowTaskForce}
+            inputOnMap={readOnly}
           />
           {running && <ProgressLine info={info} />}
           {commandsLeft > 0 && (

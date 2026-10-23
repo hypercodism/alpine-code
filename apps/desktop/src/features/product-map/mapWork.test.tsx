@@ -298,15 +298,21 @@ describe('a planned product on its map', () => {
       ).toEqual(['build-1', 'map-1']),
     );
 
-    // Words while it works wait, and go to the build once its turn is over.
-    expect(input().getAttribute('placeholder')).toBe('지금 일이 끝나면 전해요');
-    write('버튼 색은 파란색으로');
-    expect(await screen.findByRole('region', { name: 'AI가 지금 일을 마치면 전할게요' })).toBeTruthy();
-    const open = await connection.request('session/open', { sessionId: 'build-1' });
-    const approval = open.active.find((item) => item.kind === 'approval');
-    await connection.request('session/answer', { sessionId: 'build-1', requestId: approval!.id, decision: 'allow' });
-    await waitFor(() => expect(sent(request, 'build-1').at(-1)).toBe('버튼 색은 파란색으로'));
-    await waitFor(() => expect(screen.queryByRole('region', { name: 'AI가 지금 일을 마치면 전할게요' })).toBeNull());
+    // While it waits for my OK, my words skip that command and tell the build what to do instead (#35): the map's
+    // input is where the conversation beside it says to write them.
+    expect(input().getAttribute('placeholder')).toBe('건너뛰고 대신 할 일을 적어 주세요');
+    write('그 명령은 빼고 버튼 색은 파란색으로');
+    await waitFor(() =>
+      expect(request).toHaveBeenCalledWith(
+        'session/answer',
+        expect.objectContaining({
+          sessionId: 'build-1',
+          decision: 'deny',
+          feedback: '그 명령은 빼고 버튼 색은 파란색으로',
+        }),
+      ),
+    );
+    expect(screen.queryByRole('region', { name: 'AI가 지금 일을 마치면 전할게요' })).toBeNull();
   });
 
   it('keeps another answer to an AI decision while the build works, and gives it to the build after (#5)', async () => {

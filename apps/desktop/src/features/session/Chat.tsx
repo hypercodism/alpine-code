@@ -36,14 +36,17 @@ export function Chat({
   items,
   activeIds,
   onShowTaskForce,
+  inputOnMap = false,
 }: {
   sessionId: string;
   /** The project the session works in, whose memory the suggestions go to. */
   cwd: string;
   items: Item[];
   activeIds: readonly string[];
-  /** Opens the dock on the TF's agents (its 에이전트 보기). */
+  /** Opens the dock on the TF's agents (its AI 팀 보기). */
   onShowTaskForce?: () => void;
+  /** The conversation is answered from the map's input, not one below it (it is shown beside the map). */
+  inputOnMap?: boolean;
 }) {
   const answered = useMemo(() => answers(items), [items]);
   // A run that failed last can be asked again: what I last sent, sent again.
@@ -58,9 +61,15 @@ export function Chat({
         ) : block.type === 'blocked' ? (
           <BlockedLine key={block.item.id} item={block.item} />
         ) : block.type === 'approval' ? (
-          <ApprovalCard key={block.item.id} sessionId={sessionId} approval={block.item} />
+          <ApprovalCard key={block.item.id} sessionId={sessionId} approval={block.item} inputOnMap={inputOnMap} />
         ) : block.type === 'question' ? (
-          <QuestionCard key={`question-${block.call.id}`} sessionId={sessionId} call={block.call} items={items} />
+          <QuestionCard
+            key={`question-${block.call.id}`}
+            sessionId={sessionId}
+            call={block.call}
+            items={items}
+            inputOnMap={inputOnMap}
+          />
         ) : block.type === 'memory' ? (
           <MemoryCard key={`memory-${block.call.id}`} sessionId={sessionId} cwd={cwd} call={block.call} />
         ) : block.item.kind === 'memory_review' ? (

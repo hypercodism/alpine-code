@@ -34,6 +34,7 @@ export function JourneyMap({
   look,
   touching,
   asked,
+  onPlan,
 }: {
   cwd: string;
   /** `board` read person first (`toTreeMap`). */
@@ -54,6 +55,11 @@ export function JourneyMap({
   look?: string;
   touching?: ReadonlySet<string>;
   asked?: string | null;
+  /**
+   * A plan not built yet: there is no code to check or find steps in, so nothing is checked and new journeys, steps
+   * and people are words to the plan's conversation.
+   */
+  onPlan?: (words: string) => void;
 }) {
   const t = useMessages(flowTreeMessages);
   const edit = useEditFlow();
@@ -83,7 +89,12 @@ export function JourneyMap({
       asked={asked}
       seenAt={seenAt ?? undefined}
       readSource={readSource}
-      onCheck={(targets) => void start('verify', { nodeIds: [...new Set(targets.map((target) => target.cardId))] })}
+      planning={!!onPlan}
+      onCheck={
+        onPlan
+          ? undefined
+          : (targets) => void start('verify', { nodeIds: [...new Set(targets.map((target) => target.cardId))] })
+      }
       onFix={(targets) => {
         const cardId = targets[0]?.cardId;
         const card = cardId ? map.cards[cardId] : undefined;
@@ -118,12 +129,20 @@ export function JourneyMap({
         if (last?.text)
           edit.mutate({ cwd, nodeId: last.cardId, field: 'promise', conditionId: null, value: last.text });
       }}
-      onAddJourney={(_, title, goal) => void start('extend', { request: t.addJourneyRequest(title, goal) })}
+      onAddJourney={(_, title, goal) =>
+        onPlan
+          ? onPlan(t.planJourneyRequest(title, goal))
+          : void start('extend', { request: t.addJourneyRequest(title, goal) })
+      }
       onFindSteps={(journeyId) => {
         const journey = map.people.flatMap((person) => person.journeys).find((item) => item.id === journeyId);
-        void start('extend', { flowId: journeyId, request: t.findStepsRequest(journey?.title.ko ?? journeyId) });
+        const title = journey?.title.ko ?? journeyId;
+        if (onPlan) onPlan(t.planStepsRequest(title));
+        else void start('extend', { flowId: journeyId, request: t.findStepsRequest(title) });
       }}
-      onAddPerson={(name) => void start('reshape', { request: t.addPersonRequest(name) })}
+      onAddPerson={(name) =>
+        onPlan ? onPlan(t.planPersonRequest(name)) : void start('reshape', { request: t.addPersonRequest(name) })
+      }
       // A map from a newer Alpine is read only: no decisions to write (the decision chips are not shown).
       onDecide={readOnly ? undefined : (cardId, field, value) => decide.mutate({ cwd, nodeId: cardId, field, value })}
       onOpenSession={onSession}
