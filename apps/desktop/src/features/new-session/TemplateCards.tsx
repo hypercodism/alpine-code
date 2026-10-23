@@ -23,7 +23,8 @@ export interface Template {
 
 /**
  * The setups the app shows. Without Alpine Cloud (`cloud` false) nothing that needs it is offered or promised: no
- * realtime web app (it lives on the cloud's database), and no web address or putting it on the internet.
+ * realtime web app (it lives on the cloud's database), and no web address, visitors, hosting or putting it on the
+ * internet.
  */
 export function useTemplates(cloud: boolean): Template[] {
   const t = useMessages(messages);
@@ -42,8 +43,9 @@ export function useTemplates(cloud: boolean): Template[] {
       tile: 'bg-avatar-1 text-avatar-1-ink',
       name: t.lite,
       short: cloud ? t.liteShort : t.liteShortLocal,
-      points: cloud ? [t.litePoint1, t.litePoint2, t.litePoint3] : [t.litePoint1Local, t.litePoint2],
-      stack: 'React · Hono · Cloudflare D1',
+      // Visitors and where it runs only matter once it is on the internet, which needs Alpine Cloud.
+      points: cloud ? [t.litePoint1, t.litePoint2, t.litePoint3] : [t.litePoint1Local],
+      stack: cloud ? 'React · Hono · Cloudflare D1' : undefined,
     },
     {
       id: 'web-pro',

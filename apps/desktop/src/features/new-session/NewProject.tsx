@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { Pencil } from 'lucide-react';
-import { useLayoutEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { useStore } from 'zustand';
 
 import { AlpineSignIn, NodeInstall, UpgradeSheet } from '@/shared/components/cloud';
@@ -131,6 +131,13 @@ export function NewProject({
     if (now.stage?.name === 'creating' && now.stage.outcome.status === 'working') return;
     store.setState((state) => ({ turn: state.turn + 1, folder: presetFolder, stage: null }));
   }, [presetFolder, store]);
+
+  // A done screen that has been seen is forgotten once I leave it (`useForgetFinished`).
+  const finished = stage?.name === 'creating' && stage.outcome.status === 'done' && !stage.seen;
+  useEffect(() => {
+    const now = store.getState().stage;
+    if (finished && now?.name === 'creating') store.setState({ stage: { ...now, seen: true } });
+  }, [finished, store]);
 
   const wanted = picked ?? agent ?? DEFAULT_AGENT;
   // Until the agents are read (or when they cannot be), no agent is sent, so the server applies its own choice.
@@ -269,17 +276,21 @@ export function NewProject({
     setStage({ ...creating, name: 'choosing' });
   };
 
-  // A folder picked for the project is looked into at once: one with files in it is a project to open, not a place
-  // to start one, so it is not taken. When it cannot be looked into the server decides on 만들기.
+  // A folder picked for the project is taken at once (sending right away makes it there) and looked into: one with
+  // files in it is a project to open, not a place to start one, so it is given back. When it cannot be looked into
+  // the server decides on 만들기.
   const pick = (next: string | null) => {
     setFilled(null);
-    if (next === null || next === folder) return setFolder(next);
+    const before = folder;
+    setFolder(next);
+    if (next === null || next === before) return;
     void server.request('files/list', { cwd: next, path: '', limit: 20 }).then(
       ({ entries }) => {
-        if (entries.some((entry) => !EMPTY_ANYWAY.has(entry.name))) setFilled(next);
-        else setFolder(next);
+        if (store.getState().folder !== next || !entries.some((entry) => !EMPTY_ANYWAY.has(entry.name))) return;
+        setFolder(before);
+        setFilled(next);
       },
-      () => setFolder(next),
+      () => {},
     );
   };
 

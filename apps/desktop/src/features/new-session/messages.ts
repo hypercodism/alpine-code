@@ -81,6 +81,7 @@ export const messages = defineMessages({
     openAsProject: '프로젝트로 열기',
     dismiss: '닫기',
     restart: '다시 시작',
+    errorDetail: '자세한 내용',
   },
   en: {
     newHeading: 'What do you want to make?',
@@ -160,5 +161,6 @@ export const messages = defineMessages({
     openAsProject: 'Open as a project',
     dismiss: 'Close',
     restart: 'Start again',
+    errorDetail: 'Details',
   },
 });

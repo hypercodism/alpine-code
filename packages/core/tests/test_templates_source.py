@@ -93,18 +93,44 @@ def test_the_first_new_project_fetches_and_a_fresh_copy_is_not_fetched_again(tmp
     assert templates.ensure_templates() == ["blank", "web-lite"]  # fresh: the copy, no network
 
 
-def test_a_day_old_copy_is_fetched_again_and_kept_when_that_fails(tmp_path, monkeypatch):
-    monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    monkeypatch.setattr(templates, "TEMPLATES_REPO", _public(tmp_path, "blank"))
-    templates.ensure_templates()
-    copy = templates.fetched_templates()
+def _day_old(copy):
     day_ago = time.time() - 25 * 60 * 60
     os.utime(copy, (day_ago, day_ago))
+
+
+def _refreshed():
+    templates._refresh.join(timeout=30)
+
+
+def test_a_day_old_copy_serves_at_once_and_a_newer_one_is_fetched_behind_it(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setattr(templates, "_refresh_started", 0.0)
+    monkeypatch.setattr(templates, "TEMPLATES_REPO", _public(tmp_path, "blank"))
+    templates.ensure_templates()
+    old = templates.fetched_templates()
+    _day_old(old)
     _public(tmp_path, "web-lite")  # the repository moved on
+    assert templates.ensure_templates() == ["blank"]  # nobody waits for the network
+    _refreshed()
     assert templates.ensure_templates() == ["blank", "web-lite"]
-    os.utime(templates.fetched_templates(), (day_ago, day_ago))
+    assert not old.exists()  # only the newest copy is kept
+    assert [p.name for p in (templates.home_dir() / "templates").iterdir()] == [templates.fetched_templates().name]
+
+
+def test_a_failed_fetch_behind_a_copy_keeps_it_and_waits_before_trying_again(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setattr(templates, "_refresh_started", 0.0)
+    monkeypatch.setattr(templates, "TEMPLATES_REPO", _public(tmp_path, "blank"))
+    templates.ensure_templates()
+    _day_old(templates.fetched_templates())
     monkeypatch.setattr(templates, "TEMPLATES_REPO", "http://127.0.0.1:9/nothing.git")
-    assert templates.ensure_templates() == ["blank", "web-lite"]  # offline: the old copy still serves
+    assert templates.ensure_templates() == ["blank"]  # offline: the old copy still serves
+    _refreshed()
+    assert templates.ensure_templates() == ["blank"]
+    tried = []
+    monkeypatch.setattr(templates, "fetch_templates", lambda: tried.append(1))
+    assert templates.ensure_templates() == ["blank"]
+    assert tried == []  # not again within the hour
 
 
 def test_with_nothing_to_use_the_reason_says_what_to_do(tmp_path, monkeypatch):

@@ -1,6 +1,8 @@
 import type { JudgedNew, ProjectInfo } from '@alpine/protocol';
+import { useEffect } from 'react';
 import { createStore, type StoreApi } from 'zustand';
 
+import { useNavigation } from '@/shared/navigation';
 import { useServer, type CreateStep, type ServerConnection, type TemplateId } from '@/shared/server';
 
 /**
@@ -27,6 +29,8 @@ export interface CreatingStage {
   /** The web address the server made, once it says so. */
   address: string | null;
   outcome: { status: 'working' } | { status: 'done' } | { status: 'failed'; error: unknown };
+  /** The done screen has been shown: once it is left, it is done with (`useForgetFinished`). */
+  seen?: boolean;
 }
 
 interface NewProjectState {
@@ -49,4 +53,20 @@ export function useNewProjectStore(): StoreApi<NewProjectState> {
     stores.set(server, store);
   }
   return store;
+}
+
+/**
+ * A finished making is told once: when 새 프로젝트 is left after its done screen was shown, or its project was opened
+ * another way (the rail), it is forgotten, so 새 프로젝트 starts empty again rather than showing an old project.
+ */
+export function useForgetFinished(onNewProject: boolean) {
+  const store = useNewProjectStore();
+  const lastProject = useNavigation((s) => s.lastProject);
+  useEffect(() => {
+    if (onNewProject) return;
+    const { stage } = store.getState();
+    if (stage?.name !== 'creating' || stage.outcome.status !== 'done') return;
+    if (stage.seen || (stage.project && stage.project.path === lastProject))
+      store.setState((state) => ({ stage: null, folder: null, turn: state.turn + 1 }));
+  }, [onNewProject, lastProject, store]);
 }

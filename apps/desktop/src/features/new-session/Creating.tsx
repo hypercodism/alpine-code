@@ -7,6 +7,7 @@ import { useMessages } from '@/shared/i18n';
 import { tildePath, useHomeDir } from '@/shared/platform';
 import type { CreateStep, TemplateId } from '@/shared/server';
 
+import { ErrorDetail } from './ErrorDetail';
 import { messages } from './messages';
 
 const ORDER: CreateStep[] = ['folder', 'address', 'agent'];
@@ -113,7 +114,7 @@ export function Creating({
       {failure && (
         <div role="alert" className="motion-step flex flex-col gap-1">
           <p className="text-body text-fg">{body}</p>
-          {failure.detail && <p className="font-mono text-meta break-words text-fg-muted">{failure.detail}</p>}
+          <ErrorDetail detail={failure.detail} />
         </div>
       )}
       {(failure || finished) && (

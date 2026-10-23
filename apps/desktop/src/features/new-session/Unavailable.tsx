@@ -5,6 +5,7 @@ import { useMessages } from '@/shared/i18n';
 import { openInBrowser } from '@/shared/platform';
 import { ServerError, useGitTools, useInstallGitTools } from '@/shared/server';
 
+import { ErrorDetail } from './ErrorDetail';
 import { messages } from './messages';
 
 /** The reasons `projects/judge` gives when there are no setups to show, because they could not be fetched. */
@@ -42,7 +43,7 @@ export function Unavailable({ error, onRetry }: { error: unknown; onRetry: () =>
       <div role="alert" className="flex flex-col gap-1">
         <h1 className="text-title font-semibold">{t.unavailable}</h1>
         <p className="text-body text-fg">{body}</p>
-        {detail && <p className="font-mono text-meta break-words text-fg-muted">{detail}</p>}
+        <ErrorDetail detail={detail} />
       </div>
       <div className="flex justify-end gap-2">
         {noGit &&

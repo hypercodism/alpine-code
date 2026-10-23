@@ -7,7 +7,8 @@ publishes it. Nothing in it depends on Alpine, so a project is an ordinary folde
 The templates folder is the one setting below (``templates_dir``): ``$ALPINE_TEMPLATES``, else the local
 ``~/Developments/alpine-templates`` while it exists, else a copy fetched from the public ``alpine-templates``
 repository (``TEMPLATES_REPO``) into ``~/.alpine-code/templates/<commit>``. A normal install has neither local folder,
-so the first new project fetches the copy (``ensure_templates``), and one a day later fetches it again.
+so the first new project fetches the copy (``ensure_templates``); once it is a day old, a new project uses it as it is
+while a newer one is fetched behind it.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 from collections.abc import Iterable
 from pathlib import Path
@@ -31,8 +33,16 @@ TEMPLATES_ENV = "ALPINE_TEMPLATES"
 #: The public repository the templates are fetched from when no local folder has them. ``None`` fetches nothing.
 TEMPLATES_REPO: str | None = "https://github.com/hypercodism/alpine-templates.git"
 
-#: Seconds a fetched copy is used before the next new project fetches the repository again.
+#: Seconds a fetched copy is used before the next new project fetches the repository again (behind it).
 _FRESH_FOR = 24 * 60 * 60
+
+#: Seconds after a fetch behind a copy failed before the next new project tries again.
+_RETRY_AFTER = 60 * 60
+
+#: The fetch under way behind a copy that is in use, and when the last one started.
+_refresh: threading.Thread | None = None
+_refresh_started = 0.0
+_refresh_lock = threading.Lock()
 
 #: The templates the app knows, in the order it shows them. Only those in the templates folder can be made.
 KNOWN = ("blank", "web-lite", "web-pro", "mobile")
@@ -85,8 +95,9 @@ def _local_templates() -> Path | None:
 
 
 def ensure_templates() -> list[str]:
-    """The templates a new project can start from, fetched first when it is time: with no local folder, a missing
-    copy or one older than a day is fetched again. When fetching fails the copy there is still serves.
+    """The templates a new project can start from. With no local folder and no copy yet, they are fetched first, which
+    the person waits for. A copy older than a day is used as it is, and a newer one is fetched behind it
+    (``_refresh_behind``): a slow or failing network never holds up a copy that is there.
 
     Raises:
         TemplatesUnavailable: There are none, and none could be fetched.
@@ -99,19 +110,17 @@ def ensure_templates() -> list[str]:
         return found
     copy = fetched_templates()
     kept = available_templates(copy) if copy is not None else []
-    if kept and time.time() - copy.stat().st_mtime < _FRESH_FOR:
+    if kept:
+        if time.time() - copy.stat().st_mtime >= _FRESH_FOR:
+            _refresh_behind()
         return kept
     try:
         folder = fetch_templates()
     except OSError as e:
-        if kept:
-            return kept
         # GitHub answers a repository that is not there as one that needs signing in.
         missing = any(words in str(e) for words in ("not found", "not appear to be a git", "could not read Username"))
         raise TemplatesUnavailable("not_found" if missing else "unreachable", str(e)) from e
     if folder is None:  # nothing to fetch from, or no git to fetch with
-        if kept:
-            return kept
         if TEMPLATES_REPO is None:
             raise TemplatesUnavailable("not_found", "There is no templates repository to fetch")
         raise TemplatesUnavailable("no_git_tools", "git is needed to fetch the templates")
@@ -119,6 +128,26 @@ def ensure_templates() -> list[str]:
     if not found:
         raise TemplatesUnavailable("not_found", "The templates repository has no templates")
     return found
+
+
+def _refresh_behind() -> None:
+    """Fetches the templates again in a thread, while the copy there serves. One at a time, and not again within
+    ``_RETRY_AFTER`` of the last try, so an offline machine does not try on every new project. A failure leaves the
+    copy as it is: it is tried again later."""
+    global _refresh, _refresh_started
+    with _refresh_lock:
+        if (_refresh is not None and _refresh.is_alive()) or time.time() - _refresh_started < _RETRY_AFTER:
+            return
+        _refresh_started = time.time()
+        _refresh = threading.Thread(target=_fetch_quietly, name="templates-refresh", daemon=True)
+        _refresh.start()
+
+
+def _fetch_quietly() -> None:
+    try:
+        fetch_templates()
+    except OSError:
+        pass
 
 
 def fetched_templates() -> Path | None:
@@ -130,8 +159,8 @@ def fetched_templates() -> Path | None:
 
 def fetch_templates(repo: str | None = None) -> Path | None:
     """Fetches the public templates repository into ``~/.alpine-code/templates/<commit>`` (the latest commit, no
-    history) and returns the folder; the copy already there when it is the latest. ``None`` while there is no
-    repository address (``TEMPLATES_REPO``) or git cannot run.
+    history) and returns the folder; the copy already there when it is the latest. Older copies are removed: only the
+    newest is ever used. ``None`` while there is no repository address (``TEMPLATES_REPO``) or git cannot run.
 
     Raises:
         OSError: git failed.
@@ -149,8 +178,11 @@ def fetch_templates(repo: str | None = None) -> Path | None:
         folder = root / commit
         if folder.is_dir():
             os.utime(folder)  # fresh again: it is the latest
-            return folder
-        scratch.rename(folder)
+        else:
+            scratch.rename(folder)
+        for old in root.glob("*"):
+            if old != folder and old.is_dir() and not old.name.startswith("fetch-"):
+                shutil.rmtree(old, ignore_errors=True)
         return folder
     finally:
         shutil.rmtree(scratch, ignore_errors=True)

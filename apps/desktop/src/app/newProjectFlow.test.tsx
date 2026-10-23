@@ -108,6 +108,11 @@ describe('새 프로젝트, as the audit walked it', () => {
     expect(alert.textContent).toContain('인터넷 연결을 확인한 뒤 다시 해 보세요');
     expect(screen.queryByRole('radiogroup', { name: '구성' })).toBeNull();
     expect(screen.queryByRole('button', { name: '만들기' })).toBeNull();
+    // What git said is in English: folded away, for whoever has to look into it.
+    const detail = alert.querySelector('details')!;
+    expect(detail.open).toBe(false);
+    expect(within(detail).getByText('자세한 내용')).toBeTruthy();
+    expect(detail.textContent).toContain('git clone failed');
     fireEvent.click(screen.getByRole('button', { name: '다시 해 보기' }));
     await waitFor(() => expect(sent('projects/judge')).toHaveLength(2));
     expect(sent('projects/judge')[1]).toEqual(sent('projects/judge')[0]);
@@ -138,6 +143,9 @@ describe('새 프로젝트, as the audit walked it', () => {
     expect(within(setups).getByRole('radio', { name: /^웹앱/ })).toHaveProperty('ariaChecked', 'true');
     expect(screen.queryByText('추천')).toBeNull();
     expect(screen.queryByText(/인터넷 주소|인터넷에 올릴|인터넷에는/)).toBeNull();
+    // Visitors and where it runs only matter on the internet.
+    expect(screen.queryByText(/방문자/)).toBeNull();
+    expect(screen.queryByText(/Cloudflare/)).toBeNull();
     expect(screen.getByText('이 Mac에 만들어요.')).toBeTruthy();
     fireEvent.click(within(setups).getByRole('radio', { name: /빈 프로젝트/ }));
     expect(screen.queryByText(/인터넷에 올릴/)).toBeNull();
@@ -163,6 +171,33 @@ describe('새 프로젝트, as the audit walked it', () => {
     expect(await screen.findByRole('heading', { name: '무엇을 만들어 볼까요?' })).toBeTruthy();
   });
 
+  it('#20: a made project seen and left through the rail is not shown again on 새 프로젝트', async () => {
+    const { router } = mount();
+    await send();
+    fireEvent.click(await screen.findByRole('button', { name: '만들기' }));
+    await screen.findByRole('button', { name: '지도로 가기' });
+    await act(() => router.navigate({ to: '/board', search: { project: PROJECTS[0]!.path } }));
+    await settle();
+    await go(router, '/');
+    expect(await screen.findByRole('heading', { name: '무엇을 만들어 볼까요?' })).toBeTruthy();
+    expect(screen.queryByText(IDEA)).toBeNull();
+    expect(screen.getByRole('button', { name: '만들 곳: 새 폴더' })).toBeTruthy();
+  });
+
+  it('#20: made while I was away and then opened from the rail, it is not told again on 새 프로젝트', async () => {
+    const { router, sent } = mount({ newProject: { createMs: 30 } });
+    await send();
+    fireEvent.click(await screen.findByRole('button', { name: '만들기' }));
+    await go(router, '/settings');
+    await settle();
+    // Opening it from the rail makes it the last project, as on the real server where it is listed.
+    await waitFor(() => expect(sent('projects/create')).toHaveLength(1));
+    act(() => useNavigation.getState().rememberProject('/Users/me/AlpineCode/craft-booking'));
+    await go(router, '/');
+    expect(await screen.findByRole('heading', { name: '무엇을 만들어 볼까요?' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '지도로 가기' })).toBeNull();
+  });
+
   it('#20: leaving while the setups are shown keeps the idea and the setup I chose', async () => {
     const { router } = mount();
     await send();
@@ -185,6 +220,30 @@ describe('새 프로젝트, as the audit walked it', () => {
     fireEvent.click(within(alert).getByRole('button', { name: '프로젝트로 열기' }));
     await waitFor(() => expect(router.state.location.pathname).toBe('/board'));
     expect(router.state.location.search).toEqual({ project: PROJECTS[1]!.path });
+  });
+
+  it('#27: a picked folder is taken at once, so sending before it is looked into makes the project there', async () => {
+    let answer: () => void = () => {};
+    const looked = new Promise<void>((resolve) => (answer = resolve));
+    const { sent } = mount({
+      extra: {
+        results: {
+          'files/list': async () => {
+            await looked;
+            return { entries: [], nextOffset: 0, hasMore: false };
+          },
+        },
+      },
+    });
+    picked.folder = '/Users/me/Developments/devlog';
+    fireEvent.click(await screen.findByRole('button', { name: '만들 곳: 새 폴더' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: '이미 만든 빈 폴더 고르기…' }));
+    expect(await screen.findByRole('button', { name: '만들 곳: devlog' })).toBeTruthy();
+    await send();
+    fireEvent.click(await screen.findByRole('button', { name: '만들기' }));
+    answer();
+    await screen.findByRole('button', { name: '지도로 가기' });
+    expect(sent('projects/create')).toEqual([expect.objectContaining({ folder: '/Users/me/Developments/devlog' })]);
   });
 
   it('#27: an empty folder, or one with only git in it, is taken', async () => {
