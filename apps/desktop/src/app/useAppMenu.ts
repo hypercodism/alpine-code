@@ -184,7 +184,14 @@ async function iconBytes(): Promise<Uint8Array | undefined> {
  * "Check for Updates…": says what it found, and offers to restart when a newer version is ready; while the AI works,
  * the offer says the work stops. A restart that fails says so.
  */
-export async function checkByHand(get: () => Latest, version: string) {
+export function checkByHand(get: () => Latest, version: string) {
+  // Pressed again while it checks, downloads or asks: the same check, so its answer is asked once (#50).
+  byHand ??= checkAndAsk(get, version).finally(() => (byHand = null));
+  return byHand;
+}
+let byHand: Promise<void> | null = null;
+
+async function checkAndAsk(get: () => Latest, version: string) {
   const { t } = get();
   const found = await checkForUpdate();
   if (found.kind === 'ready') {

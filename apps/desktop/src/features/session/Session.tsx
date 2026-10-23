@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { AgentChip, Composer, useSlashSkills } from '@/shared/components/composer';
 import { useMessages } from '@/shared/i18n';
+import { answerTo, ASK_USER, readQuestion } from '@/shared/questions';
 import {
   activeApproval,
   SESSION_NOT_FOUND,
@@ -17,6 +18,7 @@ import {
   useSetSessionAgent,
   useServer,
   useSetSessionMode,
+  type Item,
 } from '@/shared/server';
 
 import { Chat } from './Chat';
@@ -26,6 +28,13 @@ import { messages } from './messages';
 
 /** Within this many pixels of the end, the chat follows new text; further up, the reader is left where they are. */
 const FOLLOW_PX = 80;
+
+/** Whether the conversation's last question to me is still unanswered. */
+function questionOpen(items: Item[]) {
+  const call = items.findLast((item) => item.kind === 'tool_call' && item.name === ASK_USER && item.status === 'done');
+  const question = call?.kind === 'tool_call' ? readQuestion(call) : null;
+  return !!call && call.kind === 'tool_call' && !!question && !answerTo(items, call, question);
+}
 
 /**
  * A session's centre column: the chat ending in the progress line while a run is
@@ -37,19 +46,22 @@ const FOLLOW_PX = 80;
  */
 /**
  * `compact`: shown in the dock beside another page (the product map), so it fits the dock's width instead of keeping
- * the width of a page of its own. `readOnly`: the page has its own input for this conversation (the map's), so this
- * shows the conversation without a second one.
+ * the width of a page of its own. `readOnly`: the page has its own input (the map's), so this shows the conversation
+ * without a second one. `inputOnMap`: that input answers this conversation (it is the one the map talks to); another
+ * conversation shown beside the map gets its own input while it waits for my answer, for that answer only.
  */
 export function Session({
   sessionId,
   compact = false,
   readOnly = false,
+  inputOnMap = false,
   onInspectProcesses,
   onShowTaskForce,
 }: {
   sessionId: string;
   compact?: boolean;
   readOnly?: boolean;
+  inputOnMap?: boolean;
   onInspectProcesses?: () => void;
   /** Opens the dock on the session's TF. */
   onShowTaskForce?: () => void;
@@ -145,6 +157,7 @@ export function Session({
   const { info } = state;
   const running = info.status === 'running' || info.status === 'waiting';
   const approval = activeApproval(state);
+  const answerHere = readOnly && !inputOnMap && (!!approval || questionOpen(state.items));
   const title = info.title || t.untitled;
   const agentError = setAgent.error;
   const agentFailed =
@@ -179,6 +192,7 @@ export function Session({
             items={state.items}
             activeIds={state.activeIds}
             onShowTaskForce={onShowTaskForce}
+            inputOnMap={readOnly && inputOnMap}
           />
           {running && <ProgressLine info={info} />}
           {commandsLeft > 0 && (
@@ -191,7 +205,7 @@ export function Session({
           )}
         </div>
       </div>
-      {!readOnly && (
+      {(!readOnly || answerHere) && (
         <div className={clsx('mx-auto flex w-full max-w-175 flex-col gap-2 pt-3 pb-6', compact ? 'px-4' : 'px-6')}>
           {setAgent.isError && (
             <p role="alert" className="px-1 text-meta text-fg-muted">

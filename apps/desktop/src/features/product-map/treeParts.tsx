@@ -212,7 +212,8 @@ export function Detail({
   person: Person;
   selection: Selection;
   onSelect: (selection: Selection) => void;
-  onCheck: (targets: PromiseTarget[]) => void;
+  /** Absent on a plan not built yet: there is no code to check a promise against. */
+  onCheck?: (targets: PromiseTarget[]) => void;
   onFix: (targets: PromiseTarget[]) => void;
   onRemove: (target: PromiseTarget) => void;
   /** Below a step's promises: where a new one is added. */
@@ -357,13 +358,15 @@ export function Detail({
               {t.fix}
             </Button>
           )}
-          <Button
-            variant={promise.status === 'failed' ? 'secondary' : 'primary'}
-            disabled={promise.status === 'checking'}
-            onClick={() => onCheck([target])}
-          >
-            {promise.status === 'unconfirmed' || promise.status === 'planned' ? t.checkThis : t.checkAgain}
-          </Button>
+          {onCheck && (
+            <Button
+              variant={promise.status === 'failed' ? 'secondary' : 'primary'}
+              disabled={promise.status === 'checking'}
+              onClick={() => onCheck([target])}
+            >
+              {promise.status === 'unconfirmed' || promise.status === 'planned' ? t.checkThis : t.checkAgain}
+            </Button>
+          )}
           <LinkButton className="ml-auto text-danger" onClick={() => onRemove(target)}>
             {t.remove}
           </LinkButton>
@@ -449,7 +452,7 @@ export function Detail({
           </ul>
         </section>
       )}
-      {unchecked.length > 0 && (
+      {unchecked.length > 0 && onCheck && (
         <div>
           <Button variant="primary" onClick={() => onCheck(unchecked)}>
             {t.checkStep}

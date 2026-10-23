@@ -10,8 +10,9 @@ import shlex
 import shutil
 import socket
 import sys
+import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -114,6 +115,37 @@ def how_to_run(project: Path) -> tuple[str, int] | None:
     return None
 
 
+#: A managed server still starting that prints nothing new and does no work for this long, with nothing listening
+#: where it should, is given up on: it never listens, or listens where no one looks (a port of its own, no address
+#: printed). It is stopped and shown as failed, which offers to have the AI fix it, instead of "starting" for ever.
+#: A first install that prints nothing (npm, when its output is not a terminal) still works, so it is not quiet.
+QUIET_LIMIT = 180.0
+
+
+def _cpu_seconds(text: str) -> float:
+    """``ps``'s cumulative CPU time (``[[dd-]hh:]mm:ss[.cc]``) in seconds."""
+    days, _, clock = text.rpartition("-")
+    total = 0.0
+    for part in clock.split(":"):
+        total = total * 60 + float(part)
+    return total + (int(days) * 86400 if days else 0)
+
+
+async def _group_work(pgid: int) -> float | None:
+    """How much CPU time the process group (the server's command and everything it started) has used, or ``None``
+    when ``ps`` cannot tell."""
+    total, found = 0.0, False
+    for line in (await _command("ps", "-A", "-o", "pgid=,time=")).splitlines():
+        group, _, used = line.strip().partition(" ")
+        if group == str(pgid):
+            try:
+                total += _cpu_seconds(used.strip())
+                found = True
+            except ValueError:
+                pass
+    return total if found else None
+
+
 @dataclass
 class DevelopmentServer:
     id: str
@@ -125,6 +157,11 @@ class DevelopmentServer:
     session_id: str | None = None
     requested_port: int | None = None
     external_pid: int | None = None
+    # How much output and work were seen last and since when they stayed so, while starting (``QUIET_LIMIT``).
+    heard: int = 0
+    worked: float | None = None
+    quiet_since: float = field(default_factory=time.monotonic)
+    gave_up: bool = False
 
     async def snapshot(self) -> dict[str, Any]:
         if self.process_id:
@@ -146,10 +183,21 @@ class DevelopmentServer:
         else:
             process = process_manager().get(self.process_id)
             state = process.snapshot()
-            if state.get("status") in {"exited", "failed", "stopped", "cancelled"}:
+            if self.gave_up:
+                status = "failed"
+            elif state.get("status") in {"exited", "failed", "stopped", "cancelled"}:
                 status = "stopped" if state.get("cancelled") or state.get("exit_code") in (0, None) else "failed"
             elif state.get("status") == "stopping":
                 status = "stopping"
+            elif status == "starting":
+                now = time.monotonic()
+                worked = await _group_work(state["pid"]) if state.get("pid") else None
+                if state.get("output_size", 0) != self.heard or worked != self.worked:
+                    self.heard, self.worked, self.quiet_since = state.get("output_size", 0), worked, now
+                elif now - self.quiet_since >= QUIET_LIMIT:
+                    self.gave_up = True
+                    status = "failed"
+                    await process.stop()
         return {
             "id": self.id,
             "cwd": self.cwd,

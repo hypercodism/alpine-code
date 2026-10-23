@@ -25,8 +25,9 @@ export const CHANGES_TAB = 'work-result';
 
 /**
  * App-level composition keeps file links and the running project's tools on the same workspace. The dock is one row
- * of icons: 요약 (what the page hands in), then 터미널, 변경 사항, 미리보기, 파일, and under ⋮ the rarer places
- * (데이터, 에이전트 실행). Away from the map, the project's map stays small above them.
+ * of tabs: 요약 (what the page hands in; 대화 on the map), then 터미널, 바뀐 파일, 앱 미리보기, 파일, and under ⋮ the
+ * rarer places (데이터, AI가 실행한 명령). The places used most show their names; the others are icons. Away from the
+ * map, the project's map stays small above them.
  */
 export function WorkspaceDock({
   cwd,
@@ -80,6 +81,7 @@ export function WorkspaceDock({
             id: SUMMARY_TAB,
             label: summaryLabel ?? t.summary,
             icon: LayoutList,
+            named: true,
             divider: true,
             bare: true,
             content: summary,
@@ -103,10 +105,11 @@ export function WorkspaceDock({
             id: 'servers',
             label: t.preview,
             icon: Globe,
+            named: true,
             bare: true,
             content: <DevelopmentServers key={cwd} cwd={cwd} sessionId={sessionId} onAskFix={onAskFix} />,
           },
-          { id: 'source', label: t.source, icon: Folder, content: <FileViewer /> },
+          { id: 'source', label: t.source, icon: Folder, named: true, content: <FileViewer /> },
           ...(hasData
             ? [
                 {

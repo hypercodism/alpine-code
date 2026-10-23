@@ -1,5 +1,5 @@
 import type { ConnectionInfo, ConnectionsListResult } from '@alpine/protocol';
-import { Button, Dialog, Menu, NativeSelect } from '@alpine/ui/primitives';
+import { Button, Dialog, LinkButton, Menu, NativeSelect } from '@alpine/ui/primitives';
 import {
   ArrowUpRight,
   ChevronRight,
@@ -138,7 +138,13 @@ export function ConnectionTab({ onAlpineAccount }: { onAlpineAccount: () => void
                         {connection.account?.email ?? alpine?.account?.email}
                       </p>
                     )}
-                    <Status connection={connection} data={data} />
+                    <Status
+                      connection={connection}
+                      data={data}
+                      onAddKey={() =>
+                        connection.provider && setSheet({ kind: 'api-key', provider: connection.provider })
+                      }
+                    />
                   </div>
                   <div className="ml-auto flex w-full max-w-full items-center gap-2 pl-13 sm:w-auto sm:pl-0">
                     {connection.account ? (
@@ -405,7 +411,16 @@ function AddMethod({
 }
 
 /** How it is paid for, or what is missing. Limits and spend come with usage tracking. */
-function Status({ connection, data }: { connection: ConnectionInfo; data: ConnectionsListResult }) {
+function Status({
+  connection,
+  data,
+  onAddKey,
+}: {
+  connection: ConnectionInfo;
+  data: ConnectionsListResult;
+  /** Opens the key form for a provider whose key is missing. */
+  onAddKey: () => void;
+}) {
   const c = useMessages(connectMessages);
   if (connection.account) {
     const { signedIn, planUsage } = connection.account;
@@ -421,7 +436,15 @@ function Status({ connection, data }: { connection: ConnectionInfo; data: Connec
       </span>
     );
   const provider = data.providers.find((p) => p.id === connection.provider);
-  if (provider && !connection.hasKey) return <span className="text-meta text-danger">{c.noKey(provider.keyEnv)}</span>;
+  if (provider && !connection.hasKey)
+    return (
+      <span className="flex flex-wrap items-center gap-x-2 text-meta text-danger">
+        {c.noKey}
+        <LinkButton className="min-h-5 px-0.5" onClick={onAddKey}>
+          {c.addKey}
+        </LinkButton>
+      </span>
+    );
   if (!provider)
     return (
       <span className="text-meta text-fg-muted wrap-anywhere">{connection.baseUrl?.replace(/^https?:\/\//, '')}</span>

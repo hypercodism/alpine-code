@@ -16,7 +16,7 @@ export const messages = defineMessages({
     connect: '연결',
     apiKeyTitle: 'API 키로 연결',
     apiKeyLead: '키는 이 컴퓨터에만 저장해요. 붙여 넣으면 바로 확인하고 쓸 수 있는 모델을 불러와요.',
-    provider: '제공처',
+    provider: '공급자',
     usage: '쓴 만큼 결제돼요',
     subscription: '구독 한도 안에서 써요',
     key: 'API 키',
@@ -40,7 +40,8 @@ export const messages = defineMessages({
     apiKeyConnection: (provider: string) => `${provider} API 키`,
     localConnection: (address: string) => `로컬 서버 · ${address}`,
     compatibleConnection: (address: string) => `호환 서버 · ${address}`,
-    noKey: (env: string) => `키가 없어요 · ${env}를 설정하거나 연결 편집에서 넣어 주세요`,
+    noKey: '키가 없어요',
+    addKey: '키 넣기',
     continueWithChatGPT: 'ChatGPT로 계속하기',
     chatgptLead:
       '브라우저에서 로그인하고, Alpine Code가 ChatGPT 요금제를 쓰도록 허용해 주세요. 끝나면 여기로 돌아와요.',
@@ -56,7 +57,7 @@ export const messages = defineMessages({
     chatgptWelcomeLead:
       '이 앱의 AI 요청은 ChatGPT 요금제 사용량에서 빠져요. 사용량과 이 앱에 줄 한도는 ChatGPT 설정에서 관리해요.',
     account: '계정',
-    newSessionModel: '새 세션을 이 모델로 시작해요 · 설정 › 모델 연결에서 바꿀 수 있어요',
+    newSessionModel: 'AI가 새로 시작하는 대화는 이 모델로 해요 · 설정 › 모델 연결에서 바꿀 수 있어요',
     gotIt: '알겠어요',
     manageUsage: '사용량 관리 ↗',
     chatgptDeclinedTitle: 'ChatGPT 요금제 사용이 꺼져 있어요',
@@ -113,7 +114,8 @@ export const messages = defineMessages({
     apiKeyConnection: (provider: string) => `${provider} API key`,
     localConnection: (address: string) => `Local server · ${address}`,
     compatibleConnection: (address: string) => `Compatible server · ${address}`,
-    noKey: (env: string) => `No key · set ${env} or add one with Edit connection`,
+    noKey: 'No key yet',
+    addKey: 'Add the key',
     continueWithChatGPT: 'Continue with ChatGPT',
     chatgptLead:
       'Sign in in your browser and allow Alpine Code to use your ChatGPT plan. You come back here when it is done.',

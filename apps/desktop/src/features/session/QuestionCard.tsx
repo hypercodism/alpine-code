@@ -16,7 +16,18 @@ import { messages } from './messages';
  * the chosen one. Answering in the input instead works too. Once I answered, the card is the question in one quiet
  * line; my answer is my message under it.
  */
-export function QuestionCard({ sessionId, call, items }: { sessionId: string; call: ToolCallItem; items: Item[] }) {
+export function QuestionCard({
+  sessionId,
+  call,
+  items,
+  inputOnMap = false,
+}: {
+  sessionId: string;
+  call: ToolCallItem;
+  items: Item[];
+  /** Shown beside the map: another answer is written in the map's input. */
+  inputOnMap?: boolean;
+}) {
   const t = useMessages(messages);
   const question = readQuestion(call);
   if (!question) return null;
@@ -33,7 +44,7 @@ export function QuestionCard({ sessionId, call, items }: { sessionId: string; ca
       ) : (
         <Choices sessionId={sessionId} question={question} />
       )}
-      <p className="text-meta text-fg-muted">{t.questionOther}</p>
+      <p className="text-meta text-fg-muted">{inputOnMap ? t.questionOtherMap : t.questionOther}</p>
     </section>
   );
 }

@@ -78,7 +78,7 @@ describe('project pages', () => {
 
   it('shows the memory without a dock button', async () => {
     mount('/memory' + q(cwd));
-    expect(await screen.findByText('alpine-code', { selector: 'span[title]' })).toBeTruthy();
+    expect(await screen.findByRole('link', { name: 'alpine-code' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /오른쪽 창/ })).toBeNull();
   });
 });

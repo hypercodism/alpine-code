@@ -64,7 +64,7 @@ describe('Settings tabs (#12)', () => {
     const tabs = await screen.findAllByRole('tab');
     expect(tabs.map((tab) => tab.textContent)).toEqual(['일반', '모델 연결']);
     expect(screen.getByRole('tab', { name: '일반' }).getAttribute('aria-selected')).toBe('true');
-    expect(await screen.findByText('서버')).toBeTruthy();
+    expect(await screen.findByText('버전')).toBeTruthy();
   });
 });
 

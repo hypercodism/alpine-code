@@ -13,7 +13,7 @@ import { Workshop } from './Workshop';
 
 /**
  * A TF in the chat, through its life (decisions 4-6): the proposal with 시작 / 혼자 하기, then a small room with the
- * script's latest line, how many wait for an approval, 에이전트 보기 and 멈추기; the question when the script wants
+ * script's latest line, how many wait for an approval, AI 팀 보기 and 멈추기; the question when the script wants
  * more agents than planned; 이어 하기 after the app closed mid-run; and how it ended.
  */
 export function TaskForceCard({
@@ -122,7 +122,7 @@ export function TaskForceCard({
         )}
         {(item.status === 'running' || item.status === 'stopping') && (
           <>
-            <Button onClick={onShowAgents}>{t.showAgents}</Button>
+            {onShowAgents && <Button onClick={onShowAgents}>{t.showAgents}</Button>}
             {item.status === 'running' && (
               <Button disabled={busy} onClick={() => run('stop')}>
                 {t.stop}
@@ -150,9 +150,9 @@ export function TaskForceCard({
             </LinkButton>
           </>
         )}
-        {(item.status === 'done' || item.status === 'stopped' || item.status === 'failed') && total > 0 && (
-          <Button onClick={onShowAgents}>{t.showAgents}</Button>
-        )}
+        {(item.status === 'done' || item.status === 'stopped' || item.status === 'failed') &&
+          total > 0 &&
+          onShowAgents && <Button onClick={onShowAgents}>{t.showAgents}</Button>}
       </div>
     </section>
   );

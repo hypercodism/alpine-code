@@ -122,11 +122,11 @@ describe('Settings', () => {
 
   it('shows no Alpine account without it, and no Alpine row where a connection is added', async () => {
     mount('/settings', false);
-    await screen.findByText('서버');
+    await screen.findByText('버전');
     await settle();
     expect(screen.queryByText('Alpine 계정')).toBeNull();
     fireEvent.click(await screen.findByRole('tab', { name: /모델 연결/ }));
-    fireEvent.click(await screen.findByRole('button', { name: /공급자 추가/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /연결 추가/ }));
     const sheet = await screen.findByRole('dialog');
     expect(within(sheet).getByRole('button', { name: /ChatGPT/ })).toBeTruthy();
     expect(within(sheet).queryByText(/Alpine으로 시작/)).toBeNull();

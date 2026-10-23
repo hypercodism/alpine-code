@@ -70,6 +70,8 @@ export const flowTreeMessages = defineMessages({
     goalPlaceholder: '이 여정으로 할 수 있는 것 한 문장',
     noSteps: '아직 단계가 없어요. AI가 코드를 보고 단계를 찾아 줄 수 있어요.',
     findSteps: '단계 찾아 달라고 하기',
+    noStepsPlan: '아직 단계가 없어요. AI가 이 여정에 필요한 화면을 그려 줄 수 있어요.',
+    drawSteps: '단계 그려 달라고 하기',
     promiseMenu: '약속 메뉴',
     // Detail
     recentTitle: '최근 바뀐 것',
@@ -125,6 +127,10 @@ export const flowTreeMessages = defineMessages({
     findStepsRequest: (title: string) => `${title} 여정의 단계를 코드에서 찾아 지도에 넣어 주세요.`,
     addJourneyRequest: (title: string, goal: string) => `새 여정 "${title}"을(를) 지도에 넣어 주세요. ${goal}`.trim(),
     addPersonRequest: (name: string) => `"${name}"이(가) 걷는 여정을 찾아 지도의 여정마다 actor로 묶어 주세요.`,
+    // The same asks on a plan not built yet: there is no code yet, so they change the plan.
+    planStepsRequest: (title: string) => `${title} 여정에 필요한 화면을 생각해서 단계로 그려 주세요.`,
+    planJourneyRequest: (title: string, goal: string) => `기획에 새 여정 "${title}"을(를) 더해 주세요. ${goal}`.trim(),
+    planPersonRequest: (name: string) => `"${name}"도 이 제품을 써요. 이 사람이 하는 일을 여정으로 기획에 더해 주세요.`,
     actorTitle: '누가 걷나요',
     actorNew: '새 이름',
     actorPlaceholder: '예: 처음 온 손님, 정해진 시간에 도는 작업',
@@ -230,6 +236,8 @@ export const flowTreeMessages = defineMessages({
     goalPlaceholder: 'One sentence of what it lets them do',
     noSteps: 'No steps yet. The AI can read the code and find them.',
     findSteps: 'Ask the AI to find the steps',
+    noStepsPlan: 'No steps yet. The AI can draw the screens this journey needs.',
+    drawSteps: 'Ask the AI to draw the steps',
     promiseMenu: 'Promise menu',
     recentTitle: 'Recently changed',
     recentEmpty: 'Nothing has been checked yet',
@@ -286,6 +294,9 @@ export const flowTreeMessages = defineMessages({
     addJourneyRequest: (title: string, goal: string) => `Add the journey "${title}" to the map. ${goal}`.trim(),
     addPersonRequest: (name: string) =>
       `Find the journeys "${name}" walks and set them as the actor of those journeys on the map.`,
+    planStepsRequest: (title: string) => `Think of the screens the journey "${title}" needs and draw them as steps.`,
+    planJourneyRequest: (title: string, goal: string) => `Add the journey "${title}" to the plan. ${goal}`.trim(),
+    planPersonRequest: (name: string) => `"${name}" uses this product too. Add what they do to the plan as journeys.`,
     actorTitle: 'Who walks it',
     actorNew: 'New name',
     actorPlaceholder: 'e.g. A first-time guest, a scheduled job',

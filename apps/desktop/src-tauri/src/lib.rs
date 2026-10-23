@@ -43,10 +43,12 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|app, event| {
-            if let RunEvent::Exit = event {
+        .run(|app, event| match event {
+            RunEvent::ExitRequested { code, api, .. } => quit::on_exit_requested(app, code, &api),
+            RunEvent::Exit => {
                 app.state::<server::Server>().stop();
                 update::install_if_ready(app);
             }
+            _ => {}
         });
 }

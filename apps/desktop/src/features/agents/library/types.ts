@@ -1,4 +1,5 @@
-export type LibraryTab = 'skill' | 'mcp' | 'sub';
+/** What the library lists: skills (MCP and subagents come here once they exist). */
+export type LibraryTab = 'skill';
 
 export type LibraryView = { kind: 'list'; tab: LibraryTab } | { kind: 'skill'; name: string } | { kind: 'new-skill' };
 

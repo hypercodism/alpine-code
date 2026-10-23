@@ -17,7 +17,16 @@ import { CallTitle } from './ToolCalls';
  * though their files or commands differ); the buttons below answer all of them, and a line's own skip answers only
  * that agent, which carries on without the call while the others wait for the card (TF decision 6).
  */
-export function ApprovalCard({ sessionId, approval }: { sessionId: string; approval: ApprovalItem }) {
+export function ApprovalCard({
+  sessionId,
+  approval,
+  inputOnMap = false,
+}: {
+  sessionId: string;
+  approval: ApprovalItem;
+  /** Shown beside the map: what to do instead is written in the map's input. */
+  inputOnMap?: boolean;
+}) {
   const t = useMessages(messages);
   const answer = useAnswerApproval();
   const send = (decision: 'allow' | 'allow_always' | 'deny') =>
@@ -107,7 +116,7 @@ export function ApprovalCard({ sessionId, approval }: { sessionId: string; appro
           {asks.length > 1 ? t.skipAll : t.skip}
         </LinkButton>
       </div>
-      <p className="text-meta text-fg-muted">{t.answerHint}</p>
+      <p className="text-meta text-fg-muted">{inputOnMap ? t.answerHintMap : t.answerHint}</p>
     </section>
   );
 }

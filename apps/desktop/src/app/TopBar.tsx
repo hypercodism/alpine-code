@@ -214,17 +214,23 @@ function BoardPart({ project, sessionId }: { project?: string; sessionId: string
   );
 }
 
-/** The project name, on a page with no dock (the memory). */
+/** The project name, on a page with no dock (the memory); pressed, it goes back to the project's map. */
 function ProjectName({ project }: { project?: string }) {
+  const t = useMessages(messages);
   const projects = useProjects();
   const listed = projects.data?.projects.find((p) => p.path === project);
   const name = project && (listed?.name ?? project.split('/').pop());
   return (
     <Drag className="ml-3 gap-2">
       {name && (
-        <span className="truncate text-body font-medium" title={project}>
+        <Link
+          to="/board"
+          search={{ project }}
+          title={t.openMapOf(name)}
+          className="truncate rounded-md px-1 text-body font-medium hover:bg-hover"
+        >
           {name}
-        </span>
+        </Link>
       )}
     </Drag>
   );

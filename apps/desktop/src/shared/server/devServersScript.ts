@@ -15,10 +15,14 @@ const FAILED_LOG =
 
 /**
  * `devServers/*` as the app sees it, for the browser build and tests: 앱 열기 starts the project's server, which comes up
- * after `upMs` (or, with `fails`, fails then) and stays until it is stopped. Nothing runs; the preview shows a stand-in
- * page.
+ * after `upMs` (or, with `fails`, fails then) and stays until it is stopped; with `unknown`, nothing says how a
+ * project runs, so 앱 열기 starts nothing. Nothing runs; the preview shows a stand-in page.
  */
-export function devServersScript({ upMs = 1200, fails = false }: { upMs?: number; fails?: boolean } = {}): Script {
+export function devServersScript({
+  upMs = 1200,
+  fails = false,
+  unknown = false,
+}: { upMs?: number; fails?: boolean; unknown?: boolean } = {}): Script {
   const servers: (DevServerInfo & { at: number })[] = [];
   const shown = (server: DevServerInfo & { at: number }): DevServerInfo => {
     const { at, ...info } = server;
@@ -46,7 +50,8 @@ export function devServersScript({ upMs = 1200, fails = false }: { upMs?: number
       'devServers/list': ({ cwd }) => ({ servers: servers.filter((s) => s.cwd === cwd).map(shown) }),
       'devServers/open': ({ cwd }) => {
         const running = servers.findLast((s) => s.cwd === cwd && ['starting', 'running'].includes(shown(s).status));
-        return { server: running ? shown(running) : start(cwd, 'npm run dev', 5173) };
+        if (running) return { server: shown(running) };
+        return { server: unknown ? null : start(cwd, 'npm run dev', 5173) };
       },
       'devServers/start': ({ cwd, command, port }) => ({ server: start(cwd, command, port) }),
       'devServers/stop': ({ id }) => {

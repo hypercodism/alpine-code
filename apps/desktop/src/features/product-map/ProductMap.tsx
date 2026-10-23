@@ -1,7 +1,7 @@
 import type { FlowNode, FlowPrepareParams, FlowPrepareResult } from '@alpine/protocol';
 import { Button, LinkButton, Popover, SlidingPanel } from '@alpine/ui/primitives';
 import clsx from 'clsx';
-import { ChevronRight, CircleX, RotateCcw, Search, Sparkles, X } from 'lucide-react';
+import { Brain, ChevronRight, CircleX, RotateCcw, Search, Sparkles, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from 'react';
 
@@ -10,11 +10,14 @@ import { ImportLink } from '@/shared/components/import-link';
 import { latestTaskForce, roomOf } from '@/shared/components/taskforce';
 import { useMessages } from '@/shared/i18n';
 import {
+  activeApproval,
   SESSION_RUNNING,
   ServerError,
   useAgents,
+  useAnswerApproval,
   useCancelSession,
   useConnections,
+  useMemory,
   useNewSession,
   usePrepareFlow,
   useProductMap,
@@ -93,7 +96,9 @@ export function ProductMap({
   onOpenApp,
   onPublish,
   onNewHere,
+  onNewProject,
   onFixConnection,
+  onMemory,
   demo = false,
   dockOpen = false,
   hidden = false,
@@ -109,8 +114,12 @@ export function ProductMap({
   onPublish?: () => void;
   /** Opens 새 프로젝트 for this folder, which is empty (map-first 41). */
   onNewHere?: (folder: string) => void;
+  /** Opens 새 프로젝트, the one place something new starts. */
+  onNewProject?: () => void;
   /** Opens the model connection, where a build stopped by a sign-in, credits or a plan limit is fixed. */
   onFixConnection?: () => void;
+  /** Opens the project's memory, where the AI's suggestions to remember wait for me. */
+  onMemory?: () => void;
   demo?: boolean;
   /** Whether the right dock sits beside the map; when it does and the window is narrow, the changes list overlays it. */
   dockOpen?: boolean;
@@ -160,6 +169,9 @@ export function ProductMap({
   const [seenAt, markSeen] = useLastSeen(cwd);
   const [viewedSince, setViewedSince] = useState(seenAt);
   const [confirmRebuild, setConfirmRebuild] = useState(false);
+  // The map was just deleted here: its folder keeps its code, so the map is drawn from it again (map-first 40), and
+  // something else from the start begins in 새 프로젝트 (map-first 39).
+  const [deletedHere, setDeletedHere] = useState(false);
   const [busy, setBusy] = useState(false);
   // What I just asked the map, flying from its input to where the map begins.
   const [flight, setFlight] = useState<{ text: string; from: DOMRect | null; toFirst: boolean; at: number } | null>(
@@ -192,6 +204,9 @@ export function ProductMap({
   const workTeam = work.data ? latestTaskForce(work.data.items) : null;
   // A TF the work started keeps working while the session itself waits for it.
   const workBusy = atWork(workInfo) || (!!workTeam && TEAM_WORKING.has(workTeam.status));
+  // A call the work waits for me to allow: words in the map's input skip it and tell the AI what to do instead.
+  const approval = work.data && workInfo?.status === 'waiting' ? activeApproval(work.data) : null;
+  const answer = useAnswerApproval();
   // Other conversations of this project at work (an older one on the rail, one opened beside the map): the map waits
   // for them, and says so.
   const others = (sessions ?? []).filter(
@@ -339,6 +354,9 @@ export function ProductMap({
       ? planPhase(data, conversationWorking, !!question, { working: buildWorking, team: buildTeam?.status ?? null })
       : null;
   const talking = building ? buildWorking : conversationWorking;
+  // A plan whose build never began has no code: nothing on it is checked or found in code, and what is added to it is
+  // planned. Once a build began there is code, even when cards were added later or the build stopped halfway.
+  const planning = planned && (!data?.build || data.build === 'none');
   // A build that stopped can have asked something (rare: no sensible default), and its run says why it stopped.
   const buildQuestion = useMemo(
     () => (phase === 'stopped' ? (pendingQuestion(buildItems ?? [])?.question ?? null) : null),
@@ -511,17 +529,25 @@ export function ProductMap({
     node,
     readOnly,
     editLocked: anyActive,
-    onRecheck: () => void start('verify', { node }),
+    onRecheck: planning ? undefined : () => void start('verify', { node }),
     onNotARule: (conditionId: string) => {
       const rule = node.conditions?.find((c) => c.id === conditionId)?.expectation ?? '';
       void start('change', { node, request: t.notRuleRequest(node.title, rule) });
     },
   });
   const unseen = newChanges(data?.changes, seenAt).length;
+  // Suggestions to remember wait in the conversation, which may be closed: the map says they are there.
+  const memoryWaiting = useMemory(onMemory ? cwd : null).data?.pending.length ?? 0;
 
   const start = async (action: Action, target?: Target) => {
-    // A run already going in this project owns the work; only a retry of a start already under way may go on.
-    if (!data || board.isError || lock.current || data.readOnly || (anyActive && !attempt.current)) return false;
+    if (!data || board.isError || lock.current || data.readOnly) return false;
+    // A run already going in this project owns the work; only a retry of a start already under way may go on. Any
+    // other press says why nothing happens, and can be pressed again once the work is over.
+    if (anyActive && !attempt.current) {
+      setError({ text: t.busyStart });
+      setRetry({ action, target });
+      return false;
+    }
     lock.current = true;
     setBusy(true);
     setError(null);
@@ -578,15 +604,18 @@ export function ProductMap({
   // request to the map once nothing in the project works. Each place keeps its own order, so words that could not go
   // (or failed) hold back only later words to the same place, and say so; the rest go on. Words for a conversation
   // that is gone (deleted or archived meanwhile) go where the map talks now, rather than failing there for ever.
-  const here = talkTo ?? sessionId;
   const gone = (to: string) => !!sessions && !sessions.some((s) => s.id === to && !s.archived);
+  // Where the map talks may itself be gone (the page still names a conversation just deleted): then the words go to the
+  // map as a request.
+  const here = [talkTo, sessionId].find((id) => id && !gone(id)) ?? null;
   const placeOf = (word: LaterWord) => (word.to && gone(word.to) ? here : word.to);
   const targetBusy = (to: string | null) =>
     to === null ? anyActive || busy : to === workId ? workBusy : atWork((sessions ?? []).find((s) => s.id === to));
-  // Until the conversations are known, no one can tell where words go. A word that failed at a conversation now gone
-  // is tried again where the map talks.
+  // Until the conversations and the map are known, no one can tell where words go (a request needs the map). A word
+  // that failed at a conversation now gone is tried again where the map talks.
   const held = (word: LaterWord, index: number) =>
     !sessions ||
+    !data ||
     (!!word.failed && !(word.to && gone(word.to))) ||
     targetBusy(placeOf(word)) ||
     later.words.slice(0, index).some((before) => placeOf(before) === placeOf(word));
@@ -728,8 +757,13 @@ export function ProductMap({
   // With the dock beside it, the map keeps MIN_MAP_WIDTH and the changes list is laid over the dock instead.
   const overlay = dockOpen && areaWidth < MIN_MAP_WIDTH + PANEL_WIDTH;
   const uncovered = data?.coverage?.git ? (data.coverage.uncoveredCount ?? 0) : 0;
+  // A plan not built yet has no code to compare with or check against: only cards the AI removed are worth a look.
   const notices =
-    !!data && hasMap && (uncovered > 0 || !!data.unmapped?.length || editedCount > 0 || !!data.removedCards?.length);
+    !!data &&
+    hasMap &&
+    (planning
+      ? !!data.removedCards?.length
+      : uncovered > 0 || !!data.unmapped?.length || editedCount > 0 || !!data.removedCards?.length);
 
   // A deleted map starts over from nothing: its conversation is put away (archived, not deleted) and the next request
   // begins a new one, so nothing of the old drawing shows above the input.
@@ -737,6 +771,7 @@ export function ProductMap({
   const startOver = () => {
     rememberDrawing(null);
     setFlight(null);
+    setDeletedHere(true);
     if (mapConversation && !anyActive) details.mutate({ sessionId: mapConversation.id, archived: true });
     onSession('');
   };
@@ -778,6 +813,14 @@ export function ProductMap({
   // Words from the map's one input: another answer while a decision of the AI is open, the plan's conversation (or
   // the build's) while it is a plan, else a request to the map.
   const sendWords = async (text: string, from: DOMRect | null) => {
+    if (approval && workId && text)
+      return answer.mutateAsync({ sessionId: workId, requestId: approval.id, decision: 'deny', feedback: text }).then(
+        () => true,
+        () => {
+          setError({ text: t.answerFailed });
+          return false;
+        },
+      );
     if (pickReview && text) {
       changeDecision(text);
       nextReview();
@@ -805,13 +848,15 @@ export function ProductMap({
       board={data}
       readOnly={readOnly}
       unseen={unseen}
-      canStart={!(busy || workBusy || board.isError || readOnly)}
+      canStart={!(locked || board.isError)}
+      planning={planning}
       onChanges={data.changes?.length ? openChanges : undefined}
       onRediscover={() => setConfirmRebuild(true)}
       onScope={() => setScopeOpen(true)}
       onDelete={() => setDeleting(true)}
       recheck={recheck.length}
       onRecheck={recheckAll}
+      onMemory={onMemory}
     />
   );
 
@@ -860,7 +905,7 @@ export function ProductMap({
                   {t.nextMatchShort}
                 </LinkButton>
               )}
-              {hits.length > 0 && (
+              {hits.length > 0 && !planning && (
                 <LinkButton disabled={locked} onClick={verifyFound}>
                   {t.verifyFound}
                 </LinkButton>
@@ -891,6 +936,12 @@ export function ProductMap({
               {t.lensChanged(lenses.changed.size)}
             </Chip>
           )}
+          {memoryWaiting > 0 && onMemory && (
+            <Chip pressed={false} tone="attention" onClick={onMemory}>
+              <Brain size={13} aria-hidden />
+              {t.memoryWaiting(memoryWaiting)}
+            </Chip>
+          )}
           <ImportLink cwd={cwd} onOpen={openImported} />
           {mapMenu}
         </div>
@@ -900,11 +951,11 @@ export function ProductMap({
           aria-label={t.noticesLabel}
           className="flex shrink-0 flex-wrap items-center gap-1 border-b border-line bg-canvas-sunken px-2 py-1"
         >
-          {uncovered > 0 && data.coverage && (
+          {!planning && uncovered > 0 && data.coverage && (
             <Coverage coverage={data.coverage} exclude={data.exclude ?? []} disabled={locked} onSync={syncMap} />
           )}
-          <Unmapped parts={data.unmapped ?? []} disabled={locked} onContinue={continueMap} />
-          {editedCount > 0 && (
+          {!planning && <Unmapped parts={data.unmapped ?? []} disabled={locked} onContinue={continueMap} />}
+          {!planning && editedCount > 0 && (
             <li data-edited className="flex min-h-7 items-center gap-2 px-2 text-body">
               {t.editedPromises(editedCount)}
               <LinkButton disabled={locked} onClick={checkEdited}>
@@ -951,7 +1002,8 @@ export function ProductMap({
       {confirmRebuild && (
         <div className="flex flex-wrap items-center gap-3 border-b border-line bg-canvas-sunken px-5 py-3 text-body">
           <span className="min-w-0 grow">{t.rediscoverConfirm}</span>
-          <Button variant="primary" disabled={busy || workBusy || readOnly} onClick={() => void start('discover')}>
+          {anyActive && !busy && <span className="text-meta text-fg-muted">{t.busyStartShort}</span>}
+          <Button variant="primary" disabled={locked} onClick={() => void start('discover')}>
             {busy ? t.starting : t.rediscoverStart}
           </Button>
           <Button onClick={() => setConfirmRebuild(false)}>{t.cancel}</Button>
@@ -1046,7 +1098,7 @@ export function ProductMap({
             </Button>
           ) : (
             retry && (
-              <Button disabled={busy} onClick={() => void start(retry.action, retry.target)}>
+              <Button disabled={busy || anyActive} onClick={() => void start(retry.action, retry.target)}>
                 {t.retry}
               </Button>
             )
@@ -1099,6 +1151,14 @@ export function ProductMap({
           <div className="flex min-w-0 grow flex-col items-center justify-center gap-3 p-8 text-center">
             <h2 className="text-title font-semibold">{t.empty}</h2>
             <p className="max-w-90 text-body text-fg-muted">{demo ? t.demo : t.emptyLead}</p>
+            {deletedHere && onNewProject && (
+              <p className="max-w-90 text-meta text-fg-muted">
+                {t.deletedNewLead}{' '}
+                <LinkButton className="min-h-5 px-0.5" onClick={onNewProject}>
+                  {t.newProject}
+                </LinkButton>
+              </p>
+            )}
             <ImportLink cwd={cwd} onOpen={openImported} />
             <details className="group mt-1 flex flex-col items-center">
               <summary className="cursor-pointer list-none text-meta text-interactive">{t.scopeBefore}</summary>
@@ -1121,6 +1181,9 @@ export function ProductMap({
               look={planned ? look : undefined}
               touching={touching}
               asked={phase === 'asking' ? (question?.about ?? null) : null}
+              onPlan={planning ? (words) => void say(words) : undefined}
+              // A plan takes words while it works; checks and fixes wait until the AI is free, and say so.
+              waitNote={!planning && anyActive ? t.busyNote : null}
               stepParts={(cardId) => {
                 const node = nodeOf(cardId);
                 if (!node) return {};
@@ -1163,7 +1226,7 @@ export function ProductMap({
                               ? Promise.resolve(later.add(null, request, node.id)).then(() => true)
                               : start('change', { node, request })
                         }
-                        onRecheck={() => void start('verify', { node })}
+                        onRecheck={planning ? undefined : () => void start('verify', { node })}
                       />
                     </>
                   ),
@@ -1321,8 +1384,8 @@ export function ProductMap({
           {data && !readOnly && !board.isError && !checkingFolder && !(emptyFolder && !hasMap) && (
             <MapAsk
               empty={!hasMap}
-              disabled={busy || (!hasMap && !planned && anyActive)}
-              placeholder={waitsForWork ? t.busyAsk : undefined}
+              disabled={busy || (!hasMap && !planned && anyActive && !approval)}
+              placeholder={approval ? t.answerInstead : waitsForWork ? t.busyAsk : undefined}
               onSend={sendWords}
               agent={
                 <>

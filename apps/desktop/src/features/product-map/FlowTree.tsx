@@ -77,7 +77,12 @@ export interface StepParts {
 
 export interface FlowTreeProps {
   map: TreeMap;
-  onCheck: (targets: PromiseTarget[]) => void;
+  /** Asks the AI to check promises against the code; absent on a plan not built yet (nothing to check). */
+  onCheck?: (targets: PromiseTarget[]) => void;
+  /** A plan not built yet: a journey's missing steps are drawn, not found in code. */
+  planning?: boolean;
+  /** Why the AI cannot take work from here now (it is busy elsewhere): said at the top of the open details. */
+  waitNote?: string | null;
   onFix: (targets: PromiseTarget[]) => void;
   onAddPromise: (cardId: string, when: string, then: string) => void;
   onRemovePromise: (target: PromiseTarget) => void;
@@ -486,6 +491,11 @@ export function FlowTree(props: FlowTreeProps) {
             <X size={14} aria-hidden />
           </Dialog.Close>
           {focusScreen && <ScreenView key={focusScreen.src} screen={focusScreen} look={props.look ?? WIREFRAME} />}
+          {props.waitNote && (
+            <p role="status" className="mx-5 mt-5 mr-12 rounded-lg bg-canvas-sunken px-3 py-2 text-meta text-attention">
+              {props.waitNote}
+            </p>
+          )}
           <div>
             <Panel
               key={focusId ?? 'product'}
@@ -1313,14 +1323,15 @@ function PersonPanel({
         </>
       ),
     });
-  if (counts.recheck)
+  const check = props.onCheck;
+  if (counts.recheck && check)
     todo.push({
       key: 'recheck',
       text: t.todoRecheck(counts.recheck),
       tone: 'attention',
       actions: (
         <>
-          <Button variant={counts.failed ? 'secondary' : 'primary'} onClick={() => props.onCheck(targets(['recheck']))}>
+          <Button variant={counts.failed ? 'secondary' : 'primary'} onClick={() => check(targets(['recheck']))}>
             {t.todoRecheckAction}
           </Button>
           <LinkButton onClick={() => onShow(targets(['recheck'])[0]!)}>{t.todoShow}</LinkButton>
@@ -1334,20 +1345,20 @@ function PersonPanel({
       tone: 'attention',
       actions: <LinkButton onClick={() => onShow(targets(['blocked'])[0]!)}>{t.todoWhy}</LinkButton>,
     });
-  if (counts.planned)
+  if (counts.planned && check)
     todo.push({
       key: 'planned',
       text: t.todoPlanned(counts.planned),
-      actions: <Button onClick={() => props.onCheck(targets(['planned']))}>{t.todoMatch}</Button>,
+      actions: <Button onClick={() => check(targets(['planned']))}>{t.todoMatch}</Button>,
     });
-  if (counts.unconfirmed)
+  if (counts.unconfirmed && check)
     todo.push({
       key: 'unconfirmed',
       text: t.todoUnconfirmed(counts.unconfirmed),
       actions: (
         <Button
           variant={counts.failed || counts.recheck ? 'secondary' : 'primary'}
-          onClick={() => props.onCheck(targets(['unconfirmed']))}
+          onClick={() => check(targets(['unconfirmed']))}
         >
           {t.todoCheck}
         </Button>
@@ -1490,9 +1501,9 @@ function JourneyPanel({
       )}
       {journey.steps.length === 0 ? (
         <div className="flex flex-col items-start gap-3">
-          <p className="text-fg-muted">{t.noSteps}</p>
+          <p className="text-fg-muted">{props.planning ? t.noStepsPlan : t.noSteps}</p>
           <Button variant="primary" onClick={() => props.onFindSteps(journey.id)}>
-            {t.findSteps}
+            {props.planning ? t.drawSteps : t.findSteps}
           </Button>
         </div>
       ) : (
@@ -1525,9 +1536,9 @@ function JourneyPanel({
               );
             })}
           </ol>
-          {unchecked.length > 0 && (
+          {unchecked.length > 0 && props.onCheck && (
             <div>
-              <Button variant="primary" onClick={() => props.onCheck(unchecked)}>
+              <Button variant="primary" onClick={() => props.onCheck!(unchecked)}>
                 {t.checkJourney}
               </Button>
             </div>

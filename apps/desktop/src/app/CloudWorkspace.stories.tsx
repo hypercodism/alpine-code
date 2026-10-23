@@ -41,7 +41,7 @@ function Workspace() {
         <Dock
           scope="cloud-story"
           tabs={[
-            { id: 'changes', label: '변경 사항', content: <p className="text-meta text-fg-muted">바뀐 파일 4개</p> },
+            { id: 'changes', label: '바뀐 파일', content: <p className="text-meta text-fg-muted">바뀐 파일 4개</p> },
             { id: 'web', label: '웹', content: <p className="text-meta text-fg-muted">미리보기</p> },
             {
               id: 'data',

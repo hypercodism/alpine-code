@@ -2,7 +2,7 @@ import type { FlowGetResult, ProjectInfo } from '@alpine/protocol';
 
 import { sessionInfo, type Item, type Script, type ScriptContext } from '@/shared/server';
 
-import { blogBoard, blogConversation, type PlanMoment } from './planExample';
+import { blogBoard, blogBuild, blogConversation, type PlanMoment } from './planExample';
 
 /**
  * A planned product for the app in a plain browser (`pnpm dev`, no server process): the blog of the stories, on its
@@ -29,10 +29,20 @@ export const PLAN_DEMO_SESSIONS: { info: ReturnType<typeof sessionInfo>; items: 
   },
 ];
 
+/** The plan built by an AI 팀 at work (`alpine.demo` `{ "planTeam": true }`): its build conversation, with the team. */
+export const PLAN_TEAM_SESSIONS: { info: ReturnType<typeof sessionInfo>; items: Item[] }[] = [
+  {
+    info: sessionInfo({ id: 'blog-build', cwd: PLAN_DEMO_CWD, purpose: 'build', title: 'Build the planned product' }),
+    items: blogBuild('team').map((item) =>
+      item.kind === 'taskforce' ? { ...item, status: 'running', startedAt: new Date().toISOString() } : item,
+    ),
+  },
+];
+
 type Results = NonNullable<Script['results']>;
 
 /** `inner` with the blog plan on top: its project, its map, and its conversations' effect on the map. */
-export function planDemo(inner: Script): Script {
+export function planDemo(inner: Script, { team = false }: { team?: boolean } = {}): Script {
   const results = inner.results ?? {};
   const call = async <M extends keyof Results>(method: M, params: unknown, context: ScriptContext) => {
     const result = results[method] as unknown;
@@ -40,7 +50,7 @@ export function planDemo(inner: Script): Script {
     return typeof result === 'function' ? await result(params, context) : result;
   };
   let undecided = ['댓글을 받을까요', '어떤 느낌으로 만들까요'];
-  let build: string | null = null;
+  let build: string | null = team ? 'blog-build' : null;
 
   /** The map as the plan stands: asking until the build starts, then following the build's conversation. */
   const board = async (context: ScriptContext): Promise<FlowGetResult> => {
@@ -52,7 +62,11 @@ export function planDemo(inner: Script): Script {
         items: Item[];
       };
       const turn = open.items.slice(open.items.findLastIndex((item) => item.kind === 'user_message') + 1);
-      const busy = open.info.status === 'running' || open.info.status === 'waiting';
+      // A team at work builds too, while its conversation waits for it.
+      const busy =
+        open.info.status === 'running' ||
+        open.info.status === 'waiting' ||
+        open.items.some((item) => item.kind === 'taskforce' && item.status === 'running');
       moment = busy ? 'building' : turn.some((item) => item.kind === 'run_stopped') ? 'stopped' : 'built';
       state = busy ? 'running' : 'ended';
     }

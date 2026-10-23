@@ -51,6 +51,8 @@ export const messages = defineMessages({
     whereNewIn: (folder: string) => `${folder} 안에 만들어요`,
     wherePick: '이미 만든 빈 폴더 고르기…',
     wherePickTitle: '프로젝트를 시작할 빈 폴더 고르기',
+    whereChangeDefault: '새 폴더를 만들 곳 바꾸기…',
+    whereChangeDefaultNote: '설정 › 일반 › 프로젝트를 두는 곳',
     createUnknown: '프로젝트를 만들지 못했어요. 잠시 뒤에 다시 만들어 보세요.',
     madeButNotStarted: '프로젝트는 만들었어요',
     madeButNotStartedBody:
@@ -133,6 +135,8 @@ export const messages = defineMessages({
     whereNewIn: (folder: string) => `Made in ${folder}`,
     wherePick: 'Pick an empty folder you made…',
     wherePickTitle: 'Pick an empty folder to start the project in',
+    whereChangeDefault: 'Change where new folders are made…',
+    whereChangeDefaultNote: 'Settings › General › Where projects go',
     createUnknown: "The project couldn't be made. Try again in a moment.",
     madeButNotStarted: 'The project is made',
     madeButNotStartedBody: "The AI didn't start planning. Start again to plan the same idea on the map.",

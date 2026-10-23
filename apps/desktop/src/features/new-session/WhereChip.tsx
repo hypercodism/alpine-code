@@ -1,4 +1,5 @@
 import { Menu } from '@alpine/ui/primitives';
+import { useNavigate } from '@tanstack/react-router';
 import { Check, ChevronDown, Folder, FolderPlus } from 'lucide-react';
 
 import { chipClass } from '@/shared/components/composer';
@@ -24,6 +25,7 @@ export function WhereChip({
   const t = useMessages(messages);
   const home = useHomeDir();
   const cloneFolder = useSettings().data?.cloneFolder ?? null;
+  const navigate = useNavigate();
   const label = folder ? (folder.split('/').filter(Boolean).at(-1) ?? folder) : t.whereNew;
   return (
     <Menu.Root>
@@ -59,6 +61,13 @@ export function WhereChip({
           }}
         >
           {t.wherePick}
+        </Menu.Item>
+        {/* The usual place is a setting of its own: said here, where the place is chosen. */}
+        <Menu.Item onClick={() => void navigate({ to: '/settings', search: { tab: 'general' } })}>
+          <span className="flex min-w-0 grow flex-col">
+            <span>{t.whereChangeDefault}</span>
+            <span className="text-meta text-fg-muted">{t.whereChangeDefaultNote}</span>
+          </span>
         </Menu.Item>
       </Menu.Popup>
     </Menu.Root>
