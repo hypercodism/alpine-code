@@ -4,7 +4,6 @@ import { type ReactNode } from 'react';
 
 import { DockToggle } from '@/features/dock/Dock';
 import { PublishButton } from '@/features/publish/PublishButton';
-import { useCurrentProject } from '@/features/rail/currentProject';
 import { useWorkResult } from '@/features/work-result/useWorkResult';
 import { StatusWord } from '@/shared/components/status';
 import { useMessages } from '@/shared/i18n';
@@ -19,8 +18,7 @@ const iconButton =
 /**
  * The one line over the whole window: room for the traffic lights, the sidebar button, back and forward, then for a
  * session where it runs (project, branch) and its state (on the product map, the project), at the far end the dock button, and after it the update button once a new version is ready. The bar and its
- * empty parts drag the window; the buttons never do. On a new session the project is named only while the rail, which
- * names it otherwise, is hidden.
+ * empty parts drag the window; the buttons never do. 새 프로젝트 is in no project, so it names none.
  */
 export function TopBar({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail: () => void }) {
   const t = useMessages(messages);
@@ -28,7 +26,6 @@ export function TopBar({ railOpen, onToggleRail }: { railOpen: boolean; onToggle
   const match = useMatch({ from: '/session/$sessionId', shouldThrow: false });
   const board = useMatch({ from: '/board', shouldThrow: false });
   const memory = useMatch({ from: '/memory', shouldThrow: false });
-  const start = useMatch({ from: '/', shouldThrow: false });
   return (
     <div data-tauri-drag-region className="flex h-11.5 shrink-0 items-center gap-1 bg-canvas-sunken pr-3 pl-20">
       <button
@@ -52,8 +49,6 @@ export function TopBar({ railOpen, onToggleRail }: { railOpen: boolean; onToggle
         <BoardPart project={board.search.project} sessionId={board.search.session ?? null} />
       ) : memory ? (
         <ProjectName project={memory.search.project} />
-      ) : start && !railOpen ? (
-        <NewSessionPart />
       ) : (
         <span data-tauri-drag-region className="grow self-stretch" />
       )}
@@ -154,23 +149,6 @@ function BoardPart({ project, sessionId }: { project?: string; sessionId: string
       </Drag>
       {shown && <DockToggle files={result?.files.length} />}
     </>
-  );
-}
-
-/** The project a new session starts in. */
-function NewSessionPart() {
-  const projects = useProjects().data;
-  const current = useCurrentProject();
-  const name =
-    [...(projects?.projects ?? []), ...(projects?.clones ?? [])].find((p) => p.path === current)?.name ?? null;
-  return (
-    <Drag className="ml-3 gap-2">
-      {name && (
-        <span className="truncate text-body font-medium" title={current ?? undefined}>
-          {name}
-        </span>
-      )}
-    </Drag>
   );
 }
 

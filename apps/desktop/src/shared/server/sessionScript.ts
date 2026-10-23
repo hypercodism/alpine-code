@@ -10,6 +10,7 @@ import type {
 } from '@alpine/protocol';
 
 import { ServerError } from './connection';
+import { PROJECTS } from './fixtures';
 import type { Judgement, TemplateId } from './newProjects';
 import { agentStore, type AgentStore } from './toolsScript';
 import type { Script, ScriptContext } from './scripted';
@@ -51,8 +52,13 @@ export interface NewProjectScript {
   judgeMs?: number;
   /** Milliseconds between the steps of creating; defaults to 700. */
   createMs?: number;
-  /** Judging fails (the model cannot be reached). */
-  judgeFails?: boolean;
+  /**
+   * Judging fails: `true` when the model cannot be reached; a reason when the setups themselves cannot be had
+   * (`unreachable`: no internet, `not_found`: nowhere to fetch them from, `no_git_tools`: no git to fetch them with).
+   */
+  judgeFails?: boolean | 'unreachable' | 'not_found' | 'no_git_tools';
+  /** Folders with files in them besides the demo projects and the projects made here; every other folder is empty. */
+  filled?: string[];
   /** Creating announces the web address too (`<folder>.alpinesite.app`), as a server does when signed in to Alpine. */
   address?: boolean;
   /** Creating fails: `folder` before the project exists, `session` after it, when the session cannot start. */
@@ -584,9 +590,28 @@ export function sessionScript(options: SessionScriptOptions = {}): Script {
       'projects/judge': async ({ text, locale, newProject }) => {
         const script = options.newProject ?? {};
         await sleep(script.judgeMs ?? 1500);
+        if (typeof script.judgeFails === 'string')
+          throw new ServerError(-32000, `git clone failed: the templates could not be fetched`, {
+            reason: script.judgeFails,
+          });
         if (script.judgeFails)
           throw new ServerError(-32000, 'The model could not be reached', { reason: 'model_failed' });
         return { judgement: standInJudgement(text, locale, pickable, newProject === true) };
+      },
+      // What is in a folder, for the new-project screen's look at a picked one: the demo projects and the projects
+      // made here have files, so do the `filled` folders; any other folder is empty.
+      'files/list': ({ cwd }) => {
+        const full =
+          PROJECTS.some((p) => p.path === cwd) ||
+          [...made].some((folder) => cwd.endsWith(`/${folder}`)) ||
+          (options.newProject?.filled ?? []).includes(cwd);
+        const entries = full
+          ? [
+              { name: 'src', path: 'src', kind: 'directory' as const },
+              { name: 'README.md', path: 'README.md', kind: 'file' as const },
+            ]
+          : [];
+        return { entries, nextOffset: entries.length, hasMore: false };
       },
       'projects/create': async ({ id, idea, template, name, folder: chosen, agent, mode }, context) => {
         const script = options.newProject ?? {};

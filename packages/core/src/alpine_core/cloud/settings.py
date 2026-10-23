@@ -1,7 +1,8 @@
 """Where the Alpine API is, and whether Alpine Cloud is switched on at all (principle 4 in docs/alpine-cloud.md).
 
-Cloud is hidden until it is live ("Shipping hidden" in docs/alpine-cloud.md): ``enabled`` is the one switch every
-cloud feature asks, in core, in the server and, through ``cloud/status``, in the app.
+``enabled`` is the one switch every cloud feature asks, in core, in the server and, through ``cloud/enabled``, in the
+app. It is on in a normal install; ``ALPINE_CLOUD_URL`` set to an empty string turns it off, and then the app shows
+none of it ("Shipping hidden" in docs/alpine-cloud.md).
 
 ``ALPINE_CLOUD_URL`` in the environment wins, then ``cloud_url`` in ``config.toml``, then production. Development
 (``pnpm dev``, the tests) sets the variable. The user-app domain is never kept here: it comes from ``GET /v1/meta``
@@ -23,10 +24,9 @@ DEFAULT_API_URL = "https://api.alpinecode.app"
 URL_ENV = "ALPINE_CLOUD_URL"
 LOCALE_ENV = "ALPINE_LOCALE"
 
-# THE launch switch. Today Alpine Cloud is on only when ``ALPINE_CLOUD_URL`` is set (developers pointing the app at a
-# local or staging API). When api.alpinecode.app is live, make this default True: then a normal install turns cloud on
-# and ``ALPINE_CLOUD_URL`` set to an empty string is the way to turn it off.
-ENABLED_BY_DEFAULT = False
+# THE launch switch: on, so a normal install has Alpine Cloud, and ``ALPINE_CLOUD_URL`` set to an empty string is the
+# way to turn it off.
+ENABLED_BY_DEFAULT = True
 
 
 def enabled() -> bool:

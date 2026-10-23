@@ -8,7 +8,8 @@ sys.path.insert(0, str(Path(__file__).parent))  # fake_cloud.py
 
 @pytest.fixture(autouse=True)
 def home(tmp_path, monkeypatch):
-    """Every test gets its own ~/.alpine-code and no model settings from the environment."""
+    """Every test gets its own ~/.alpine-code and no model settings from the environment. Alpine Cloud is off, so no
+    test reaches the real Alpine API; a test that wants it on points ``ALPINE_CLOUD_URL`` somewhere (``cloud``)."""
     path = tmp_path / "alpine-home"
     monkeypatch.setenv("ALPINE_CODE_HOME", str(path))
     for name in (
@@ -18,10 +19,10 @@ def home(tmp_path, monkeypatch):
         "ALPINE_CONTEXT_WINDOW",
         "ALPINE_OUTPUT_LIMIT",
         "ANTHROPIC_API_KEY",
-        "ALPINE_CLOUD_URL",
         "ALPINE_LOCALE",
     ):
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("ALPINE_CLOUD_URL", "")
     return path
 
 

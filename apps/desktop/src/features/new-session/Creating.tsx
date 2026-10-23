@@ -7,6 +7,7 @@ import { useMessages } from '@/shared/i18n';
 import { tildePath, useHomeDir } from '@/shared/platform';
 import type { CreateStep, TemplateId } from '@/shared/server';
 
+import { ErrorDetail } from './ErrorDetail';
 import { messages } from './messages';
 
 const ORDER: CreateStep[] = ['folder', 'address', 'agent'];
@@ -24,7 +25,8 @@ export interface CreateFailure {
 /**
  * 만들기 with a template: the folder, the web address when signed in, then the AI starts on the idea. The steps tick
  * as the server announces them, the folder shows where it is; when the request ends (`done`) the way into the session
- * opens. When it fails, a short plain message says what happened and the button goes back.
+ * opens. When it fails, a short plain message says what happened and the button goes back; when only the AI did not
+ * start (`not_started`), 다시 시작 starts it on the same idea and the project can be opened as it is.
  */
 export function Creating({
   online,
@@ -36,6 +38,7 @@ export function Creating({
   failure,
   onOpen,
   onBack,
+  onRestart,
 }: {
   /** Signed in to Alpine: a web template gets its web address as the second step. */
   online: boolean;
@@ -51,6 +54,8 @@ export function Creating({
   onOpen: () => void;
   /** After a failure: back to the setups, or (`not_started`) on to the project that was made. */
   onBack: () => void;
+  /** `not_started`: the AI starts planning the idea in the project that was made. */
+  onRestart: () => void;
 }) {
   const t = useMessages(messages);
   const home = useHomeDir();
@@ -109,14 +114,23 @@ export function Creating({
       {failure && (
         <div role="alert" className="motion-step flex flex-col gap-1">
           <p className="text-body text-fg">{body}</p>
-          {failure.detail && <p className="font-mono text-meta break-words text-fg-muted">{failure.detail}</p>}
+          <ErrorDetail detail={failure.detail} />
         </div>
       )}
       {(failure || finished) && (
-        <div className="motion-step flex justify-end">
-          <Button variant="primary" autoFocus onClick={failure ? onBack : onOpen}>
-            {failure ? (failure.kind === 'not_started' ? t.openProject : t.back) : t.goToMap}
-          </Button>
+        <div className="motion-step flex justify-end gap-2">
+          {failure?.kind === 'not_started' ? (
+            <>
+              <Button onClick={onBack}>{t.openProject}</Button>
+              <Button variant="primary" autoFocus onClick={onRestart}>
+                {t.restart}
+              </Button>
+            </>
+          ) : (
+            <Button variant="primary" autoFocus onClick={failure ? onBack : onOpen}>
+              {failure ? t.back : t.goToMap}
+            </Button>
+          )}
         </div>
       )}
     </div>

@@ -13,9 +13,14 @@ import { useOpenProject, useProjects, useSearchSessions, useSessions } from '@/s
 import { useCurrentProject } from './currentProject';
 import { messages } from './messages';
 
-/** Lives outside the rail so search and session shortcuts also work when the rail is hidden. */
-export function NavigationController() {
-  const sessions = useSessions().data;
+/**
+ * Lives outside the rail so search and session shortcuts also work when the rail is hidden. Opening the app it goes
+ * back to where I was; `onRestored` hears when that is settled (gone there, or nowhere to go), so nothing is drawn on
+ * the way.
+ */
+export function NavigationController({ onRestored }: { onRestored?: () => void }) {
+  const sessionsQuery = useSessions();
+  const sessions = sessionsQuery.data;
   const match = useMatch({ from: '/session/$sessionId', shouldThrow: false });
   const id = match?.params.sessionId;
   const info = sessions?.find((s) => s.id === id);
@@ -24,17 +29,25 @@ export function NavigationController() {
   const restored = useRef(false);
   const visit = useNavigation((s) => s.visit);
   const navigate = useNavigate();
-  const projects = useProjects().data?.projects;
+  const projectsQuery = useProjects();
+  const projects = projectsQuery.data?.projects;
+  const unanswered = sessionsQuery.isError || projectsQuery.isError;
   useEffect(() => {
-    if (restored.current || !sessions || !projects) return;
+    if (restored.current) return;
+    // A server that cannot say leaves me where I am, which then shows what went wrong.
+    if (unanswered) {
+      restored.current = true;
+      return onRestored?.();
+    }
+    if (!sessions || !projects) return;
     restored.current = true;
-    if (!start || start.search.project || start.search.folder) return;
+    if (!start || start.search.project || start.search.folder) return onRestored?.();
     // Opening the app goes back to the last project, which is its map (map-first 1); without one, 새 프로젝트.
     const last = useNavigation.getState().lastProject;
     if (last && projects.some((p) => p.path === last && !p.archived)) {
-      void navigate({ to: '/board', search: { project: last }, replace: true });
-    }
-  }, [sessions, projects, start, navigate]);
+      void navigate({ to: '/board', search: { project: last }, replace: true }).finally(() => onRestored?.());
+    } else onRestored?.();
+  }, [sessions, projects, unanswered, start, navigate, onRestored]);
   useEffect(() => {
     if (!current) return;
     useNavigation.setState((state) => ({ expanded: { ...state.expanded, [current]: true } }));

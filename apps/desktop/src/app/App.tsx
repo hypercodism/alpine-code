@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { PLAN_DEMO_SESSIONS, planDemo } from '@/features/product-map/planDemo';
 import {
   chatScript,
+  cloudScript,
   EXAMPLE_MAP,
   flowScript,
   mergeScripts,
@@ -12,6 +13,7 @@ import {
   SESSIONS,
   STUDIO_MAP,
   tauriConnection,
+  type NewProjectScript,
   type ServerConnection,
 } from '@/shared/server';
 
@@ -39,9 +41,33 @@ function connect(): ServerConnection {
         : cwd.endsWith('/infra-terraform')
           ? READ_ONLY_MAP
           : {};
+  const demo = demoOptions();
   // A planned product (dev-blog) walks through planning and building on its map.
   const sessions = [...SESSIONS.map((info) => ({ info })), ...PLAN_DEMO_SESSIONS];
-  return scriptedConnection(planDemo(mergeScripts(chatScript({ stepMs: 400, wordMs: 80, sessions }), flowScript(map))));
+  return scriptedConnection(
+    planDemo(
+      mergeScripts(
+        chatScript({ stepMs: 400, wordMs: 80, sessions, newProject: demo.newProject }),
+        flowScript(map),
+        demo.cloudOff ? cloudScript({ enabled: false }) : {},
+      ),
+    ),
+  );
+}
+
+/**
+ * For walking a path the demo does not take by itself (setups that cannot be fetched, a project whose AI did not
+ * start, Alpine Cloud off): `alpine.demo` in localStorage, as `{ "newProject": {...}, "cloudOff": true }`.
+ */
+function demoOptions(): { newProject?: NewProjectScript; cloudOff?: boolean } {
+  try {
+    return JSON.parse(localStorage.getItem('alpine.demo') ?? '{}') as {
+      newProject?: NewProjectScript;
+      cloudOff?: boolean;
+    };
+  } catch {
+    return {};
+  }
 }
 
 export function App() {

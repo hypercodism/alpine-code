@@ -26,7 +26,6 @@ from alpine_core import (
     ProjectList,
     Settings,
     TemplateNotFound,
-    available_templates,
     create_project,
     safe_name,
     start_in,
@@ -42,6 +41,7 @@ from alpine_core.cloud import (
     links,
     read_description,
 )
+from alpine_core.templates import EMPTY_ANYWAY, TemplatesUnavailable, ensure_templates
 from alpine_protocol import (
     FlowGetParams,
     FlowPrepareParams,
@@ -78,7 +78,11 @@ class NewProjects:
             self._creating.discard(params.id)
 
     async def _create(self, params: ProjectsCreateParams) -> ProjectsCreateResult:
-        if params.template not in await asyncio.to_thread(available_templates):
+        try:
+            templates = await asyncio.to_thread(ensure_templates)
+        except TemplatesUnavailable as e:
+            raise MethodError(APP_ERROR, str(e), e.reason) from e
+        if params.template not in templates:
             raise MethodError(APP_ERROR, f"No template named {params.template!r}", "not_found")
         try:
             if params.folder:
@@ -155,7 +159,7 @@ def _make_app(folder: Path) -> str | None:
 
 def _discard(folder: Path, theirs: bool = False) -> None:
     """Takes back a folder that was made and not announced: off the rail if it got on, and off the disk. A folder the
-    person made (``theirs``) stays, empty again."""
+    person made (``theirs``) stays, as empty as it was."""
     try:
         ProjectList.default().delete(folder)
     except Exception:  # the list is what failed, or it was never written
@@ -164,7 +168,7 @@ def _discard(folder: Path, theirs: bool = False) -> None:
         shutil.rmtree(folder, ignore_errors=True)
         return
     for entry in folder.iterdir() if folder.is_dir() else []:
-        if entry.name != ".DS_Store":
+        if entry.name not in EMPTY_ANYWAY:
             shutil.rmtree(entry, ignore_errors=True) if entry.is_dir() and not entry.is_symlink() else entry.unlink()
 
 

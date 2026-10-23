@@ -21,25 +21,31 @@ export interface Template {
   soon?: boolean;
 }
 
-export function useTemplates(): Template[] {
+/**
+ * The setups the app shows. Without Alpine Cloud (`cloud` false) nothing that needs it is offered or promised: no
+ * realtime web app (it lives on the cloud's database), and no web address, visitors, hosting or putting it on the
+ * internet.
+ */
+export function useTemplates(cloud: boolean): Template[] {
   const t = useMessages(messages);
-  return [
+  const all: Template[] = [
     {
       id: 'blank',
       icon: SquareDashed,
       tile: 'bg-avatar-7 text-avatar-7-ink',
       name: t.blank,
       short: t.blankShort,
-      points: [t.blankPoint1, t.blankPoint2],
+      points: cloud ? [t.blankPoint1, t.blankPoint2] : [t.blankPoint1],
     },
     {
       id: 'web-lite',
       icon: Feather,
       tile: 'bg-avatar-1 text-avatar-1-ink',
       name: t.lite,
-      short: t.liteShort,
-      points: [t.litePoint1, t.litePoint2, t.litePoint3],
-      stack: 'React · Hono · Cloudflare D1',
+      short: cloud ? t.liteShort : t.liteShortLocal,
+      // Visitors and where it runs only matter once it is on the internet, which needs Alpine Cloud.
+      points: cloud ? [t.litePoint1, t.litePoint2, t.litePoint3] : [t.litePoint1Local],
+      stack: cloud ? 'React · Hono · Cloudflare D1' : undefined,
     },
     {
       id: 'web-pro',
@@ -62,10 +68,11 @@ export function useTemplates(): Template[] {
       soon: true,
     },
   ];
+  return cloud ? all : all.filter((template) => template.id !== 'web-pro');
 }
 
 /**
- * The four setups side by side (decisions 5, 6 and 13 in docs/alpine-cloud.md), shown once the agent has judged that
+ * The setups side by side (decisions 5, 6 and 13 in docs/alpine-cloud.md), shown once the agent has judged that
  * what I wrote is a new app. Its pick comes chosen with a 추천 mark and its reason (no line when it gave none); I can
  * choose another. Without a `recommendation` nobody picked: no mark, no reason. What each means is on its card, and the
  * chosen one opens its details under the row.
@@ -85,7 +92,11 @@ export function TemplateCards({
   const chosen = templates.find((template) => template.id === value);
   return (
     <div className="flex w-full flex-col gap-2">
-      <div role="radiogroup" aria-label={t.setups} className="grid grid-cols-4 gap-2">
+      <div
+        role="radiogroup"
+        aria-label={t.setups}
+        className={clsx('grid gap-2', templates.length > 3 ? 'grid-cols-4' : 'grid-cols-3')}
+      >
         {templates.map((template, index) => {
           const selected = template.id === value;
           const picked = recommendation?.template === template.id;

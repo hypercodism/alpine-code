@@ -1,4 +1,4 @@
-"""Shipping hidden: Alpine Cloud is on only when ``ALPINE_CLOUD_URL`` is set (docs/alpine-cloud.md)."""
+"""The launch switch: Alpine Cloud is on unless ``ALPINE_CLOUD_URL`` is an empty string (docs/alpine-cloud.md)."""
 
 import pytest
 
@@ -6,8 +6,13 @@ from alpine_core import Settings, save_connection, set_default_model
 from alpine_core.cloud import settings as cloud_settings
 
 
-def test_cloud_is_off_without_the_variable():
-    assert cloud_settings.enabled() is False
+def test_cloud_is_on_without_the_variable(monkeypatch):
+    monkeypatch.delenv("ALPINE_CLOUD_URL")
+    assert cloud_settings.enabled() is True
+
+
+def test_cloud_is_off_when_the_variable_is_empty():
+    assert cloud_settings.enabled() is False  # what conftest sets
 
 
 def test_cloud_is_on_when_the_variable_is_set(monkeypatch):
@@ -15,8 +20,9 @@ def test_cloud_is_on_when_the_variable_is_set(monkeypatch):
     assert cloud_settings.enabled() is True
 
 
-def test_an_empty_variable_is_off_even_when_the_default_becomes_on(monkeypatch):
-    monkeypatch.setattr(cloud_settings, "ENABLED_BY_DEFAULT", True)
+def test_a_blank_variable_is_off_even_with_the_default_on(monkeypatch):
+    monkeypatch.delenv("ALPINE_CLOUD_URL")
+    assert cloud_settings.ENABLED_BY_DEFAULT is True
     assert cloud_settings.enabled() is True
     monkeypatch.setenv("ALPINE_CLOUD_URL", " ")
     assert cloud_settings.enabled() is False
