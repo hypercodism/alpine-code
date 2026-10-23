@@ -45,6 +45,7 @@ import { Bar, CONNECTION, PlanBar, Working, type PlanReview, type PlanTeamAnswer
 import { buildActivity, lastReply, pendingQuestion, planPhase, stopReason, TEAM_WORKING } from './planData';
 import { mapLookCss } from './planLook';
 import { planMessages } from './planMessages';
+import { useMapRequest } from './askRequest';
 import { AskFlight, MapAsk } from './MapAsk';
 import { DeleteMap, MapMenu, ScopeEditor } from './MapSettings';
 import { Unmapped } from './Unmapped';
@@ -74,6 +75,8 @@ const due = (lastRun?: string | null) => {
   return Number.isNaN(at) || Date.now() - at >= DAY;
 };
 type Lens = 'failed' | 'recheck' | 'changed' | null;
+/** What a folder may hold and still be empty, as the server's `EMPTY_ANYWAY` (alpine_core.templates). */
+const EMPTY_ANYWAY = new Set(['.DS_Store', '.git']);
 
 /**
  * A project's map: the people who use the product and the journeys they walk. One row above it searches the cards,
@@ -87,6 +90,7 @@ export function ProductMap({
   onSession,
   onShowConversation,
   onOpenApp,
+  onPublish,
   onNewHere,
   onFixConnection,
   demo = false,
@@ -100,6 +104,8 @@ export function ProductMap({
   onShowConversation?: () => void;
   /** Runs and shows the project's app (its development server, in the dock). */
   onOpenApp?: () => void;
+  /** Puts the app online, offered beside 앱 열기 once it is built; absent without Alpine Cloud or a web app. */
+  onPublish?: () => void;
   /** Opens 새 프로젝트 for this folder, which is empty (map-first 41). */
   onNewHere?: (folder: string) => void;
   /** Opens the model connection, where a build stopped by a sign-in, credits or a plan limit is fixed. */
@@ -208,8 +214,9 @@ export function ProductMap({
     enabled: !!data && !data.exists,
     retry: false,
   });
-  // Hidden files alone (.git of a repository with nothing in it yet, .DS_Store) leave a folder empty.
-  const emptyFolder = !!rootFiles.data && rootFiles.data.entries.every((entry) => entry.name.startsWith('.'));
+  // Only what the server lets 새 프로젝트 start in counts as empty: .git (a repository with nothing in it yet) and
+  // .DS_Store. A folder with other hidden files (.env, .vscode) holds someone's project and is refused there.
+  const emptyFolder = !!rootFiles.data && rootFiles.data.entries.every((entry) => EMPTY_ANYWAY.has(entry.name));
   // Until the folder is read, it is neither empty nor a project to draw from (unless the AI already draws it).
   const checkingFolder = !!data && !data.exists && rootFiles.isPending && !workBusy && !busy;
   const locked = busy || anyActive || readOnly;
@@ -562,11 +569,20 @@ export function ProductMap({
 
   // Words that waited for the AI go, oldest first, once what they go to is free: a conversation between its turns, a
   // request to the map once nothing in the project works. Each place keeps its own order, so words that could not go
-  // (or failed) hold back only later words to the same place, and say so; the rest go on.
+  // (or failed) hold back only later words to the same place, and say so; the rest go on. Words for a conversation
+  // that is gone (deleted or archived meanwhile) go where the map talks now, rather than failing there for ever.
+  const here = talkTo ?? sessionId;
+  const gone = (to: string) => !!sessions && !sessions.some((s) => s.id === to && !s.archived);
+  const placeOf = (word: LaterWord) => (word.to && gone(word.to) ? here : word.to);
   const targetBusy = (to: string | null) =>
     to === null ? anyActive || busy : to === workId ? workBusy : atWork((sessions ?? []).find((s) => s.id === to));
+  // Until the conversations are known, no one can tell where words go. A word that failed at a conversation now gone
+  // is tried again where the map talks.
   const held = (word: LaterWord, index: number) =>
-    !!word.failed || targetBusy(word.to) || later.words.slice(0, index).some((before) => before.to === word.to);
+    !sessions ||
+    (!!word.failed && !(word.to && gone(word.to))) ||
+    targetBusy(placeOf(word)) ||
+    later.words.slice(0, index).some((before) => placeOf(before) === placeOf(word));
   const next = later.words.find((word, index) => !held(word, index));
   const [nudge, setNudge] = useState(0);
   const sending = useRef<string | null>(null);
@@ -574,8 +590,9 @@ export function ProductMap({
     if (!next || sending.current) return;
     sending.current = next.id;
     const word = next;
+    const to = placeOf(word);
     const done = () => (sending.current = null);
-    if (word.to === null) {
+    if (to === null) {
       // A request is prepared when it goes; if it fails, the error above the map offers to try again.
       const node = word.node ? nodeOf(word.node) : null;
       void (node ? start('change', { node, request: word.text }) : start('request', { request: word.text })).finally(
@@ -586,12 +603,12 @@ export function ProductMap({
       );
       return;
     }
+    // The dock stays on whatever I opened meanwhile: the words reach the conversation without taking me there.
     send.mutate(
-      { sessionId: word.to, text: word.text },
+      { sessionId: to, text: word.text },
       {
         onSuccess: () => {
           later.drop(word.id);
-          onSession(word.to!);
           done();
         },
         onError: (error) => {
@@ -599,7 +616,7 @@ export function ProductMap({
           // It started working a moment before: it goes when this turn is over.
           if (error instanceof ServerError && error.code === SESSION_RUNNING)
             setTimeout(() => setNudge((n) => n + 1), 1000);
-          else later.fail(word.id, true);
+          else later.fail(word.id, true, to);
         },
       },
     );
@@ -763,6 +780,17 @@ export function ProductMap({
     return askMap(text, from);
   };
   const waitsForWork = planned && phase !== 'built' ? workBusy : hasMap && anyActive;
+
+  // Words sent from elsewhere (the 미리보기's 고쳐 달라고 하기) go where my own would, but never answer a decision.
+  const requested = useMapRequest((state) => (state.request?.cwd === cwd ? state.request.text : null));
+  const takeRequest = useEffectEvent((text: string) => {
+    useMapRequest.getState().take();
+    if (planned && phase !== 'built') say(text);
+    else void askMap(text, null);
+  });
+  useEffect(() => {
+    if (requested) takeRequest(requested);
+  }, [requested]);
 
   const mapMenu = data && (
     <MapMenu
@@ -1188,6 +1216,7 @@ export function ProductMap({
               onNextReview={nextReview}
               onReviewPicks={() => reviewOrder[0] && setReviewing(reviewOrder[0])}
               onOpenApp={() => onOpenApp?.()}
+              onPublish={onPublish}
               onFixConnection={() => onFixConnection?.()}
               onStop={stopWork}
               onLook={showWork}

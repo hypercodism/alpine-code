@@ -183,16 +183,24 @@ describe('work asked of a map that exists (#4, #9, #10)', () => {
   });
 
   it('sends words to a free conversation even when earlier words could not be sent, and shows them all (#34)', async () => {
-    // Kept from before: words to a conversation that is gone now, then words to the map's own conversation.
+    // Kept from before: words to an older conversation that refuses them, then words to the map's own conversation.
     localStorage.setItem(
       `alpine.product-map.later:${cwd}`,
       JSON.stringify([
-        { id: 'w1', to: 'gone', text: '첫 번째 말' },
-        { id: 'w2', to: 'gone', text: '두 번째 말' },
+        { id: 'w1', to: 'old', text: '첫 번째 말' },
+        { id: 'w2', to: 'old', text: '두 번째 말' },
         { id: 'w3', to: 'map-1', text: '지도 대화에 할 말' },
       ]),
     );
-    const { request } = mount(bookingBoard());
+    const refusing: Script = {
+      results: {
+        'session/send': ({ sessionId }) => {
+          if (sessionId === 'old') throw new Error('refused');
+          return {};
+        },
+      },
+    };
+    const { request } = mount(bookingBoard(), { others: [{ id: 'old', title: '예전 대화' }] }, refusing);
     await waitFor(() => expect(sent(request, 'map-1')).toEqual(['지도 대화에 할 말']));
     const waiting = await screen.findByRole('region', { name: 'AI가 지금 일을 마치면 전할게요' });
     // The first could not go and says so; the one after it to the same place waits behind it, and is shown too.
@@ -200,7 +208,28 @@ describe('work asked of a map that exists (#4, #9, #10)', () => {
     expect(within(waiting).getByText('첫 번째 말')).toBeTruthy();
     expect(within(waiting).getByText('두 번째 말')).toBeTruthy();
     expect(within(waiting).queryByText('지도 대화에 할 말')).toBeNull();
-    expect(sent(request, 'gone')).toEqual(['첫 번째 말']);
+    expect(sent(request, 'old')).toEqual(['첫 번째 말']);
+  });
+
+  it('sends words kept for a conversation that is gone to the map, in order, without taking the dock (#34)', async () => {
+    localStorage.setItem(
+      `alpine.product-map.later:${cwd}`,
+      JSON.stringify([
+        { id: 'w1', to: 'deleted', text: '지운 대화에 할 말' },
+        { id: 'w2', to: 'old', text: '보관한 대화에 할 말', failed: true },
+      ]),
+    );
+    // The conversation takes them without starting a turn here, so nothing else calls me to it.
+    const { request, onSession } = mount(
+      bookingBoard(),
+      { others: [{ id: 'old', title: '예전 대화', archived: true }] },
+      { results: { 'session/send': {} } },
+    );
+    await waitFor(() => expect(sent(request, 'map-1')).toEqual(['지운 대화에 할 말', '보관한 대화에 할 말']));
+    expect(sent(request, 'deleted')).toEqual([]);
+    expect(sent(request, 'old')).toEqual([]);
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'AI가 지금 일을 마치면 전할게요' })).toBeNull());
+    expect(onSession).not.toHaveBeenCalled();
   });
 
   it('says why the map waits when another conversation works, leads there, and keeps my words for later (#29, #60)', async () => {
@@ -420,6 +449,32 @@ describe('a planned product on its map', () => {
 });
 
 describe('an empty folder (#79)', () => {
+  const folder = (...names: string[]): Script => ({
+    results: {
+      'files/list': {
+        entries: names.map((name) => ({ name, path: name, kind: 'file' as const })),
+        nextOffset: 0,
+        hasMore: false,
+      },
+    },
+  });
+  const nothing = {
+    revision: 'missing',
+    exists: false,
+    document: { nodes: [], flows: [], edges: [] },
+  } as FlowGetResult;
+
+  it('does not offer to start over a folder with other hidden files, which 새 프로젝트 would refuse', async () => {
+    mount(nothing, {}, folder('.git', '.env', '.vscode'));
+    expect(await screen.findByRole('textbox', { name: '지도에 부탁하기' })).toBeTruthy();
+    expect(screen.queryByText('빈 폴더예요')).toBeNull();
+  });
+
+  it('counts .git and .DS_Store alone as empty, as the server does', async () => {
+    mount(nothing, {}, folder('.git', '.DS_Store'));
+    expect(await screen.findByText('빈 폴더예요')).toBeTruthy();
+  });
+
   it('counts a folder with only hidden files (an empty repository) as empty', async () => {
     mount(
       { revision: 'missing', exists: false, document: { nodes: [], flows: [], edges: [] } } as FlowGetResult,

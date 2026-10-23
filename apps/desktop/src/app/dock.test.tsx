@@ -233,8 +233,8 @@ describe('right dock on the routes', () => {
     expect(await screen.findByText('alpine-code', { selector: 'span' })).toBeTruthy();
     fireEvent.click(await screen.findByRole('button', { name: '오른쪽 창 열기, 바뀐 파일 1개' }));
     const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
-    // The map's session sits in the dock: its conversation is the summary, then what it changed.
-    expect(within(dock).getByRole('tab', { name: '요약' }).getAttribute('aria-selected')).toBe('true');
+    // The map's session sits in the dock: its conversation first, named 대화 on the map (#88), then what it changed.
+    expect(within(dock).getByRole('tab', { name: '대화' }).getAttribute('aria-selected')).toBe('true');
     // The map has its own input for it, so the conversation here has none: one place to type.
     expect(within(dock).queryByRole('textbox')).toBeNull();
     fireEvent.click(within(dock).getByRole('tab', { name: '변경 사항' }));

@@ -4,13 +4,14 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { AlpineSignIn, NodeInstall, QrCode, UpgradeSheet } from '@/shared/components/cloud';
 import { useLocale, useMessages } from '@/shared/i18n';
-import { openInBrowser } from '@/shared/platform';
+import { checkForUpdate, openInBrowser, restartToUpdate, useUpdateReady } from '@/shared/platform';
 import {
   appAddress,
   PUBLISH_STEPS,
   useCloudStatus,
   useProductMap,
   useSendMessage,
+  useSessions,
   type PublishFlow,
   type PublishState,
 } from '@/shared/server';
@@ -84,6 +85,7 @@ export function PublishPanel(props: PublishPanelProps) {
           status={status}
           onRestore={() => setView('restore')}
           onDomains={() => setView('domains')}
+          onUpgrade={() => setView('upgrade')}
         />
       );
   }
@@ -136,6 +138,7 @@ function NeedNode({ onReady }: { onReady: () => void }) {
       </div>
       <NodeInstall
         open={open}
+        purpose="publish"
         onReady={() => {
           setOpen(false);
           onReady();
@@ -157,7 +160,13 @@ function Publisher({
   onStatusChange,
   onRestore,
   onDomains,
-}: PublishPanelProps & { status: PublishStatus; onRestore: () => void; onDomains: () => void }) {
+  onUpgrade,
+}: PublishPanelProps & {
+  status: PublishStatus;
+  onRestore: () => void;
+  onDomains: () => void;
+  onUpgrade: () => void;
+}) {
   const { locale } = useLocale();
   const cloud = useCloudStatus().data;
   const map = useProductMap(cwd);
@@ -211,6 +220,7 @@ function Publisher({
           state={state}
           fix={fix}
           onAgain={() => flow.prepare(locale)}
+          onUpgrade={onUpgrade}
           onSignedIn={() => {
             onStatusChange();
             flow.prepare(locale);
@@ -341,20 +351,28 @@ function Published({
 /** The last lines of a failed build, as the server sent them. */
 const buildTail = (message: string) => message.split('\n').slice(-40).join('\n');
 
+/** Failures trying again cannot fix: the plan's limits (Pro) and an app too old for the API (an update). */
+const NEEDS_PRO = new Set(['payment_required', 'limit_reached']);
+
 function Failed({
   state,
   fix,
   onAgain,
+  onUpgrade,
   onSignedIn,
 }: {
   state: Extract<PublishState, { status: 'failed' }>;
   fix: FixAction;
   onAgain: () => void;
+  /** Shows the plans, for a failure only Pro gets past. */
+  onUpgrade: () => void;
   onSignedIn: () => void;
 }) {
   const t = useMessages(messages);
   const { failure, during } = state;
   if (failure.reason === 'signed_out') return <AlpineSignIn reason={t.signInReason} onDone={onSignedIn} />;
+  const pro = !!failure.reason && NEEDS_PRO.has(failure.reason);
+  const update = failure.reason === 'update_required';
 
   const build = failure.reason === 'build_failed';
   const known = (failure.reason && t.failure(failure.reason)) || undefined;
@@ -382,15 +400,84 @@ function Failed({
           {t.fixFailed}
         </p>
       )}
+      {update ? (
+        <UpdateApp />
+      ) : (
+        <div className="flex justify-end gap-2">
+          <Button onClick={onAgain}>{t.again}</Button>
+          {pro && (
+            <Button variant="primary" onClick={onUpgrade}>
+              {t.seePro}
+            </Button>
+          )}
+          {build && fix.send && (
+            <Button
+              variant="primary"
+              disabled={fix.sending}
+              onClick={() => fix.send?.(t.buildFixMessage(buildTail(failure.message)))}
+            >
+              {t.fixWithAi}
+            </Button>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
+/**
+ * An app too old to publish: it looks for the new version here and restarts into it, which stops the AI's work, so
+ * while the AI works it says so first.
+ */
+function UpdateApp() {
+  const t = useMessages(messages);
+  const downloaded = useUpdateReady();
+  const working = (useSessions().data ?? []).some(
+    (s) => !s.archived && (s.status === 'running' || s.status === 'waiting'),
+  );
+  const [check, setCheck] = useState<'idle' | 'checking' | 'newest' | 'failed'>('idle');
+  const [found, setFound] = useState<string | null>(null);
+  const [restartFailed, setRestartFailed] = useState(false);
+  const version = found ?? downloaded;
+  const look = () => {
+    setCheck('checking');
+    void checkForUpdate().then((result) => {
+      if (result.kind === 'ready') {
+        setFound(result.version);
+        setCheck('idle');
+      } else setCheck(result.kind);
+    });
+  };
+  const note = restartFailed
+    ? t.restartFailed
+    : version
+      ? `${t.updateReady(version)}${working ? ` ${t.updateStopsWork}` : ''}`
+      : check === 'newest'
+        ? t.updateNewest
+        : check === 'failed'
+          ? t.updateCheckFailed
+          : null;
+  return (
+    <>
+      {note && (
+        <p role="status" className={restartFailed ? 'text-meta text-danger' : 'text-meta text-fg-muted'}>
+          {note}
+        </p>
+      )}
       <div className="flex justify-end gap-2">
-        <Button onClick={onAgain}>{t.again}</Button>
-        {build && fix.send && (
+        {version ? (
           <Button
             variant="primary"
-            disabled={fix.sending}
-            onClick={() => fix.send?.(t.buildFixMessage(buildTail(failure.message)))}
+            onClick={() => {
+              setRestartFailed(false);
+              restartToUpdate().catch(() => setRestartFailed(true));
+            }}
           >
-            {t.fixWithAi}
+            {working ? t.restartStopping : t.restartToUpdate}
+          </Button>
+        ) : (
+          <Button variant="primary" disabled={check === 'checking'} onClick={look}>
+            {check === 'checking' ? t.checkingUpdate : t.checkUpdate}
           </Button>
         )}
       </div>

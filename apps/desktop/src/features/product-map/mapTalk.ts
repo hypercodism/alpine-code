@@ -87,7 +87,10 @@ export function useLaterWords(cwd: string) {
     add: (to: string | null, text: string, node?: string) =>
       change((current) => [...current, { id: `${Date.now()}-${current.length}`, to, text, ...(node ? { node } : {}) }]),
     drop: (id: string) => change((current) => current.filter((word) => word.id !== id)),
-    fail: (id: string, failed: boolean) =>
-      change((current) => current.map((word) => (word.id === id ? { ...word, failed } : word))),
+    /** Marks words as failed (or to be sent again); `to` is where they failed, when they went somewhere else. */
+    fail: (id: string, failed: boolean, to?: string) =>
+      change((current) =>
+        current.map((word) => (word.id === id ? { ...word, failed, ...(to !== undefined ? { to } : {}) } : word)),
+      ),
   };
 }

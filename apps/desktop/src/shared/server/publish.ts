@@ -21,11 +21,12 @@ const restoreKey = (cwd: string) => ['publish', 'restore-points', cwd] as const;
  * Whether the project can go online, and what is waiting (`publish/status`). It builds nothing and asks the API for
  * little, so it is polled slowly to keep the top bar's dot true while the AI changes files.
  */
-export function usePublishStatus(cwd: string) {
+export function usePublishStatus(cwd: string, enabled = true) {
   const server = useServer();
   return useQuery({
     queryKey: publishStatusKey(cwd),
     queryFn: () => server.request('publish/status', { cwd }),
+    enabled,
     refetchInterval: 15_000,
     refetchIntervalInBackground: false,
     retry: false,

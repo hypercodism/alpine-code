@@ -8,6 +8,8 @@ from alpine_protocol.dev_servers import (
     DevServersListResult,
     DevServersLogsParams,
     DevServersLogsResult,
+    DevServersOpenParams,
+    DevServersOpenResult,
     DevServersRestartParams,
     DevServersRestartResult,
     DevServersStartParams,
@@ -24,7 +26,8 @@ class DevelopmentServers:
         self.manager = DevelopmentServerManager()
 
     def handlers(self) -> dict[str, Callable[[Any], Awaitable[Any]]]:
-        return {"devServers/list": self.list, "devServers/start": self.start, "devServers/stop": self.stop,
+        return {"devServers/list": self.list, "devServers/start": self.start,
+                "devServers/open": self.open, "devServers/stop": self.stop,
                 "devServers/restart": self.restart, "devServers/logs": self.logs}
 
     async def list(self, params: DevServersListParams) -> DevServersListResult:
@@ -33,6 +36,12 @@ class DevelopmentServers:
     async def start(self, params: DevServersStartParams) -> DevServersStartResult:
         try:
             return DevServersStartResult(**await self.manager.start(**params.model_dump()))
+        except (OSError, ValueError) as exc:
+            raise MethodError(APP_ERROR, str(exc)) from exc
+
+    async def open(self, params: DevServersOpenParams) -> DevServersOpenResult:
+        try:
+            return DevServersOpenResult(**await self.manager.open(params.cwd, session_id=params.session_id))
         except (OSError, ValueError) as exc:
             raise MethodError(APP_ERROR, str(exc)) from exc
 

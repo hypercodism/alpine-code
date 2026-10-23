@@ -1,4 +1,4 @@
-import type { DevServersStartParams } from '@alpine/protocol';
+import type { DevServersOpenParams, DevServersStartParams } from '@alpine/protocol';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useServer } from './context';
@@ -22,6 +22,10 @@ export function useDevelopmentServerActions() {
   return {
     start: useMutation({
       mutationFn: (params: DevServersStartParams) => server.request('devServers/start', params),
+      onSuccess: refresh,
+    }),
+    open: useMutation({
+      mutationFn: (params: DevServersOpenParams) => server.request('devServers/open', params),
       onSuccess: refresh,
     }),
     stop: useMutation({

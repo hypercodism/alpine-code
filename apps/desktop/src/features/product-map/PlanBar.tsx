@@ -73,6 +73,7 @@ export function PlanBar({
   onNextReview,
   onReviewPicks,
   onOpenApp,
+  onPublish,
   onTeam,
   onContinue,
   onFixConnection,
@@ -113,6 +114,8 @@ export function PlanBar({
   onNextReview: () => void;
   onReviewPicks: () => void;
   onOpenApp: () => void;
+  /** Puts the app online (Alpine Cloud); absent when there is nowhere to put it. */
+  onPublish?: () => void;
   onTeam: (answer: PlanTeamAnswer) => void;
   /** Continues a build that stopped with cards left. */
   onContinue: () => void;
@@ -262,6 +265,7 @@ export function PlanBar({
             )}
           </p>
         </div>
+        {onPublish && <Button onClick={onPublish}>{t.publish}</Button>}
         <Button variant="primary" onClick={onOpenApp}>
           {t.openApp}
         </Button>

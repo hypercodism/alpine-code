@@ -2,6 +2,7 @@
 //! built by the frontend (`src/app/useAppMenu.ts`) so it follows the app's language and routes.
 //! Screens and the protocol live in the frontend (`../src`); this crate does not read protocol messages.
 
+mod quit;
 mod server;
 mod update;
 
@@ -24,14 +25,18 @@ pub fn run() {
             let server = server::Server::start(app.handle())?;
             app.manage(server);
             app.manage(update::Updates::default());
+            app.manage(quit::Working::default());
             if cfg!(not(debug_assertions)) {
                 app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
                 update::download_in_background(app.handle());
             }
             Ok(())
         })
+        .on_window_event(quit::on_window_event)
         .invoke_handler(tauri::generate_handler![
             server::server_send,
+            quit::quit_guard,
+            quit::quit,
             update::update_ready,
             update::update_check,
             update::update_restart

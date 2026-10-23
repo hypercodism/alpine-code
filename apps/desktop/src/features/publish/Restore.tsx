@@ -14,11 +14,14 @@ import { messages } from './messages';
  */
 export function Restore({
   cwd,
+  back,
   onBack,
   onClose,
   onUpgrade,
 }: {
   cwd: string;
+  /** Where 뒤로 goes, when it is not the 올리기 sheet (the data). */
+  back?: string;
   onBack: () => void;
   onClose: () => void;
   /** Pro reaches further back; the sheet shows the plans. */
@@ -59,11 +62,24 @@ export function Restore({
       <div className="flex flex-col gap-1">
         <LinkButton className="-ml-1 self-start" onClick={onBack}>
           <ArrowLeft aria-hidden="true" size={14} strokeWidth={1.75} className="mr-1" />
-          {t.restoreBack}
+          {back ?? t.restoreBack}
         </LinkButton>
         <h2 className="text-title">{t.restoreTitle}</h2>
         <p className="text-body text-fg-muted">{t.restoreLead}</p>
       </div>
+      {points.isPending && (
+        <p role="status" className="text-body text-fg-muted">
+          {t.restoreLoading}
+        </p>
+      )}
+      {points.isError && (
+        <p role="alert" className="flex flex-wrap items-baseline gap-x-2 text-body text-fg-muted">
+          {t.restoreLoadFailed}
+          <LinkButton className="min-h-5 px-0.5" onClick={() => void points.refetch()}>
+            {t.retry}
+          </LinkButton>
+        </p>
+      )}
       {points.isSuccess && list.length === 0 && <p className="text-body text-fg-muted">{t.restoreEmpty}</p>}
       {list.length > 0 && (
         <ul role="radiogroup" aria-label={t.restoreTitle} className="flex flex-col gap-1">
@@ -106,20 +122,22 @@ export function Restore({
           {t.restoreFailed}
         </p>
       )}
-      <div className="flex items-center justify-end gap-3">
-        {restore.isPending && (
-          <span role="status" className="text-meta text-fg-muted">
-            {t.restoring}
-          </span>
-        )}
-        <Button
-          variant="primary"
-          disabled={!chosen || restore.isPending}
-          onClick={() => chosen && restore.mutate(chosen)}
-        >
-          {t.restoreDo}
-        </Button>
-      </div>
+      {list.length > 0 && (
+        <div className="flex items-center justify-end gap-3">
+          {restore.isPending && (
+            <span role="status" className="text-meta text-fg-muted">
+              {t.restoring}
+            </span>
+          )}
+          <Button
+            variant="primary"
+            disabled={!chosen || restore.isPending}
+            onClick={() => chosen && restore.mutate(chosen)}
+          >
+            {t.restoreDo}
+          </Button>
+        </div>
+      )}
     </>
   );
 }

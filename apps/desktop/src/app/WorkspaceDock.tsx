@@ -1,6 +1,6 @@
 import { useNavigate } from '@tanstack/react-router';
 import { Database, Diff, Folder, Globe, LayoutList, ListChecks, SquareTerminal } from 'lucide-react';
-import { type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { DataPanel } from '@/features/data/DataPanel';
@@ -8,9 +8,11 @@ import { DevelopmentServers } from '@/features/development-servers';
 import { DockLayout, type DockTab } from '@/features/dock/Dock';
 import { showDockTab, useDockOpen } from '@/features/dock/state';
 import { MiniMap } from '@/features/product-map/MiniMap';
+import { Restore } from '@/features/publish/Restore';
 import { FileViewer } from '@/features/file-viewer';
 import { ProcessControl } from '@/features/process-control';
 import { Terminal } from '@/features/terminal';
+import { UpgradeSheet } from '@/shared/components/cloud';
 import { FileNavigationProvider } from '@/shared/files';
 import { useMessages } from '@/shared/i18n';
 import { useCloudEnabled, useDataSources } from '@/shared/server';
@@ -31,8 +33,10 @@ export function WorkspaceDock({
   sessionId,
   scope,
   summary,
+  summaryLabel,
   changes,
   showMap = true,
+  onAskFix,
   children,
 }: {
   cwd: string;
@@ -40,10 +44,14 @@ export function WorkspaceDock({
   scope: string;
   /** What 요약 shows on this page. */
   summary: ReactNode;
+  /** The first tab's name where it is not a summary (on the map it is the map's conversation: 대화). */
+  summaryLabel?: string;
   /** The 변경 사항 tab (the work result), which stays mounted. */
   changes: DockTab;
   /** False on the map itself, where a small copy of it would only repeat the page. */
   showMap?: boolean;
+  /** Where the 미리보기 sends what went wrong when the app would not open, for the AI to fix (the map's page). */
+  onAskFix?: (text: string) => void;
   children: ReactNode;
 }) {
   const t = useMessages(messages);
@@ -68,7 +76,14 @@ export function WorkspaceDock({
           ) : undefined
         }
         tabs={[
-          { id: SUMMARY_TAB, label: t.summary, icon: LayoutList, divider: true, bare: true, content: summary },
+          {
+            id: SUMMARY_TAB,
+            label: summaryLabel ?? t.summary,
+            icon: LayoutList,
+            divider: true,
+            bare: true,
+            content: summary,
+          },
           {
             id: 'terminal',
             label: t.terminal,
@@ -89,7 +104,7 @@ export function WorkspaceDock({
             label: t.preview,
             icon: Globe,
             bare: true,
-            content: <DevelopmentServers key={cwd} cwd={cwd} sessionId={sessionId} />,
+            content: <DevelopmentServers key={cwd} cwd={cwd} sessionId={sessionId} onAskFix={onAskFix} />,
           },
           { id: 'source', label: t.source, icon: Folder, content: <FileViewer /> },
           ...(hasData
@@ -100,7 +115,7 @@ export function WorkspaceDock({
                   icon: Database,
                   more: true,
                   bare: true,
-                  content: <DataPanel key={cwd} cwd={cwd} />,
+                  content: <DataPlace key={cwd} cwd={cwd} />,
                 },
               ]
             : []),
@@ -127,5 +142,30 @@ export function WorkspaceDock({
         {children}
       </DockLayout>
     </FileNavigationProvider>
+  );
+}
+
+/**
+ * The 데이터 place: the data, and from the live data its restore points (the same view as in the 올리기 sheet), so the
+ * points its read-only note promises are one press away; Pro's longer window opens the plans.
+ */
+function DataPlace({ cwd }: { cwd: string }) {
+  const t = useMessages(messages);
+  const [view, setView] = useState<'data' | 'restore' | 'upgrade'>('data');
+  if (view === 'data') return <DataPanel cwd={cwd} onRestorePoints={() => setView('restore')} />;
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4">
+      {view === 'restore' ? (
+        <Restore
+          cwd={cwd}
+          back={t.data}
+          onBack={() => setView('data')}
+          onClose={() => setView('data')}
+          onUpgrade={() => setView('upgrade')}
+        />
+      ) : (
+        <UpgradeSheet onBack={() => setView('restore')} onDone={() => setView('restore')} />
+      )}
+    </div>
   );
 }
