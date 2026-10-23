@@ -13,7 +13,7 @@ import { Workshop } from './Workshop';
 
 /**
  * A TF in the chat, through its life (decisions 4-6): the proposal with 시작 / 혼자 하기, then a small room with the
- * script's latest line, how many wait for an approval, 에이전트 보기 and 멈추기; the question when the script wants
+ * script's latest line, how many wait for an approval, AI 팀 보기 and 멈추기; the question when the script wants
  * more agents than planned; 이어 하기 after the app closed mid-run; and how it ended.
  */
 export function TaskForceCard({

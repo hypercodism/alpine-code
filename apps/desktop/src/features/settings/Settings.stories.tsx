@@ -74,7 +74,7 @@ export const GeneralAuto: Story = {
   },
   play: async () => {
     await expect(
-      await screen.findByRole('button', { name: /확인 모델 바꾸기|Change the checking model/ }),
+      await screen.findByRole('button', { name: /승인 검토 모델 바꾸기|Change the checking model/ }),
     ).toBeVisible();
   },
 };
@@ -136,7 +136,7 @@ export const AddProvider: Story = {
   args: { tab: 'connection' },
   parameters: { server: firstRunScript() },
   play: async () => {
-    await userEvent.click(await screen.findByRole('button', { name: /공급자 추가|Add provider/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /연결 추가|Add provider/ }));
     const dialog = await screen.findByRole('dialog');
     await expect(within(dialog).getByRole('button', { name: /ChatGPT/ })).toBeVisible();
     await userEvent.click(within(dialog).getByRole('button', { name: /API 키|API key/ }));
