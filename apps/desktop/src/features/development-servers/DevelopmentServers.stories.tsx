@@ -27,6 +27,7 @@ const meta = {
           total: 65,
         }),
         'devServers/start': { server },
+        'devServers/open': { server },
         'devServers/stop': { server: { ...server, status: 'stopped', url: null } },
         'devServers/restart': { server },
       },
@@ -37,6 +38,10 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 export const Running: Story = {};
 export const Empty: Story = { parameters: { server: { results: { 'devServers/list': { servers: [] } } } } };
+/** Nothing in the project says how it runs: 앱 열기 leaves the command to 고급. */
+export const Unknown: Story = {
+  parameters: { server: { results: { 'devServers/list': { servers: [] }, 'devServers/open': { server: null } } } },
+};
 export const PortConflict: Story = {
   parameters: {
     server: {

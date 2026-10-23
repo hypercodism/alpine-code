@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import re
+import shlex
 import shutil
 import socket
+import sys
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -73,6 +76,40 @@ def _loopback_ports(process: Any) -> list[int]:
     return list(dict.fromkeys(int(value) for value in reversed(values) if 1 <= int(value) <= 65535))
 
 
+#: The package.json scripts a Node.js project is run with while developing, in the order they are tried.
+_NODE_SCRIPTS = ("dev", "start")
+
+#: The package manager a project uses, by its lockfile; npm when there is none.
+_LOCKFILES = (("pnpm-lock.yaml", "pnpm"), ("yarn.lock", "yarn"), ("bun.lock", "bun"), ("bun.lockb", "bun"))
+
+#: How many ports after the first one a project's server may take, when the first is in use.
+_PORT_TRIES = 50
+
+
+def how_to_run(project: Path) -> tuple[str, int] | None:
+    """How a project runs while developing, as a person would start it at a terminal, and the port to try first: its
+    package.json's ``dev`` (else ``start``) script with the package manager its lockfile names, installing first when
+    nothing is installed yet; else a folder with an ``index.html`` is served as it is. ``{port}`` in the command is the
+    port it gets; a Node.js server is given ``PORT`` instead, and Vite, which ignores it, says in its output where it
+    went. ``None`` when nothing says how."""
+    package = project / "package.json"
+    if package.is_file():
+        try:
+            scripts = json.loads(package.read_text(encoding="utf-8")).get("scripts")
+        except (OSError, ValueError, AttributeError):
+            scripts = None
+        name = next((n for n in _NODE_SCRIPTS if isinstance(scripts, dict) and isinstance(scripts.get(n), str)), None)
+        if name:
+            tool = next((tool for lockfile, tool in _LOCKFILES if (project / lockfile).exists()), "npm")
+            run = f"{tool} run {name}"
+            if not (project / "node_modules").is_dir():
+                run = f"{tool} install && {run}"
+            return run, 5173 if "vite" in scripts[name] else 3000
+    if (project / "index.html").is_file():
+        return f"{shlex.quote(sys.executable)} -u -m http.server {{port}} --bind 127.0.0.1", 8000
+    return None
+
+
 @dataclass
 class DevelopmentServer:
     id: str
@@ -134,36 +171,67 @@ class DevelopmentServerManager:
             raise ValueError("Choose a project folder and a server command")
         async with self._lock:
             await self._discover(str(project))
-            # A second click or another session must not duplicate a managed process that is still starting.
-            for existing in self.servers.values():
-                if existing.cwd == str(project) and (existing.port == port or existing.requested_port == port):
-                    current = await existing.snapshot()
-                    if current["status"] in {"starting", "running", "stopping"}:
+            return await self._start(project, command, port, session_id=session_id, reuse=reuse)
+
+    async def open(self, cwd: str, *, session_id: str | None = None) -> dict[str, Any]:
+        """The project's app, running: the server it already has (one the agent or a terminal started counts), else one
+        started the way the project runs (``how_to_run``) on a free port. No server when nothing says how."""
+        project = Path(cwd).expanduser().resolve(strict=True)
+        if not project.is_dir():
+            raise ValueError("Choose a project folder")
+        async with self._lock:
+            await self._discover(str(project))
+            for server in reversed(list(self.servers.values())):
+                if server.cwd == str(project):
+                    current = await server.snapshot()
+                    if current["status"] in {"starting", "running"}:
                         return {"server": current}
-            conflict = await listener(port)
-            if conflict:
-                conflict["can_reuse"] = conflict["cwd"] is not None and Path(conflict["cwd"]).resolve() == project
-                if not reuse or not conflict["can_reuse"]:
-                    return {"conflict": conflict}
-                server = DevelopmentServer(
-                    uuid.uuid4().hex, str(project), command, port, external=True, external_pid=conflict["pid"]
-                )
-            else:
-                # PORT is supplied for servers that support it; explicit CLI flags still take precedence.
-                process = await process_manager().start(
-                    f"PORT={port} {command}", project, session_id=session_id, title=f"Dev server :{port}"
-                )
-                server = DevelopmentServer(
-                    uuid.uuid4().hex,
-                    str(project),
-                    command,
-                    port,
-                    process_id=process.id,
-                    session_id=session_id,
-                    requested_port=port,
-                )
-            self.servers[server.id] = server
-            return {"server": await server.snapshot()}
+            how = how_to_run(project)
+            if how is None:
+                return {"server": None}
+            command, first = how
+            taken = {server.requested_port for server in self.servers.values()}
+            port = first
+            for candidate in range(first, first + _PORT_TRIES):
+                if candidate not in taken and not await listener(candidate):
+                    port = candidate
+                    break
+            return await self._start(project, command.replace("{port}", str(port)), port, session_id=session_id)
+
+    async def _start(
+        self, project: Path, command: str, port: int, *, session_id: str | None = None, reuse: bool = False
+    ) -> dict[str, Any]:
+        """Starts (or reuses) a server; the caller holds the lock."""
+        # A second click or another session must not duplicate a managed process that is still starting.
+        for existing in self.servers.values():
+            if existing.cwd == str(project) and (existing.port == port or existing.requested_port == port):
+                current = await existing.snapshot()
+                if current["status"] in {"starting", "running", "stopping"}:
+                    return {"server": current}
+        conflict = await listener(port)
+        if conflict:
+            conflict["can_reuse"] = conflict["cwd"] is not None and Path(conflict["cwd"]).resolve() == project
+            if not reuse or not conflict["can_reuse"]:
+                return {"conflict": conflict}
+            server = DevelopmentServer(
+                uuid.uuid4().hex, str(project), command, port, external=True, external_pid=conflict["pid"]
+            )
+        else:
+            # PORT is supplied for servers that support it; explicit CLI flags still take precedence.
+            process = await process_manager().start(
+                f"PORT={port} {command}", project, session_id=session_id, title=f"Dev server :{port}"
+            )
+            server = DevelopmentServer(
+                uuid.uuid4().hex,
+                str(project),
+                command,
+                port,
+                process_id=process.id,
+                session_id=session_id,
+                requested_port=port,
+            )
+        self.servers[server.id] = server
+        return {"server": await server.snapshot()}
 
     async def _discover(self, project: str) -> None:
         """Adopt agent/terminal-launched servers only after verifying their listening process group."""

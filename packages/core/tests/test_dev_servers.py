@@ -5,7 +5,7 @@ import socket
 import sys
 from pathlib import Path
 
-from alpine_core.dev_servers import DevelopmentServerManager, listener
+from alpine_core.dev_servers import DevelopmentServerManager, how_to_run, listener
 from alpine_core.processes import process_manager
 
 
@@ -147,5 +147,46 @@ def test_discovers_agent_launched_server_and_can_stop_it(tmp_path: Path):
         finally:
             outside.terminate()
             await outside.wait()
+            await process_manager().shutdown()
+    asyncio.run(check())
+
+
+def test_how_to_run_follows_the_project(tmp_path: Path):
+    assert how_to_run(tmp_path) is None
+    (tmp_path / "index.html").write_text("<h1>hi</h1>")
+    command, port = how_to_run(tmp_path)
+    assert "http.server {port}" in command and port == 8000
+    (tmp_path / "package.json").write_text('{"scripts": {"dev": "vite", "build": "vite build"}}')
+    assert how_to_run(tmp_path) == ("npm install && npm run dev", 5173)
+    (tmp_path / "node_modules").mkdir()
+    (tmp_path / "pnpm-lock.yaml").write_text("")
+    assert how_to_run(tmp_path) == ("pnpm run dev", 5173)
+    (tmp_path / "package.json").write_text('{"scripts": {"start": "next start"}}')
+    assert how_to_run(tmp_path) == ("pnpm run start", 3000)
+    (tmp_path / "package.json").write_text("not json")
+    assert how_to_run(tmp_path)[1] == 8000
+
+
+def test_open_starts_the_project_once_and_shows_what_runs(tmp_path: Path):
+    async def check():
+        manager = DevelopmentServerManager()
+        assert await manager.open(str(tmp_path)) == {"server": None}
+        (tmp_path / "index.html").write_text("<h1>hi</h1>")
+        # The first port to try is in use by someone else: the next free one is taken.
+        busy = socket.socket()
+        try:
+            busy.bind(("127.0.0.1", 8000))
+            busy.listen()
+        except OSError:
+            pass  # Something here already listens on it.
+        try:
+            opened = (await manager.open(str(tmp_path)))["server"]
+            assert opened["port"] != 8000
+            await ready(opened["port"])
+            again = (await manager.open(str(tmp_path)))["server"]
+            assert again["id"] == opened["id"] and again["status"] == "running"
+            assert again["url"] == f"http://localhost:{opened['port']}"
+        finally:
+            busy.close()
             await process_manager().shutdown()
     asyncio.run(check())

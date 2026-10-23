@@ -2,6 +2,7 @@ import { LinkButton } from '@alpine/ui/primitives';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 
 import { SUMMARY_TAB, WorkspaceDock } from '@/app/WorkspaceDock';
+import { openApp } from '@/features/development-servers';
 import { messages as dockMessages } from '@/features/dock/messages';
 import { showDockTab, useDockExpanded, useDockOpen } from '@/features/dock/state';
 import { useMapTalk } from '@/features/product-map/mapTalk';
@@ -83,7 +84,11 @@ function BoardRoute() {
         hidden={expanded}
         demo={!('__TAURI_INTERNALS__' in window)}
         onShowConversation={() => showDockTab(SUMMARY_TAB)}
-        onOpenApp={() => showDockTab('servers')}
+        // The app opens itself: the preview starts the project's server and shows it (no command to type).
+        onOpenApp={() => {
+          openApp(project.path);
+          showDockTab('servers');
+        }}
         onFixConnection={() => void navigate({ to: '/settings', search: { tab: 'connection' } })}
         onNewHere={(folder) => void navigate({ to: '/', search: { folder } })}
         // An empty id lets go of the session (the map started over).

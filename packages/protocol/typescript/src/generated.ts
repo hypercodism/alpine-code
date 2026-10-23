@@ -916,6 +916,23 @@ export interface DevServersLogsResult {
   total: number;
 }
 /**
+ * The project's app, running: the server it has, else one Alpine starts the way the project runs.
+ *
+ * This interface was referenced by `AlpineProtocol`'s JSON-Schema
+ * via the `definition` "DevServersOpenParams".
+ */
+export interface DevServersOpenParams {
+  cwd: string;
+  sessionId?: string | null;
+}
+/**
+ * This interface was referenced by `AlpineProtocol`'s JSON-Schema
+ * via the `definition` "DevServersOpenResult".
+ */
+export interface DevServersOpenResult {
+  server?: DevServerInfo | null;
+}
+/**
  * This interface was referenced by `AlpineProtocol`'s JSON-Schema
  * via the `definition` "DevServersRestartParams".
  */
@@ -4805,6 +4822,7 @@ export interface Methods {
   'projects/installNodeTools': { params: ProjectsInstallNodeToolsParams; result: ProjectsInstallNodeToolsResult };
   'devServers/list': { params: DevServersListParams; result: DevServersListResult };
   'devServers/start': { params: DevServersStartParams; result: DevServersStartResult };
+  'devServers/open': { params: DevServersOpenParams; result: DevServersOpenResult };
   'devServers/stop': { params: DevServersStopParams; result: DevServersStopResult };
   'devServers/restart': { params: DevServersRestartParams; result: DevServersRestartResult };
   'devServers/logs': { params: DevServersLogsParams; result: DevServersLogsResult };

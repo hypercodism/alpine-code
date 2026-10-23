@@ -46,6 +46,18 @@ class DevServersStartResult(Message):
     conflict: DevServerConflict | None = None
 
 
+class DevServersOpenParams(Message):
+    """The project's app, running: the server it has, else one Alpine starts the way the project runs."""
+
+    cwd: str
+    session_id: str | None = None
+
+
+class DevServersOpenResult(Message):
+    server: DevServerInfo | None = None
+    """``None`` when nothing in the project says how it runs; the app then asks for the command."""
+
+
 class DevServersStopParams(Message):
     id: str
 
@@ -77,6 +89,7 @@ class DevServersLogsResult(Message):
 DEV_SERVER_METHODS = {
     "devServers/list": (DevServersListParams, DevServersListResult),
     "devServers/start": (DevServersStartParams, DevServersStartResult),
+    "devServers/open": (DevServersOpenParams, DevServersOpenResult),
     "devServers/stop": (DevServersStopParams, DevServersStopResult),
     "devServers/restart": (DevServersRestartParams, DevServersRestartResult),
     "devServers/logs": (DevServersLogsParams, DevServersLogsResult),

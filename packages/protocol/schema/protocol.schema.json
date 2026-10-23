@@ -135,6 +135,10 @@
       "params": "DevServersStartParams",
       "result": "DevServersStartResult"
     },
+    "devServers/open": {
+      "params": "DevServersOpenParams",
+      "result": "DevServersOpenResult"
+    },
     "devServers/stop": {
       "params": "DevServersStopParams",
       "result": "DevServersStopResult"
@@ -2887,6 +2891,47 @@
         "total"
       ],
       "title": "DevServersLogsResult",
+      "type": "object"
+    },
+    "DevServersOpenParams": {
+      "description": "The project's app, running: the server it has, else one Alpine starts the way the project runs.",
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "sessionId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "cwd"
+      ],
+      "title": "DevServersOpenParams",
+      "type": "object"
+    },
+    "DevServersOpenResult": {
+      "properties": {
+        "server": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DevServerInfo"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "DevServersOpenResult",
       "type": "object"
     },
     "DevServersRestartParams": {

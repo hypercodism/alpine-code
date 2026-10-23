@@ -17,6 +17,8 @@ import {
   type ServerConnection,
 } from '@/shared/server';
 
+import { devServersScript } from '@/shared/server/devServersScript';
+
 import { Providers } from './providers';
 import { routeTree } from './routeTree.gen';
 
@@ -49,6 +51,7 @@ function connect(): ServerConnection {
       mergeScripts(
         chatScript({ stepMs: 400, wordMs: 80, sessions, newProject: demo.newProject }),
         flowScript(map),
+        devServersScript(),
         demo.cloudOff ? cloudScript({ enabled: false }) : {},
       ),
     ),
