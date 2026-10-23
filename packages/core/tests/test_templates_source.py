@@ -113,8 +113,28 @@ def test_a_day_old_copy_serves_at_once_and_a_newer_one_is_fetched_behind_it(tmp_
     assert templates.ensure_templates() == ["blank"]  # nobody waits for the network
     _refreshed()
     assert templates.ensure_templates() == ["blank", "web-lite"]
-    assert not old.exists()  # only the newest copy is kept
-    assert [p.name for p in (templates.home_dir() / "templates").iterdir()] == [templates.fetched_templates().name]
+    # The copy that served until now stays (a new project may be copying from it); the next fetch removes it.
+    assert old.exists() and templates.fetched_templates() != old
+    _day_old(templates.fetched_templates())
+    _public(tmp_path, "web-pro")
+    monkeypatch.setattr(templates, "_refresh_started", 0.0)
+    templates.ensure_templates()
+    _refreshed()
+    assert not old.exists()
+    assert len(list((templates.home_dir() / "templates").iterdir())) == 2
+
+
+def test_a_project_made_from_the_copy_that_is_being_replaced_is_made(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setattr(templates, "TEMPLATES_REPO", _public(tmp_path, "blank"))
+    templates.ensure_templates()
+    source = templates.templates_dir()
+    _public(tmp_path, "web-lite")
+    # The newer copy lands while a creation has already picked the older one.
+    monkeypatch.setattr(templates, "templates_dir", lambda: source)
+    templates.fetch_templates()
+    folder = templates.create_project("blank", tmp_path / "projects", "app")
+    assert (folder / "AGENTS.md").read_text() == "# blank\n"
 
 
 def test_a_failed_fetch_behind_a_copy_keeps_it_and_waits_before_trying_again(tmp_path, monkeypatch):
