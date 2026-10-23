@@ -17,7 +17,7 @@ from alpine_server.sessions import SessionManager
 @pytest.fixture(autouse=True)
 def home(tmp_path, monkeypatch):
     monkeypatch.setenv("ALPINE_CODE_HOME", str(tmp_path / "home"))
-    monkeypatch.delenv("ALPINE_CLOUD_URL", raising=False)
+    monkeypatch.setenv("ALPINE_CLOUD_URL", "")  # turned off
 
 
 def sources(tmp_path: Path):

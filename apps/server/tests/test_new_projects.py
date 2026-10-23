@@ -231,6 +231,39 @@ def test_a_project_starts_in_an_empty_folder_the_person_made(monkeypatch, tmp_pa
     run(scenario())
 
 
+def test_an_empty_git_repository_counts_as_an_empty_folder_and_keeps_its_remote(monkeypatch, tmp_path):
+    cloned = tmp_path / "from-github"
+    cloned.mkdir()
+    git(cloned, "init", "-q")
+    git(cloned, "remote", "add", "origin", "https://github.com/me/from-github.git")
+
+    async def scenario():
+        harness = Harness(monkeypatch, "ok")
+        result = await harness.create(folder=str(cloned), name="ignored")
+        assert (cloned / "package.json").exists()
+        assert git(cloned, "remote", "get-url", "origin").strip() == "https://github.com/me/from-github.git"
+        assert "Start from the web-lite template" in git(cloned, "log", "--format=%s")
+        await harness.items(result.session_id)
+        await harness.close()
+
+    run(scenario())
+
+
+def test_with_no_templates_to_be_had_nothing_is_made_and_the_reason_is_said(monkeypatch, repos, tmp_path):
+    monkeypatch.delenv("ALPINE_TEMPLATES")
+    monkeypatch.setenv("HOME", str(tmp_path / "user"))
+    monkeypatch.setattr(templates_module, "TEMPLATES_REPO", "http://127.0.0.1:9/alpine-templates.git")
+
+    async def scenario():
+        harness = Harness(monkeypatch, "ok")
+        with pytest.raises(MethodError) as refused:
+            await harness.create()
+        assert refused.value.data.reason == "unreachable" and harness.changes == []
+        assert not repos.exists() or list(repos.iterdir()) == []
+
+    run(scenario())
+
+
 def test_a_folder_with_files_in_it_is_not_started_in(monkeypatch, tmp_path):
     theirs = tmp_path / "theirs"
     theirs.mkdir()
