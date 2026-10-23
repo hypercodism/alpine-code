@@ -19,9 +19,9 @@ import { messages } from './messages';
 
 const LANGUAGE_NAMES: Record<Locale, string> = { ko: '한국어', en: 'English' };
 
-export type SettingsTab = 'general' | 'connection' | 'usage' | 'harness';
+export type SettingsTab = 'general' | 'connection';
 
-/** One page with tabs: general, model connection, usage and harness. */
+/** One page with tabs: general and model connection. A tab comes when it has something to show. */
 export function Settings({
   tab = 'general',
   onChange,
@@ -41,14 +41,12 @@ export function Settings({
         <Tabs.List>
           <Tabs.Tab value="general">{t.general}</Tabs.Tab>
           <Tabs.Tab value="connection">{t.connection}</Tabs.Tab>
-          <Tabs.Tab value="usage">{t.usage}</Tabs.Tab>
-          <Tabs.Tab value="harness">{t.harness}</Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="general">
           <General onReviewModel={() => onChange({ tab: 'connection' })} />
         </Tabs.Panel>
         <Tabs.Panel value="connection">
-          <ConnectionTab />
+          <ConnectionTab onAlpineAccount={() => onChange({ tab: 'general' })} />
         </Tabs.Panel>
       </Tabs.Root>
     </div>
@@ -121,10 +119,13 @@ function General({ onReviewModel }: { onReviewModel: () => void }) {
       )}
       {settings && (
         <>
-          <dt className="text-fg-muted">{t.cloneFolder}</dt>
-          <dd className="flex min-w-0 items-center gap-2">
-            <span className="min-w-0 truncate font-mono text-meta">{tildePath(settings.cloneFolder, home)}</span>
-            <LinkButton onClick={() => void changeCloneFolder()}>{t.changeCloneFolder}</LinkButton>
+          <dt className="self-start pt-0.5 text-fg-muted">{t.cloneFolder}</dt>
+          <dd className="flex min-w-0 flex-col items-start gap-1">
+            <span className="flex max-w-full min-w-0 items-center gap-2">
+              <span className="min-w-0 truncate font-mono text-meta">{tildePath(settings.cloneFolder, home)}</span>
+              <LinkButton onClick={() => void changeCloneFolder()}>{t.changeCloneFolder}</LinkButton>
+            </span>
+            <p className="text-meta text-fg-muted">{t.cloneFolderLead}</p>
           </dd>
         </>
       )}

@@ -123,3 +123,23 @@ def test_declined_sign_in_and_sign_out(home, monkeypatch):
         await h.server.close()
 
     asyncio.run(run())
+
+
+def test_deleting_a_signed_in_account_signs_it_out_first(home, monkeypatch):
+    import alpine_core.chatgpt.connections as connections
+
+    revoked = []
+    monkeypatch.setattr(connections, "revoke", lambda account: revoked.append(account.refresh_token) or True)
+
+    async def run():
+        h = Harness()
+        await h.call("chatgpt/signIn")
+        h.started[0].outcome.set_result(account())
+        await asyncio.sleep(0.05)
+        assert (await h.call("connections/remove", {"connection": "chatgpt"}))["result"] == {"defaultModel": None}
+        assert revoked == ["rt"]
+        assert FileSecrets(home_dir() / "auth.json").get_oauth("chatgpt") is None
+        assert (await h.call("connections/list"))["result"]["connections"] == []
+        await h.server.close()
+
+    asyncio.run(run())
