@@ -74,6 +74,8 @@ const due = (lastRun?: string | null) => {
   return Number.isNaN(at) || Date.now() - at >= DAY;
 };
 type Lens = 'failed' | 'recheck' | 'changed' | null;
+/** What a folder may hold and still be empty, as the server's `EMPTY_ANYWAY` (alpine_core.templates). */
+const EMPTY_ANYWAY = new Set(['.DS_Store', '.git']);
 
 /**
  * A project's map: the people who use the product and the journeys they walk. One row above it searches the cards,
@@ -211,8 +213,9 @@ export function ProductMap({
     enabled: !!data && !data.exists,
     retry: false,
   });
-  // Hidden files alone (.git of a repository with nothing in it yet, .DS_Store) leave a folder empty.
-  const emptyFolder = !!rootFiles.data && rootFiles.data.entries.every((entry) => entry.name.startsWith('.'));
+  // Only what the server lets 새 프로젝트 start in counts as empty: .git (a repository with nothing in it yet) and
+  // .DS_Store. A folder with other hidden files (.env, .vscode) holds someone's project and is refused there.
+  const emptyFolder = !!rootFiles.data && rootFiles.data.entries.every((entry) => EMPTY_ANYWAY.has(entry.name));
   // Until the folder is read, it is neither empty nor a project to draw from (unless the AI already draws it).
   const checkingFolder = !!data && !data.exists && rootFiles.isPending && !workBusy && !busy;
   const locked = busy || anyActive || readOnly;

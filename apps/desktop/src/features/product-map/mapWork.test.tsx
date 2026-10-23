@@ -420,6 +420,32 @@ describe('a planned product on its map', () => {
 });
 
 describe('an empty folder (#79)', () => {
+  const folder = (...names: string[]): Script => ({
+    results: {
+      'files/list': {
+        entries: names.map((name) => ({ name, path: name, kind: 'file' as const })),
+        nextOffset: 0,
+        hasMore: false,
+      },
+    },
+  });
+  const nothing = {
+    revision: 'missing',
+    exists: false,
+    document: { nodes: [], flows: [], edges: [] },
+  } as FlowGetResult;
+
+  it('does not offer to start over a folder with other hidden files, which 새 프로젝트 would refuse', async () => {
+    mount(nothing, {}, folder('.git', '.env', '.vscode'));
+    expect(await screen.findByRole('textbox', { name: '지도에 부탁하기' })).toBeTruthy();
+    expect(screen.queryByText('빈 폴더예요')).toBeNull();
+  });
+
+  it('counts .git and .DS_Store alone as empty, as the server does', async () => {
+    mount(nothing, {}, folder('.git', '.DS_Store'));
+    expect(await screen.findByText('빈 폴더예요')).toBeTruthy();
+  });
+
   it('counts a folder with only hidden files (an empty repository) as empty', async () => {
     mount(
       { revision: 'missing', exists: false, document: { nodes: [], flows: [], edges: [] } } as FlowGetResult,
