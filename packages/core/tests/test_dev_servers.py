@@ -260,7 +260,8 @@ def test_port_reaches_every_step_of_the_command(tmp_path: Path):
 
 def test_a_server_that_never_listens_fails_instead_of_starting_for_ever(tmp_path: Path, monkeypatch):
     # Like a dev script that ignores PORT and says nothing: once quiet for QUIET_LIMIT it is stopped and failed, so the
-    # preview can offer the AI's fix. Output keeps it starting (a first install that takes a while).
+    # preview can offer the AI's fix. Output keeps it starting, and so does work without output (npm's first install
+    # prints nothing when its output is not a terminal).
     from alpine_core import dev_servers
 
     monkeypatch.setattr(dev_servers, "QUIET_LIMIT", 0.6)
@@ -273,9 +274,14 @@ def test_a_server_that_never_listens_fails_instead_of_starting_for_ever(tmp_path
             f"{shlex.quote(sys.executable)} -u -c "
             "'import time\nfor i in range(60):\n    print(i, flush=True); time.sleep(0.2)'"
         )
+        silent = (
+            f"{shlex.quote(sys.executable)} -u -c "
+            "'import time\nend = time.time() + 60\nwhile time.time() < end: sum(range(1000))'"
+        )
         try:
             given_up = (await manager.start(str(tmp_path), quiet, port))["server"]
             busy = (await manager.start(str(tmp_path), talking, free_port()))["server"]
+            installing = (await manager.start(str(tmp_path), silent, free_port()))["server"]
             for _ in range(60):
                 listed = {s["id"]: s for s in await manager.list(str(tmp_path))}
                 if listed[given_up["id"]]["status"] == "failed":
@@ -284,6 +290,15 @@ def test_a_server_that_never_listens_fails_instead_of_starting_for_ever(tmp_path
             assert listed[given_up["id"]]["status"] == "failed"
             assert process_manager().get(given_up["process_id"]).snapshot()["status"] != "running"
             assert listed[busy["id"]]["status"] == "starting"
+            assert listed[installing["id"]]["status"] == "starting"
         finally:
             await process_manager().shutdown()
     asyncio.run(check())
+
+
+def test_cpu_time_is_read_as_ps_prints_it():
+    from alpine_core.dev_servers import _cpu_seconds
+
+    assert _cpu_seconds("0:01.50") == 1.5
+    assert _cpu_seconds("01:02:03") == 3723
+    assert _cpu_seconds("1-00:00:01") == 86401
