@@ -36,6 +36,7 @@ export function WorkspaceDock({
   summaryLabel,
   changes,
   showMap = true,
+  onAskFix,
   children,
 }: {
   cwd: string;
@@ -49,6 +50,8 @@ export function WorkspaceDock({
   changes: DockTab;
   /** False on the map itself, where a small copy of it would only repeat the page. */
   showMap?: boolean;
+  /** Where the 미리보기 sends what went wrong when the app would not open, for the AI to fix (the map's page). */
+  onAskFix?: (text: string) => void;
   children: ReactNode;
 }) {
   const t = useMessages(messages);
@@ -101,7 +104,7 @@ export function WorkspaceDock({
             label: t.preview,
             icon: Globe,
             bare: true,
-            content: <DevelopmentServers key={cwd} cwd={cwd} sessionId={sessionId} />,
+            content: <DevelopmentServers key={cwd} cwd={cwd} sessionId={sessionId} onAskFix={onAskFix} />,
           },
           { id: 'source', label: t.source, icon: Folder, content: <FileViewer /> },
           ...(hasData

@@ -13,6 +13,13 @@ import {
 import { messages } from './messages';
 import { useOpenRequest } from './openRequest';
 
+/** How much of the end of the output the AI is given to fix an app that would not open. */
+const FIX_LOG = 4000;
+
+/** Terminal colours and styles, which would only be noise in the words the AI is given. */
+// eslint-disable-next-line no-control-regex -- the escape character is what it looks for
+const stripAnsi = (text: string) => text.replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '');
+
 /**
  * The dock's 미리보기: the project's app, running. 앱 열기 asks the server for it (`devServers/open`), which uses the
  * server the project already has (one the AI started counts) or starts one the way the project runs, so the person
@@ -23,10 +30,13 @@ export function DevelopmentServers({
   cwd,
   sessionId,
   onDismiss,
+  onAskFix,
 }: {
   cwd: string;
   sessionId?: string;
   onDismiss?: () => void;
+  /** Hands the AI what went wrong when the app would not open (on the map, as words to the map). */
+  onAskFix?: (text: string) => void;
 }) {
   const m = useMessages(messages);
   const servers = useDevelopmentServers(cwd);
@@ -70,6 +80,12 @@ export function DevelopmentServers({
   const status = current?.status;
   const opening = actions.open.isPending || status === 'starting';
   const failed = actions.open.isError || status === 'failed';
+  // What the AI is given to fix: the command and the end of its output (or why it could not even start).
+  const askFix = () => {
+    const output = current && !current.external ? (logs.data?.text ?? '').slice(-FIX_LOG) : '';
+    const reason = output.trim() || actions.open.error?.message || '';
+    onAskFix?.(m.fixRequest(current?.command ?? '', stripAnsi(reason).trim()));
+  };
 
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-4" aria-label={m.title}>
@@ -114,13 +130,28 @@ export function DevelopmentServers({
       ) : (
         <div className="flex flex-col items-start gap-3">
           <p role={failed || unknown ? 'alert' : undefined} className="text-body text-fg-muted">
-            {unknown ? m.unknown : failed ? m.openFailed : status === 'stopped' ? m.appStopped : m.lead}
+            {unknown
+              ? m.unknown
+              : failed
+                ? onAskFix
+                  ? m.openFailedFix
+                  : m.openFailed
+                : status === 'stopped'
+                  ? m.appStopped
+                  : m.lead}
           </p>
-          {!unknown && (
-            <Button variant="primary" disabled={busy} onClick={open}>
-              {failed ? m.openAgain : m.openApp}
-            </Button>
-          )}
+          <div className="flex flex-wrap gap-2">
+            {failed && onAskFix && (
+              <Button variant="primary" onClick={askFix}>
+                {m.askFix}
+              </Button>
+            )}
+            {!unknown && (
+              <Button variant={failed && onAskFix ? undefined : 'primary'} disabled={busy} onClick={open}>
+                {failed ? m.openAgain : m.openApp}
+              </Button>
+            )}
+          </div>
         </div>
       )}
       <details

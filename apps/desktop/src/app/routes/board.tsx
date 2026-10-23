@@ -6,6 +6,7 @@ import { openApp } from '@/features/development-servers';
 import { openPublish, usePublishable } from '@/features/publish/publishRequest';
 import { messages as dockMessages } from '@/features/dock/messages';
 import { showDockTab, useDockExpanded, useDockOpen } from '@/features/dock/state';
+import { askMapFor } from '@/features/product-map/askRequest';
 import { useMapTalk } from '@/features/product-map/mapTalk';
 import { messages as mapMessages } from '@/features/product-map/messages';
 import { ProductMap } from '@/features/product-map/ProductMap';
@@ -79,6 +80,11 @@ function BoardRoute() {
       summaryLabel={m.conversationTab}
       changes={resultTab}
       showMap={false}
+      // The app would not open: the map takes what went wrong as my words, and its conversation shows the fixing.
+      onAskFix={(text) => {
+        askMapFor(project.path, text);
+        showDockTab(SUMMARY_TAB);
+      }}
     >
       <ProductMap
         key={project.path}

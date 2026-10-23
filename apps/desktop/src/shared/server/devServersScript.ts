@@ -9,15 +9,21 @@ const PAGE = (name: string) =>
       `<h1 style="font-size:22px">${name}</h1><p style="color:#666">첫 글을 써 보세요.</p></body>`,
   )}`;
 
+/** What a server that would not start printed (`fails`). */
+const FAILED_LOG =
+  "> npm run dev\n\n\u001b[31mError: Cannot find module 'vite'\u001b[39m\nRequire stack:\n- /project/node_modules/.bin/vite\n";
+
 /**
  * `devServers/*` as the app sees it, for the browser build and tests: 앱 열기 starts the project's server, which comes up
- * after `upMs` and stays until it is stopped. Nothing runs; the preview shows a stand-in page.
+ * after `upMs` (or, with `fails`, fails then) and stays until it is stopped. Nothing runs; the preview shows a stand-in
+ * page.
  */
-export function devServersScript({ upMs = 1200 }: { upMs?: number } = {}): Script {
+export function devServersScript({ upMs = 1200, fails = false }: { upMs?: number; fails?: boolean } = {}): Script {
   const servers: (DevServerInfo & { at: number })[] = [];
   const shown = (server: DevServerInfo & { at: number }): DevServerInfo => {
     const { at, ...info } = server;
     const up = info.status === 'starting' && Date.now() - at >= upMs;
+    if (up && fails) return { ...info, status: 'failed' };
     return up ? { ...info, status: 'running', url: PAGE(info.cwd.split('/').pop() ?? '') } : info;
   };
   const start = (cwd: string, command: string, port: number) => {
@@ -39,7 +45,7 @@ export function devServersScript({ upMs = 1200 }: { upMs?: number } = {}): Scrip
     results: {
       'devServers/list': ({ cwd }) => ({ servers: servers.filter((s) => s.cwd === cwd).map(shown) }),
       'devServers/open': ({ cwd }) => {
-        const running = servers.findLast((s) => s.cwd === cwd && (s.status === 'starting' || s.status === 'running'));
+        const running = servers.findLast((s) => s.cwd === cwd && ['starting', 'running'].includes(shown(s).status));
         return { server: running ? shown(running) : start(cwd, 'npm run dev', 5173) };
       },
       'devServers/start': ({ cwd, command, port }) => ({ server: start(cwd, command, port) }),
@@ -52,7 +58,7 @@ export function devServersScript({ upMs = 1200 }: { upMs?: number } = {}): Scrip
         return { server: start(find(id).cwd, find(id).command, find(id).port) };
       },
       'devServers/logs': ({ offset }) => {
-        const text = '> npm run dev\n\n  VITE ready\n  ➜  Local:   http://localhost:5173/\n';
+        const text = fails ? FAILED_LOG : '> npm run dev\n\n  VITE ready\n  ➜  Local:   http://localhost:5173/\n';
         return { text: offset ? '' : text, nextOffset: text.length, total: text.length };
       },
     },

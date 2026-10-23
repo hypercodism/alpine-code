@@ -122,6 +122,44 @@ describe('앱 열기 (#7)', () => {
   });
 });
 
+describe('앱 열기 that fails (#7)', () => {
+  it('hands the AI what went wrong, as words to the map, and shows its conversation', async () => {
+    const failed = {
+      id: 'dev-1',
+      cwd,
+      command: 'npm run dev',
+      port: 5173,
+      status: 'failed' as const,
+      url: null,
+      external: false,
+    };
+    const log = "\u001b[31mError: Cannot find module 'vite'\u001b[39m\n";
+    const { request } = mount('built', {
+      results: {
+        'devServers/open': { server: failed },
+        'devServers/list': { servers: [failed] },
+        'devServers/logs': ({ offset }) => ({ text: offset ? '' : log, nextOffset: log.length, total: log.length }),
+      },
+    });
+    fireEvent.click(await screen.findByRole('button', { name: '앱 열기' }));
+    const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
+    expect(await within(dock).findByText('앱을 열지 못했어요. AI가 실행 기록을 보고 고칠 수 있어요.')).toBeTruthy();
+    expect(within(dock).getByRole('button', { name: '다시 열기' })).toBeTruthy();
+    // The output has arrived before the button is pressed.
+    await vi.waitFor(() => expect(request).toHaveBeenCalledWith('devServers/logs', expect.anything()));
+    fireEvent.click(within(dock).getByRole('button', { name: 'AI에게 고쳐 달라고 하기' }));
+    await vi.waitFor(() => {
+      const sent = request.mock.calls.find(([, params]) => JSON.stringify(params ?? {}).includes('Cannot find module'));
+      // A request to the map, as if typed into its input.
+      expect(sent?.[0]).toBe('flow/prepare');
+      // The command and the output, without the terminal's colour codes.
+      expect(JSON.stringify(sent![1])).toContain('npm run dev');
+      expect(JSON.stringify(sent![1])).not.toContain('\\u001b');
+    });
+    expect(within(dock).getByRole('tab', { name: '대화', selected: true })).toBeTruthy();
+  });
+});
+
 describe('올리기 from the map (#13, #23)', () => {
   it('offers 인터넷에 올리기 beside 앱 열기, which opens the top bar sheet', async () => {
     mount('built');

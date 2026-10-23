@@ -45,6 +45,7 @@ import { Bar, CONNECTION, PlanBar, Working, type PlanReview, type PlanTeamAnswer
 import { buildActivity, lastReply, pendingQuestion, planPhase, stopReason, TEAM_WORKING } from './planData';
 import { mapLookCss } from './planLook';
 import { planMessages } from './planMessages';
+import { useMapRequest } from './askRequest';
 import { AskFlight, MapAsk } from './MapAsk';
 import { DeleteMap, MapMenu, ScopeEditor } from './MapSettings';
 import { Unmapped } from './Unmapped';
@@ -779,6 +780,17 @@ export function ProductMap({
     return askMap(text, from);
   };
   const waitsForWork = planned && phase !== 'built' ? workBusy : hasMap && anyActive;
+
+  // Words sent from elsewhere (the 미리보기's 고쳐 달라고 하기) go where my own would, but never answer a decision.
+  const requested = useMapRequest((state) => (state.request?.cwd === cwd ? state.request.text : null));
+  const takeRequest = useEffectEvent((text: string) => {
+    useMapRequest.getState().take();
+    if (planned && phase !== 'built') say(text);
+    else void askMap(text, null);
+  });
+  useEffect(() => {
+    if (requested) takeRequest(requested);
+  }, [requested]);
 
   const mapMenu = data && (
     <MapMenu

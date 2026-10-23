@@ -52,7 +52,7 @@ function connect(): ServerConnection {
       mergeScripts(
         chatScript({ stepMs: 400, wordMs: 80, sessions, newProject: demo.newProject }),
         flowScript(map),
-        devServersScript(),
+        devServersScript({ fails: demo.appFails }),
         demo.cloudOff ? cloudScript({ enabled: false }) : demo.cloud ? cloudScript(demo.cloud) : {},
       ),
     ),
@@ -61,15 +61,22 @@ function connect(): ServerConnection {
 
 /**
  * For walking a path the demo does not take by itself (setups that cannot be fetched, a project whose AI did not
- * start, Alpine Cloud off, an account signed in with live data or a publish the API refuses): `alpine.demo` in
- * localStorage, as `{ "newProject": {...}, "cloudOff": true }` or `{ "cloud": { "signedIn": true, "data": "live" } }`.
+ * start, Alpine Cloud off, an account signed in with live data, a publish the API refuses or an app that will not
+ * open): `alpine.demo` in localStorage, as `{ "newProject": {...}, "cloudOff": true }`,
+ * `{ "cloud": { "signedIn": true, "data": "live" } }` or `{ "appFails": true }`.
  */
-function demoOptions(): { newProject?: NewProjectScript; cloudOff?: boolean; cloud?: CloudScriptOptions } {
+function demoOptions(): {
+  newProject?: NewProjectScript;
+  cloudOff?: boolean;
+  cloud?: CloudScriptOptions;
+  appFails?: boolean;
+} {
   try {
     return JSON.parse(localStorage.getItem('alpine.demo') ?? '{}') as {
       newProject?: NewProjectScript;
       cloudOff?: boolean;
       cloud?: CloudScriptOptions;
+      appFails?: boolean;
     };
   } catch {
     return {};

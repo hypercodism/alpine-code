@@ -9,6 +9,10 @@ export const messages = defineMessages({
     openAgain: '다시 열기',
     opening: '앱을 여는 중이에요… 처음 열 때는 1~2분 걸릴 수 있어요.',
     openFailed: '앱을 열지 못했어요. 이유는 고급의 실행 기록에 있어요.',
+    openFailedFix: '앱을 열지 못했어요. AI가 실행 기록을 보고 고칠 수 있어요.',
+    askFix: 'AI에게 고쳐 달라고 하기',
+    fixRequest: (command: string, log: string) =>
+      `미리보기에서 앱 열기가 실패했어요. 아래 실행 기록을 보고 앱이 열리도록 고쳐 주세요.\n\n실행 명령: ${command}\n\n${log}`,
     appStopped: '앱이 꺼져 있어요.',
     unknown: '이 프로젝트를 여는 방법을 찾지 못했어요. 아래 고급에서 실행 명령을 적어 주세요.',
     advanced: '고급',
@@ -43,6 +47,10 @@ export const messages = defineMessages({
     openAgain: 'Open again',
     opening: 'Opening the app… The first time can take a minute or two.',
     openFailed: 'The app could not be opened. The reason is in the output under Advanced.',
+    openFailedFix: 'The app could not be opened. The AI can read its output and fix it.',
+    askFix: 'Ask the AI to fix it',
+    fixRequest: (command: string, log: string) =>
+      `Opening the app in the preview failed. Read the output below and fix it so the app opens.\n\nCommand: ${command}\n\n${log}`,
     appStopped: 'The app is not running.',
     unknown: 'Could not tell how this project runs. Enter its command under Advanced below.',
     advanced: 'Advanced',
