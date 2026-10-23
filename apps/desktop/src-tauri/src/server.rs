@@ -19,29 +19,17 @@ pub struct Server {
 
 impl Server {
     pub fn start(app: &AppHandle) -> std::io::Result<Self> {
-        let mut child = command(app)?
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()?;
-        let stdin = child.stdin.take().expect("stdin is piped");
-        let stdout = child.stdout.take().expect("stdout is piped");
-        let stderr = child.stderr.take().expect("stderr is piped");
-
-        let app = app.clone();
-        thread::spawn(move || {
-            for line in BufReader::new(stdout).lines().map_while(Result::ok) {
-                let _ = app.emit("server://message", line);
-            }
-            let _ = app.emit("server://exit", ());
-        });
-        thread::spawn(move || {
-            for line in BufReader::new(stderr).lines().map_while(Result::ok) {
-                log::info!(target: "server", "{line}");
-            }
-        });
-
+        let (child, stdin) = spawn(app)?;
         Ok(Self { child: Mutex::new(child), stdin: Mutex::new(stdin) })
+    }
+
+    /// A new server in place of a stopped one (an update that could not be installed leaves the app running).
+    pub fn restart(&self, app: &AppHandle) -> Result<(), String> {
+        self.stop();
+        let (child, stdin) = spawn(app).map_err(|e| e.to_string())?;
+        *self.child.lock().map_err(|e| e.to_string())? = child;
+        *self.stdin.lock().map_err(|e| e.to_string())? = stdin;
+        Ok(())
     }
 
     pub fn stop(&self) {
@@ -50,6 +38,33 @@ impl Server {
             let _ = child.wait();
         }
     }
+}
+
+/// Starts the server and relays its output to the windows.
+fn spawn(app: &AppHandle) -> std::io::Result<(Child, ChildStdin)> {
+    let mut child = command(app)?
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    let stdin = child.stdin.take().expect("stdin is piped");
+    let stdout = child.stdout.take().expect("stdout is piped");
+    let stderr = child.stderr.take().expect("stderr is piped");
+
+    let app = app.clone();
+    thread::spawn(move || {
+        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+            let _ = app.emit("server://message", line);
+        }
+        let _ = app.emit("server://exit", ());
+    });
+    thread::spawn(move || {
+        for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+            log::info!(target: "server", "{line}");
+        }
+    });
+
+    Ok((child, stdin))
 }
 
 /// Development runs the workspace's server through uv; a bundled app runs it on the Python runtime it carries

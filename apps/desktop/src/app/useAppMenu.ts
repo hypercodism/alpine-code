@@ -1,5 +1,7 @@
 import { useNavigate, useRouter } from '@tanstack/react-router';
 import { getName, getVersion } from '@tauri-apps/api/app';
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { Menu, Submenu } from '@tauri-apps/api/menu';
 import { ask, message } from '@tauri-apps/plugin-dialog';
 import { useEffect, useRef } from 'react';
@@ -10,6 +12,7 @@ import { checkForUpdate, inTauri, restartToUpdate } from '@/shared/platform';
 
 import appIcon from '../../src-tauri/icons/128x128@2x.png';
 import { menuMessages } from './messages';
+import { quitMessages } from './quitMessages';
 import { useWorkRunning } from './useWorkRunning';
 
 interface Actions {
@@ -20,19 +23,31 @@ interface Actions {
 
 /**
  * The macOS menu bar, in the app's language. It is built here rather than in Rust so its items can navigate and
- * follow the language setting; its shortcuts (⌘N, ⌘O, ⌘,) reach the app through it. Does nothing outside Tauri.
+ * follow the language setting; its shortcuts (⌘N, ⌘O, ⌘,) reach the app through it. Closing the window quits the app,
+ * so 윈도우 닫기, 끝내기 and the window's close button all ask first while the AI works. Does nothing outside Tauri.
  */
 export function useAppMenu(railOpen: boolean, actions: Actions) {
   const { locale } = useLocale();
   const t = useMessages(menuMessages);
+  const q = useMessages(quitMessages);
   const navigate = useNavigate();
   const router = useRouter();
   const working = useWorkRunning();
   // The menu is rebuilt only when its text changes; its items call whatever the latest actions are.
-  const latest = useRef({ ...actions, navigate, router, t, working });
+  const latest = useRef({ ...actions, navigate, router, t, q, working });
   useEffect(() => {
-    latest.current = { ...actions, navigate, router, t, working };
+    latest.current = { ...actions, navigate, router, t, q, working };
   });
+
+  // The close button is the shell's: it asks here only while the AI works (src-tauri/src/quit.rs).
+  useEffect(() => {
+    if (inTauri()) void invoke('quit_guard', { working }).catch(() => {});
+  }, [working]);
+  useEffect(() => {
+    if (!inTauri()) return;
+    const unlisten = listen('quit-requested', () => void quitAsking(() => latest.current));
+    return () => void unlisten.then((stop) => stop());
+  }, []);
 
   useEffect(() => {
     if (!inTauri()) return;
@@ -52,7 +67,8 @@ export type Latest = Actions & {
   navigate: ReturnType<typeof useNavigate>;
   router: ReturnType<typeof useRouter>;
   t: (typeof menuMessages)['ko'];
-  /** The AI is at work, so restarting would stop it. */
+  q: (typeof quitMessages)['ko'];
+  /** The AI is at work, so restarting or quitting would stop it. */
   working: boolean;
 };
 
@@ -88,7 +104,7 @@ async function buildMenu(railOpen: boolean, get: () => Latest): Promise<Menu> {
           { item: 'HideOthers', text: t.hideOthers },
           { item: 'ShowAll', text: t.showAll },
           { item: 'Separator' },
-          { item: 'Quit', text: t.quit(name) },
+          { text: t.quit(name), accelerator: 'CmdOrCtrl+Q', action: () => void quitAsking(get) },
         ],
       },
       {
@@ -102,7 +118,8 @@ async function buildMenu(railOpen: boolean, get: () => Latest): Promise<Menu> {
           },
           { text: t.addProject, accelerator: 'CmdOrCtrl+O', action: () => get().openFolder() },
           { item: 'Separator' },
-          { item: 'CloseWindow', text: t.closeWindow },
+          // The only window: closing it is quitting.
+          { text: t.closeWindow, accelerator: 'CmdOrCtrl+W', action: () => void quitAsking(get) },
         ],
       },
       {
@@ -137,6 +154,21 @@ async function buildMenu(railOpen: boolean, get: () => Latest): Promise<Menu> {
   });
   await windowMenu.setAsWindowsMenuForNSApp();
   return menu;
+}
+
+/** Quits the app; while the AI works, only once the person says so. */
+export async function quitAsking(get: () => Latest) {
+  const { q, working } = get();
+  if (working) {
+    const yes = await ask(q.body, {
+      title: q.title,
+      kind: 'warning',
+      okLabel: q.quitAnyway,
+      cancelLabel: q.keepWorking,
+    });
+    if (!yes) return;
+  }
+  await invoke('quit');
 }
 
 /** The app icon for the About window: a development run has no app bundle, so macOS would show a folder. */

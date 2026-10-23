@@ -67,20 +67,32 @@ pub async fn update_check(app: AppHandle) -> Result<Option<String>, String> {
     fetch(&app).await.map_err(|e| e.to_string())
 }
 
-/// Installs the waiting version and starts it.
+/// Installs the waiting version and starts it. An install that fails says why and leaves the app running as it was
+/// (the server is started again), rather than restarting into the old version as if it had worked.
 #[tauri::command]
-pub fn update_restart(app: AppHandle) {
-    app.state::<Server>().stop();
-    install_if_ready(&app);
+pub fn update_restart(app: AppHandle) -> Result<(), String> {
+    let server = app.state::<Server>();
+    server.stop();
+    if let Err(e) = install(&app) {
+        log::warn!(target: "update", "{e}");
+        server.restart(&app).map_err(|again| format!("{e}; {again}"))?;
+        return Err(e);
+    }
     app.restart();
 }
 
-/// Call once the server has stopped.
+/// Call once the server has stopped. On quit there is no one left to tell, so a failure is only logged.
 pub fn install_if_ready(app: &AppHandle) {
-    let ready = app.try_state::<Updates>().and_then(|updates| updates.ready.lock().ok()?.take());
-    if let Some((update, bytes)) = ready
-        && let Err(e) = update.install(bytes)
-    {
+    if let Err(e) = install(app) {
         log::warn!(target: "update", "{e}");
+    }
+}
+
+/// Installs the waiting version, if there is one.
+fn install(app: &AppHandle) -> Result<(), String> {
+    let ready = app.try_state::<Updates>().and_then(|updates| updates.ready.lock().ok()?.take());
+    match ready {
+        Some((update, bytes)) => update.install(bytes).map_err(|e| e.to_string()),
+        None => Ok(()),
     }
 }
