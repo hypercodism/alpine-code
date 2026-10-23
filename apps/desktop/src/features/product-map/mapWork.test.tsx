@@ -315,6 +315,22 @@ describe('a planned product on its map', () => {
     expect(screen.queryByRole('region', { name: 'AI가 지금 일을 마치면 전할게요' })).toBeNull();
   });
 
+  it('keeps words written while the build works, and gives them to the build once its turn is over (#34)', async () => {
+    const { connection, request } = mount(blog('building'), {
+      build: { status: 'running' },
+      buildItems: blogBuild('building'),
+    });
+    await waitFor(() => expect(input().getAttribute('placeholder')).toBe('지금 일이 끝나면 전해요'));
+    write('버튼 색은 파란색으로');
+    const waiting = await screen.findByRole('region', { name: 'AI가 지금 일을 마치면 전할게요' });
+    expect(within(waiting).getByText('버튼 색은 파란색으로')).toBeTruthy();
+    expect(sent(request, 'build-1')).toEqual([]);
+    // Its turn ends (here, stopped): the words go to the build, not to the map as a request.
+    await connection.request('session/cancel', { sessionId: 'build-1' });
+    await waitFor(() => expect(sent(request, 'build-1')).toEqual(['버튼 색은 파란색으로']));
+    expect(request.mock.calls.some(([method]) => method === 'flow/prepare')).toBe(false);
+  });
+
   it('keeps another answer to an AI decision while the build works, and gives it to the build after (#5)', async () => {
     const { connection, request } = mount(blog('building'), { buildItems: blogBuild('building') });
     await connection.request('session/send', { sessionId: 'build-1', text: '이대로 만들어 주세요.' });

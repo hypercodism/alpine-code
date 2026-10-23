@@ -27,7 +27,7 @@ import { routeTree } from './routeTree.gen';
 /**
  * Names and the features left over (audit theme 7): what can not start says why, a plan shows only what fits a plan,
  * the conversation beside the map points at the map's input, the AI 팀 opens beside the map, memory is reached from
- * the map, a deleted plan can be planned again, and the words are the same everywhere.
+ * the map, a deleted map is drawn again from the code, and the words are the same everywhere.
  */
 
 vi.mock('@/features/terminal/TerminalScreen', () => ({
@@ -164,6 +164,19 @@ describe('a plan shows only what fits a plan (#32)', () => {
   });
 });
 
+describe('a plan once its build began is code (#32)', () => {
+  it('keeps the code checks after a build stopped halfway', async () => {
+    mount('/board' + q(app), {
+      plan: 'stopped',
+      sessions: [{ info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '지도' }) }],
+    });
+    expect(await screen.findByText('만들기가 멈췄어요')).toBeTruthy();
+    const menu = await mapMenu();
+    for (const name of ['기능 더 찾기', '지도 범위 바꾸기'])
+      expect(within(menu).getByRole('menuitem', { name })).toBeTruthy();
+  });
+});
+
 const building = (items: Item[] = []) => [
   { info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '지도' }) },
   { info: sessionInfo({ id: 'build-1', cwd: app, purpose: 'build', title: 'Build the planned product' }), items },
@@ -187,6 +200,36 @@ describe('the conversation beside the map points at the map (#35)', () => {
         }),
       ),
     );
+  });
+});
+
+describe('another conversation beside the map is answered where it is shown (#35)', () => {
+  it('gets an input of its own while it waits, since the map’s input does not reach it', async () => {
+    const open = renderHook(() => useDockOpen());
+    act(() => open.result.current[1](true));
+    open.unmount();
+    const { connection, request, router } = mount('/board' + q(app), {
+      sessions: [
+        { info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '지도' }) },
+        { info: sessionInfo({ id: 'old', cwd: app, title: 'README 다시 쓰기' }) },
+      ],
+    });
+    await connection.request('session/send', { sessionId: 'old', text: 'README를 고쳐 줘' });
+    await router.navigate({ to: '/board', search: { project: app, session: 'old' } });
+    const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
+    expect(await within(dock).findByText('지금 지도 대화가 아닌 다른 대화를 보고 있어요')).toBeTruthy();
+    const card = await within(dock).findByRole('region', { name: '승인 요청' });
+    expect(within(card).getByText('다르게 하려면 아래 입력창에 적어 주세요')).toBeTruthy();
+    const own = within(dock).getByPlaceholderText('어떻게 다르게 할지 적어 주세요');
+    fireEvent.change(own, { target: { value: '고치지 말고 읽기만 해 줘' } });
+    fireEvent.keyDown(own, { key: 'Enter' });
+    await waitFor(() =>
+      expect(calls(request, 'session/answer')).toContainEqual(
+        expect.objectContaining({ sessionId: 'old', decision: 'deny', feedback: '고치지 말고 읽기만 해 줘' }),
+      ),
+    );
+    // Answered, it is only read here again: the map's input is the one input.
+    await waitFor(() => expect(within(dock).queryByPlaceholderText('어떻게 다르게 할지 적어 주세요')).toBeNull());
   });
 });
 
@@ -253,9 +296,9 @@ describe('memory is reached from the map (#69, #82)', () => {
   });
 });
 
-describe('a deleted map can be planned again (#72)', () => {
-  it('says what goes, and starts a new plan in the same folder', async () => {
-    const { request } = mount('/board' + q(app), {
+describe('a deleted map starts over from the code (#72)', () => {
+  it('says what goes, draws the map again from the code, and leads to 새 프로젝트 for something new', async () => {
+    const { request, router } = mount('/board' + q(app), {
       plan: 'built',
       sessions: [{ info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '지도' }) }],
     });
@@ -264,13 +307,16 @@ describe('a deleted map can be planned again (#72)', () => {
     expect(within(strip).getByText(/기획 때 정한 답과 화면 스케치/)).toBeTruthy();
     expect(within(strip).getByText(/폴더의 코드와 파일은 그대로 남아요/)).toBeTruthy();
     fireEvent.click(within(strip).getByRole('button', { name: '삭제' }));
-    fireEvent.click(await screen.findByRole('button', { name: '처음부터 다시 기획하기' }));
-    expect(screen.getByRole('heading', { name: '무엇을 만들어 볼까요?' })).toBeTruthy();
-    write('동네 빵집 예약 앱');
+    expect(await screen.findByText(/지도를 지웠어요/)).toBeTruthy();
+    // No second way to start something new here (map-first 39): the folder has code, so the map is drawn from it.
+    expect(screen.queryByRole('button', { name: '처음부터 다시 기획하기' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '새 프로젝트로 시작하기' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/'));
+    await router.navigate({ to: '/board', search: { project: app } });
+    await screen.findByRole('heading', { name: '이 프로젝트를 지도로 펼쳐볼게요' });
+    write('');
     await waitFor(() =>
-      expect(calls(request, 'flow/prepare')).toContainEqual(
-        expect.objectContaining({ action: 'plan', request: '동네 빵집 예약 앱' }),
-      ),
+      expect(calls(request, 'flow/prepare')).toContainEqual(expect.objectContaining({ action: 'discover' })),
     );
   });
 });

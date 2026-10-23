@@ -96,6 +96,7 @@ export function ProductMap({
   onOpenApp,
   onPublish,
   onNewHere,
+  onNewProject,
   onFixConnection,
   onMemory,
   demo = false,
@@ -113,6 +114,8 @@ export function ProductMap({
   onPublish?: () => void;
   /** Opens 새 프로젝트 for this folder, which is empty (map-first 41). */
   onNewHere?: (folder: string) => void;
+  /** Opens 새 프로젝트, the one place something new starts. */
+  onNewProject?: () => void;
   /** Opens the model connection, where a build stopped by a sign-in, credits or a plan limit is fixed. */
   onFixConnection?: () => void;
   /** Opens the project's memory, where the AI's suggestions to remember wait for me. */
@@ -166,8 +169,9 @@ export function ProductMap({
   const [seenAt, markSeen] = useLastSeen(cwd);
   const [viewedSince, setViewedSince] = useState(seenAt);
   const [confirmRebuild, setConfirmRebuild] = useState(false);
-  // A folder with code and no map can also start over as a new plan (after its plan's map was deleted, say).
-  const [planAgain, setPlanAgain] = useState(false);
+  // The map was just deleted here: its folder keeps its code, so the map is drawn from it again (map-first 40), and
+  // something else from the start begins in 새 프로젝트 (map-first 39).
+  const [deletedHere, setDeletedHere] = useState(false);
   const [busy, setBusy] = useState(false);
   // What I just asked the map, flying from its input to where the map begins.
   const [flight, setFlight] = useState<{ text: string; from: DOMRect | null; toFirst: boolean; at: number } | null>(
@@ -282,16 +286,12 @@ export function ProductMap({
       later.add(null, text);
       return true;
     }
-    if (!hasMap && planAgain && !text) return false;
     const shown = { text: text || t.drawBubble, from, toFirst: !hasMap, at: ++flights.current };
     setFlight(shown);
-    // A map that exists takes the words as a request (do it, keep the map true); none yet, they draw it from the code,
-    // or plan a new product when I chose to start over.
+    // A map that exists takes the words as a request (do it, keep the map true); none yet, they draw it from the code.
     const started = hasMap
       ? await start('request', { request: text })
-      : planAgain
-        ? await start('plan', { request: text })
-        : await start('discover', { request: text || t.discoveryRequest });
+      : await start('discover', { request: text || t.discoveryRequest });
     if (!started) setFlight((current) => (current?.at === shown.at ? null : current));
     return started;
   };
@@ -354,8 +354,9 @@ export function ProductMap({
       ? planPhase(data, conversationWorking, !!question, { working: buildWorking, team: buildTeam?.status ?? null })
       : null;
   const talking = building ? buildWorking : conversationWorking;
-  // A plan not built yet has no code: nothing on it is checked or found in code, and what is added to it is planned.
-  const planning = planned && phase !== 'built';
+  // A plan whose build never began has no code: nothing on it is checked or found in code, and what is added to it is
+  // planned. Once a build began there is code, even when cards were added later or the build stopped halfway.
+  const planning = planned && (!data?.build || data.build === 'none');
   // A build that stopped can have asked something (rare: no sensible default), and its run says why it stopped.
   const buildQuestion = useMemo(
     () => (phase === 'stopped' ? (pendingQuestion(buildItems ?? [])?.question ?? null) : null),
@@ -770,6 +771,7 @@ export function ProductMap({
   const startOver = () => {
     rememberDrawing(null);
     setFlight(null);
+    setDeletedHere(true);
     if (mapConversation && !anyActive) details.mutate({ sessionId: mapConversation.id, archived: true });
     onSession('');
   };
@@ -1145,17 +1147,18 @@ export function ProductMap({
               {t.newHere}
             </Button>
           </div>
-        ) : !hasMap && planAgain ? (
-          <div className="flex min-w-0 grow flex-col items-center justify-center gap-3 p-8 text-center">
-            <h2 className="text-title font-semibold">{t.planAgainTitle}</h2>
-            <p className="max-w-90 text-body text-fg-muted">{t.planAgainLead}</p>
-            <LinkButton onClick={() => setPlanAgain(false)}>{t.planAgainBack}</LinkButton>
-          </div>
         ) : !hasMap ? (
           <div className="flex min-w-0 grow flex-col items-center justify-center gap-3 p-8 text-center">
             <h2 className="text-title font-semibold">{t.empty}</h2>
             <p className="max-w-90 text-body text-fg-muted">{demo ? t.demo : t.emptyLead}</p>
-            {!readOnly && <LinkButton onClick={() => setPlanAgain(true)}>{t.planAgain}</LinkButton>}
+            {deletedHere && onNewProject && (
+              <p className="max-w-90 text-meta text-fg-muted">
+                {t.deletedNewLead}{' '}
+                <LinkButton className="min-h-5 px-0.5" onClick={onNewProject}>
+                  {t.newProject}
+                </LinkButton>
+              </p>
+            )}
             <ImportLink cwd={cwd} onOpen={openImported} />
             <details className="group mt-1 flex flex-col items-center">
               <summary className="cursor-pointer list-none text-meta text-interactive">{t.scopeBefore}</summary>
@@ -1380,17 +1383,9 @@ export function ProductMap({
           )}
           {data && !readOnly && !board.isError && !checkingFolder && !(emptyFolder && !hasMap) && (
             <MapAsk
-              empty={!hasMap && !planAgain}
+              empty={!hasMap}
               disabled={busy || (!hasMap && !planned && anyActive && !approval)}
-              placeholder={
-                approval
-                  ? t.answerInstead
-                  : waitsForWork
-                    ? t.busyAsk
-                    : !hasMap && planAgain
-                      ? t.planAgainPlaceholder
-                      : undefined
-              }
+              placeholder={approval ? t.answerInstead : waitsForWork ? t.busyAsk : undefined}
               onSend={sendWords}
               agent={
                 <>

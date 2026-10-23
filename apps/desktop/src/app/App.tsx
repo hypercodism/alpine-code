@@ -55,6 +55,9 @@ function connect(): ServerConnection {
     ...PLAN_DEMO_SESSIONS,
     ...(demo.stoppedRuns ? STOPPED_RUNS : []),
     ...(demo.planTeam ? PLAN_TEAM_SESSIONS : []),
+    ...(demo.mapTalk
+      ? [{ info: sessionInfo({ id: 'alpine-map', cwd: '/Users/me/alpine-code', purpose: 'map', title: '지도' }) }]
+      : []),
   ];
   const connection = scriptedConnection(
     planDemo(
@@ -78,8 +81,9 @@ function connect(): ServerConnection {
  * open, no model connected, conversations whose run failed or whose model sign-in ended, the server process ending
  * after a while): `alpine.demo` in localStorage, as
  * `{ "newProject": {...}, "cloudOff": true, "noModel": true, "stoppedRuns": true, "engineStopsAfterMs": 3000 }`,
- * `{ "cloud": { "signedIn": true, "data": "live" } }`, `{ "appFails": true }`, `{ "appUnknown": true }` or `{ "planTeam": true }` (dev-blog built by an
- * AI 팀 at work).
+ * `{ "cloud": { "signedIn": true, "data": "live" } }`, `{ "appFails": true }`, `{ "appUnknown": true }`, `{ "planTeam": true }` (dev-blog built by an
+ * AI 팀 at work) or `{ "mapTalk": true }` (alpine-code's map has its own conversation, so its older ones are other
+ * conversations beside it).
  */
 function demoOptions(): DemoOptions {
   try {
@@ -97,6 +101,7 @@ interface DemoOptions {
   /** Nothing in a project says how it runs: 앱 열기 finds no way to start it. */
   appUnknown?: boolean;
   planTeam?: boolean;
+  mapTalk?: boolean;
   noModel?: boolean;
   stoppedRuns?: boolean;
   engineStopsAfterMs?: number;

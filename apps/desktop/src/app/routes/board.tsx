@@ -80,12 +80,14 @@ function BoardRoute() {
           {team.content}
         </div>
       ) : (
-        // The map has its own input for this conversation; here it only reads.
+        // The map has its own input; here the conversation only reads, unless it is one the map's input does not
+        // reach and it waits for my answer.
         <Session
           key={session}
           sessionId={session}
           compact
           readOnly
+          inputOnMap={!talkTo || session === talkTo}
           onInspectProcesses={() => showDockTab('processes')}
           onShowTaskForce={
             team
@@ -139,6 +141,7 @@ function BoardRoute() {
         onFixConnection={() => void navigate({ to: '/settings', search: { tab: 'connection' } })}
         onMemory={() => void navigate({ to: '/memory', search: { project: project.path } })}
         onNewHere={(folder) => void navigate({ to: '/', search: { folder } })}
+        onNewProject={() => void navigate({ to: '/' })}
         // An empty id lets go of the session (the map started over).
         onSession={(id) =>
           void navigate({
