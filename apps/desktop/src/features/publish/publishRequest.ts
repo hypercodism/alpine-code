@@ -14,8 +14,11 @@ export const usePublishRequest = create<{ cwd: string | null; ask: (cwd: string)
   }),
 );
 
-/** Opens the 올리기 sheet of the project's top bar. */
-export const openPublish = (cwd: string) => usePublishRequest.getState().ask(cwd);
+/**
+ * Opens the 올리기 sheet of the project's top bar. After the press that asked for it is over: a sheet opened during
+ * that press would take it for a press outside itself and close again.
+ */
+export const openPublish = (cwd: string) => void setTimeout(() => usePublishRequest.getState().ask(cwd));
 
 /**
  * Whether the project has something to put online (a web app in it), so 올리기 is offered for it; asked only while
