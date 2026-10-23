@@ -142,7 +142,7 @@ export function PlanBar({
     );
   if (waiting && (phase === 'building' || phase === 'drawing' || thinking))
     return (
-      <Bar title={t.waitingTitle} hint={t.waitingHint}>
+      <Bar title={t.waitingTitle} hint={phase === 'building' ? t.waitingHint : t.waitingPlanHint}>
         <Button variant="primary" onClick={onLook}>
           {t.waitingLook}
         </Button>

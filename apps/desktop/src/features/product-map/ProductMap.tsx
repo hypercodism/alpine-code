@@ -341,10 +341,11 @@ export function ProductMap({
           thinking: plan.activityThinking,
         }) ?? { text: plan.activityThinking, touching: [] })
       : null;
-  // The same facts for work on a map that is not a plan (a request, a change, a check): what the AI does now, in a line
-  // above the input with 멈추기, and the cards it touches.
+  // The same facts for work on a map that is not a plan, or a plan already built (a request, a change, a check): what
+  // the AI does now, in a line above the input with 멈추기, and the cards it touches.
+  const ownLine = !planned || phase === 'built';
   const workActivity =
-    !planned && workBusy && data
+    ownLine && workBusy && data
       ? buildActivity(work.data?.items ?? [], data, {
           onCard: t.workOnCard,
           editing: plan.activityEditing,
@@ -1195,7 +1196,7 @@ export function ProductMap({
               onLook={showWork}
             />
           )}
-          {!planned &&
+          {ownLine &&
             workBusy &&
             (workInfo?.status === 'waiting' ? (
               <Bar title={t.workWaiting} hint={t.workWaitingHint}>
@@ -1208,7 +1209,7 @@ export function ProductMap({
               <Working key={workText} text={workText} stop={t.stopDrawing} onStop={stopWork} />
             ))}
           {!workBusy && others.length > 0 && (
-            <p className="pointer-events-auto flex flex-wrap items-center gap-x-2 self-center rounded-full bg-canvas-raised px-3 py-1 text-meta text-fg-muted shadow-overlay">
+            <p className="pointer-events-auto flex flex-wrap items-center gap-x-2 self-center rounded-xl bg-canvas-raised px-3 py-1.5 text-meta text-fg-muted shadow-overlay">
               <span>{t.otherWorking}</span>
               <LinkButton
                 className="min-h-5 px-0.5"
