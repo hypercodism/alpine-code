@@ -699,10 +699,11 @@ class AgentsDeleteResult(Message):
 
 # Skills: folders with a SKILL.md (agentskills.io) that teach the agent a task
 
-SkillOrigin = Literal["project", "alpine", "agents", "claude", "codex"]
-"""``alpine``: installed or made in Alpine, which may change and delete it. ``agents``, ``claude``, ``codex``: kept by
-another app in ``~/.agents/skills``, ``~/.claude/skills`` or ``~/.codex/skills``, used where it is. ``project``: in
-the project's own ``.agents/skills``, ``.alpine-code/skills`` or ``.claude/skills``."""
+SkillOrigin = Literal["project", "alpine", "agents", "claude", "codex", "builtin"]
+"""``builtin``: comes with Alpine itself and cannot be removed. ``alpine``: installed or made in Alpine, which may
+change and delete it. ``agents``, ``claude``, ``codex``: kept by another app in ``~/.agents/skills``,
+``~/.claude/skills`` or ``~/.codex/skills``, used where it is. ``project``: in the project's own ``.agents/skills``,
+``.alpine-code/skills`` or ``.claude/skills``."""
 
 
 class SkillInfo(Message):
@@ -1702,6 +1703,10 @@ class FeatureFile(Message):
     conditions: list[FlowCondition] = Field(default_factory=list, max_length=60)
     checks: list[FlowCheck] = Field(default_factory=list, max_length=60)
     """One current check per condition; the server keeps the history of results."""
+    decisions: list[CardDecision] = Field(default_factory=list, max_length=20)
+    """Product questions about this card and their answers, oldest first."""
+    tentative: bool = False
+    """A planned step that exists only if an open question goes one way: drawn dashed until it is answered."""
 
     @model_validator(mode="after")
     def condition_references(self) -> FeatureFile:
@@ -1712,6 +1717,20 @@ class FeatureFile(Message):
         if not set(linked) <= ids or len(set(linked)) != len(linked):
             raise ValueError("Unknown or duplicate condition check")
         return self
+
+
+class CardDecision(Message):
+    """A product question about a card and the answer it got, kept on the card."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    question: str = Field(min_length=1, max_length=300)
+    options: list[Annotated[str, Field(min_length=1, max_length=120)]] = Field(default_factory=list, max_length=4)
+    """The answers that were offered, so the person can pick another later."""
+    answer: str = Field(min_length=1, max_length=120)
+    by: Literal["person", "ai"] = "person"
+    """``ai``: the AI took its own pick (the person said to decide the rest, or it came up while building). The app
+    marks it as the AI's, and the person may change it."""
 
 
 class FlowNode(FeatureFile):
@@ -1786,8 +1805,28 @@ class MapFile(Message):
     """Glob patterns (gitignore style) of files unrelated to the map, e.g. "**/*.lock". The agent's call."""
     unmapped: list[UnmappedPart] = Field(default_factory=list, max_length=100)
     """Parts of the product the agent knows exist but has not mapped yet; entries go once they are mapped."""
+    undecided: list[Annotated[str, Field(min_length=1, max_length=200)]] = Field(default_factory=list, max_length=50)
+    """While planning: the product decisions still open, in the person's words. One goes once it is decided."""
     proposed_include: SkipJsonSchema[list[str]] = Field(default_factory=list, exclude=True)
     """No longer used: maps made before 2026-10-13 may carry it, and it is read and ignored, never written."""
+
+
+class MapLook(Message):
+    """``.alpine-code/map/look.json``: the look the planned screens wear, as the values behind the theme tokens they
+    draw with (``bg-page``, ``text-ink``, ``font-display``...). Picking a look restyles every screen at once."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    page: str = Field(max_length=200)
+    surface: str = Field(max_length=200)
+    ink: str = Field(max_length=200)
+    muted: str = Field(max_length=200)
+    line: str = Field(max_length=200)
+    accent: str = Field(max_length=200)
+    on_accent: str = Field(max_length=200)
+    display: str = Field(max_length=200)
+    body: str = Field(max_length=200)
+    radius: str = Field(max_length=200)
 
 
 class MapProblem(Message):
@@ -1986,6 +2025,12 @@ class FlowGetResult(Message):
     previews: dict[str, str] = Field(default_factory=dict)
     sketches: dict[str, str] = Field(default_factory=dict)
     """Card id → the agent's drawn sketch as a data URL, for cards without a screenshot."""
+    screens: dict[str, str] = Field(default_factory=dict)
+    """Card id → the planned screen as HTML (``.alpine-code/map/screens/<id>.html``), drawn with the theme tokens."""
+    look: MapLook | None = None
+    """The look the planned screens wear; ``None`` until one is picked."""
+    undecided: list[str] = Field(default_factory=list)
+    """While planning: the product decisions still open (map.json ``undecided``)."""
     changes: list[FlowChange] = Field(default_factory=list)
     """Recent changes, newest first, at most 200."""
     states: dict[str, NodeState] = Field(default_factory=dict)
@@ -2002,6 +2047,10 @@ class FlowGetResult(Message):
     unmapped: list[UnmappedPart] = Field(default_factory=list)
     """What the agent knows it has not mapped yet (map.json ``unmapped``)."""
     """A finished "지도 고치기" session whose changes the user has not accepted or undone yet."""
+    planned: bool = False
+    """The map began as the plan of a product that did not exist yet (``plan``): the app shows it as a plan."""
+    build: Literal["none", "running", "ended"] = "none"
+    """The last ``build`` of the plan: none yet, its session still working, or ended (done or stopped)."""
 
 
 class FlowNodeParams(Message):
@@ -2021,8 +2070,10 @@ class FlowNodeResult(Message):
 class FlowPrepareParams(Message):
     cwd: str
     revision: str
-    action: Literal["discover", "extend", "change", "verify", "sync", "reshape"]
-    """reshape: change the map's cards and flows as the user asks (split, merge, rename, move, remove), never the
+    action: Literal["plan", "build", "discover", "extend", "change", "verify", "sync", "reshape"]
+    """plan: draw a product that does not exist yet from the person's words, then ask what is left to decide. build:
+    build what was planned, in the AI's own order, and check its promises.
+    reshape: change the map's cards and flows as the user asks (split, merge, rename, move, remove), never the
     product's code. Alpine keeps the map as it was, so the user can accept the result or put it back."""
     request: str = Field(default="", max_length=8000)
     node_id: str | None = None
@@ -2165,8 +2216,9 @@ class ProjectsCreateParams(Message):
     """Makes a project from a template and starts the agent on the idea.
 
     The template is copied into ``<clone folder>/<name>`` (``<name>-2``, ``<name>-3``... when taken, as for clones),
-    the folder becomes a git repository with the template as its first commit, and joins the projects. Then a session
-    starts there and gets ``idea`` as its first message. Each step is announced through ``projects/createChanged``
+    the folder becomes a git repository with the template as its first commit, and joins the projects. Then the
+    project's map conversation starts there and gets ``idea`` as the plan of its map (``flow/prepare`` ``plan``), so
+    the product is planned on the map before it is built. Each step is announced through ``projects/createChanged``
     as it finishes; the request answers after the last one. Fails with ``not_found`` when the server has no such
     template, ``invalid_config`` when config.toml cannot be read. When the session cannot start, the project stays
     made and on the rail, and the error is the session's.
@@ -2187,7 +2239,7 @@ class ProjectsCreateParams(Message):
 class ProjectsCreateResult(Message):
     project: ProjectInfo
     session_id: str
-    """The session working on the idea."""
+    """The map conversation planning the idea."""
     address: str | None = None
     """The project's web address (``craft-booking.alpinesite.app``) when signed in to Alpine and the template can be
     published; ``None`` when no app was made."""

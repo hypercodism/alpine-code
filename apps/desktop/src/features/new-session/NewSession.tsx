@@ -105,6 +105,7 @@ export function NewSession({
   onProjectChange,
   onNewProject,
   onStarted,
+  onPlanning,
 }: {
   /** Where the session starts; `null`: making a new project. */
   project: ProjectInfo | null;
@@ -117,6 +118,8 @@ export function NewSession({
   /** 새로 만들기 in the dialog the project chip opens. */
   onNewProject: () => void;
   onStarted: (sessionId: string) => void;
+  /** A project was made: its map, where the AI plans the idea with me. */
+  onPlanning: (projectPath: string) => void;
 }) {
   const slash = useSlashSkills(project?.path);
   const t = useMessages(messages);
@@ -343,13 +346,7 @@ export function NewSession({
                     </div>
                   </div>
                 ) : stage?.name === 'creating' ? (
-                  <CreatingFrom
-                    key="creating"
-                    stage={stage}
-                    online={signedIn}
-                    onOpen={(sessionId) => onStarted(sessionId)}
-                    onBack={back}
-                  />
+                  <CreatingFrom key="creating" stage={stage} online={signedIn} onOpen={onPlanning} onBack={back} />
                 ) : (
                   <div key="start" className="motion-step flex flex-col items-center gap-6">
                     <h1 className="text-center text-display font-semibold">
@@ -443,7 +440,7 @@ function CreatingFrom({
 }: {
   stage: CreatingStage;
   online: boolean;
-  onOpen: (sessionId: string) => void;
+  onOpen: (projectPath: string) => void;
   onBack: (stage: CreatingStage, failure: CreateFailure) => void;
 }) {
   const { outcome } = stage;
@@ -457,7 +454,7 @@ function CreatingFrom({
       address={stage.address}
       done={outcome.status === 'done'}
       failure={failure}
-      onOpen={() => outcome.status === 'done' && onOpen(outcome.sessionId)}
+      onOpen={() => outcome.status === 'done' && stage.project && onOpen(stage.project.path)}
       onBack={() => failure && onBack(stage, failure)}
     />
   );

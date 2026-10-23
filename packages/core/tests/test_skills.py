@@ -22,6 +22,7 @@ from alpine_core import (
     skill_text,
 )
 from alpine_core import session as session_module
+from alpine_core import skills as skills_module
 from alpine_core.skills import expand_command, read_skill, split_front_matter
 
 PDF = """---
@@ -87,13 +88,27 @@ def test_alpines_skills_come_first_then_other_apps_and_the_project_wins(home, tm
     write_skill(claude / "notes", "---\nname: notes\ndescription: Take notes.\n---\n")
     library = SkillLibrary(home, [(claude, "claude")])
     library.install(write_skill(tmp_path / "src" / "pdf"), "anthropics/skills/pdf")
-    assert [(s.name, s.origin) for s in library.installed()] == [("pdf", "alpine"), ("notes", "claude")]
+    assert [(s.name, s.origin) for s in library.installed()] == [
+        ("pdf", "alpine"),
+        ("notes", "claude"),
+        ("product-planning", "builtin"),
+    ]
     assert library.get("pdf").source == "anthropics/skills/pdf"
 
     project = tmp_path / "project"
     write_skill(project / ".agents/skills/notes", "---\nname: notes\ndescription: The project's notes.\n---\n")
     by_name = {s.name: s for s in library.for_project(project)}
     assert by_name["notes"].origin == "project" and by_name["pdf"].origin == "alpine"
+
+
+def test_a_skill_that_comes_with_alpine_cannot_be_removed_or_changed(home):
+    library = SkillLibrary(home, [])
+    with pytest.raises(SkillError) as removed:
+        library.remove("product-planning")
+    with pytest.raises(SkillError) as written:
+        library.write("product-planning", "---\ndescription: mine\n---\n", new=True)
+    assert (removed.value.reason, written.value.reason) == ("not_owned", "exists")
+    assert library.get("product-planning").origin == "builtin"
 
 
 def test_installing_again_replaces_and_only_alpines_skills_can_be_removed(home, tmp_path):
@@ -304,6 +319,7 @@ def test_the_model_sees_the_skills_and_loads_one_with_the_skill_tool(home, tmp_p
 
 
 def test_without_skills_there_is_no_tool_and_no_section(home, tmp_path, monkeypatch):
+    monkeypatch.setattr(skills_module, "BUILTIN_FOLDER", tmp_path / "builtin")  # none come with Alpine
     session, model = _session(tmp_path, monkeypatch, ["hi"], skills=SkillLibrary(home, []))
     session.send("hello")
     assert "# Skills" not in model.requests[0].system
@@ -323,6 +339,7 @@ def test_slash_name_sends_the_skill_with_the_message_and_shows_what_was_typed(ho
 
 
 def test_a_skill_installed_mid_conversation_is_listed_from_the_next_message(home, tmp_path, monkeypatch):
+    monkeypatch.setattr(skills_module, "BUILTIN_FOLDER", tmp_path / "builtin")  # none come with Alpine
     library = SkillLibrary(home, [])
     session, model = _session(tmp_path, monkeypatch, ["one", "two"], skills=library)
     session.send("hi")

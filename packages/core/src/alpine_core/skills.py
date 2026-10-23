@@ -10,7 +10,8 @@ Where skills come from, first one with a name wins:
   read like the project's AGENTS.md;
 - the ones Alpine installed, in ``~/.alpine-code/skills/<name>``, which Alpine may change and delete;
 - the ones other apps put on this computer (``~/.agents/skills``, ``~/.claude/skills``, ``~/.codex/skills``), used
-  where they are and never changed or deleted by Alpine.
+  where they are and never changed or deleted by Alpine;
+- the ones that come with Alpine (``builtin_skills/`` next to this module), which cannot be removed.
 
 Every skill is in every agent unless the agent turns it off (``AgentConfig.skills_off``): installing a skill is
 enough to use it.
@@ -38,13 +39,16 @@ from alpineagents.errors import ToolInputError
 
 from .home import home_dir
 
-Origin = Literal["project", "alpine", "agents", "claude", "codex"]
+Origin = Literal["project", "alpine", "agents", "claude", "codex", "builtin"]
 
 #: The file that makes a folder a skill.
 SKILL_FILE = "SKILL.md"
 
 #: Where Alpine notes, inside a skill it installed, where the skill came from.
 SOURCE_FILE = ".alpine-source.json"
+
+#: The skills that come with Alpine.
+BUILTIN_FOLDER = Path(__file__).parent / "builtin_skills"
 
 #: Folders inside a project that hold its skills, in order.
 PROJECT_FOLDERS = (".agents/skills", ".alpine-code/skills", ".claude/skills")
@@ -272,8 +276,9 @@ class SkillLibrary:
         self._lock = _lock_for(self.folder)
 
     def installed(self) -> list[Skill]:
-        """Every skill of the user, Alpine's first; a name found again later is left out."""
-        return _first_by_name([*_skills_in(self.folder, "alpine"), *self._from_elsewhere()])
+        """Every skill of the user, Alpine's first, then the ones that come with Alpine; a name found again later is
+        left out."""
+        return _first_by_name([*_skills_in(self.folder, "alpine"), *self._from_elsewhere(), *builtin_skills()])
 
     def for_project(self, project: Path) -> list[Skill]:
         """The skills a session in ``project`` can use: the project's own, then the user's."""
@@ -331,7 +336,7 @@ class SkillLibrary:
             raise SkillError("SKILL.md needs front matter with a description", "invalid")
         folder = self.folder / name
         with self._lock:
-            if new and (folder.exists() or any(s.name == name for s in self._from_elsewhere())):
+            if new and (folder.exists() or any(s.name == name for s in [*self._from_elsewhere(), *builtin_skills()])):
                 raise SkillError(f"A skill named {name} exists", "exists")
             if not new and not (folder / SKILL_FILE).is_file():
                 raise SkillError(f"No skill named {name} that Alpine can change", "not_owned")
@@ -354,11 +359,23 @@ class SkillLibrary:
             if (folder / SKILL_FILE).is_file() or folder.is_dir():
                 shutil.rmtree(folder)
                 return
-        if any(s.name == name for s in self._from_elsewhere()):
-            raise SkillError(f"{name} belongs to another app", "not_owned")
+        if any(s.name == name for s in [*self._from_elsewhere(), *builtin_skills()]):
+            raise SkillError(f"{name} belongs to another app or comes with Alpine", "not_owned")
 
     def _from_elsewhere(self) -> list[Skill]:
         return [s for folder, origin in self._elsewhere for s in _skills_in(folder, origin)]
+
+
+def builtin_skills() -> list[Skill]:
+    return _skills_in(BUILTIN_FOLDER, "builtin")
+
+
+def builtin_skill(name: str) -> Skill:
+    """A skill that comes with Alpine. Raises ``KeyError`` for a name it does not have."""
+    found = next((s for s in builtin_skills() if s.name == name), None)
+    if found is None:
+        raise KeyError(name)
+    return found
 
 
 def _first_by_name(skills: Iterable[Skill]) -> list[Skill]:

@@ -104,6 +104,7 @@ export function skillAppName(skill: Pick<SkillInfo, 'origin'>, t: Words2): strin
 /** Where a skill I did not add in Alpine came from ('Claude Code에 있던 스킬'), or `null` for Alpine's own. */
 export function skillApp(skill: Pick<SkillInfo, 'origin'>, t: Words2): string | null {
   if (skill.origin === 'project') return t.fromProject;
+  if (skill.origin === 'builtin') return t.builtin;
   const app = skillAppName(skill, t);
   return app ? t.fromApp(app) : null;
 }

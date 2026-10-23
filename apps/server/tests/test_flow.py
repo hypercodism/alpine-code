@@ -944,7 +944,12 @@ def files_under(root: Path) -> dict[str, bytes]:
 def test_discovery_starts_empty_creates_the_map_and_writes_schemas(proj):
     prepared = prepare(proj, action="discover", nodeId=None, flowId=None)
     assert not prepared.board.document.nodes and prepared.board.exists
-    assert json.loads((proj / BASE / "map.json").read_text()) == {"formatVersion": 1, "exclude": [], "unmapped": []}
+    assert json.loads((proj / BASE / "map.json").read_text()) == {
+        "formatVersion": 1,
+        "exclude": [],
+        "unmapped": [],
+        "undecided": [],
+    }
     for name in ("map", "feature", "flow"):
         assert json.loads((proj / BASE / f"schema/{name}.json").read_text())["type"] == "object"
     assert "ALREADY implemented" in prepared.prompt and "proposedInclude" not in prepared.prompt
@@ -955,6 +960,70 @@ def test_discovery_starts_empty_creates_the_map_and_writes_schemas(proj):
     # Decision 18: a flow is a journey through one door, and every card sits where its user meets it.
     assert "through one door of the product" in prepared.prompt and "Upkeep features" not in prepared.prompt
     assert json.loads((proj / BASE / "state/project.json").read_text())["syncSession"] == "s1"
+
+
+def test_planning_starts_from_words_with_the_planning_skill(proj):
+    prepared = prepare(proj, action="plan", request="개발 블로그 만들어 줘", nodeId=None, flowId=None)
+    assert prepared.prompt.startswith("개발 블로그 만들어 줘")
+    assert prepared.board.exists and prepared.board.planned and not prepared.board.document.nodes
+    assert not prepare(proj, action="discover", nodeId=None, flowId=None).board.document.nodes
+    assert get(proj).planned  # a map that began as a plan stays one
+    assert '<skill_content name="product-planning">' in prepared.prompt and "ask_user" in prepared.prompt
+    assert "Do not record checks" not in prepared.prompt and "ALREADY implemented" not in prepared.prompt
+    with pytest.raises(MethodError, match="Describe"):
+        prepare(proj, action="plan", request=" ", nodeId=None, flowId=None)
+
+
+def test_building_a_plan_goes_on_without_asking_and_checks_the_promises(proj):
+    prepare(proj, action="plan", request="블로그", nodeId=None, flowId=None)
+    prepared = prepare(proj, action="build", request="이대로 만들어 주세요.", nodeId=None, flowId=None)
+    assert "Choose your own order" in prepared.prompt and '"by": "ai"' in prepared.prompt
+    assert "new unique `id`" in prepared.prompt  # building records checks
+    assert "<skill_content" not in prepared.prompt  # the skill came with the plan, in the same conversation
+
+
+def test_the_map_says_whether_its_build_is_still_working(proj, monkeypatch):
+    prepare(proj, action="plan", request="블로그", nodeId=None, flowId=None)
+    assert get(proj).build == "none"
+    make_session(proj, sid="b1", calls=(), status="running", updated="2999-01-01T00:00:00+00:00")
+    prepare(proj, action="build", request="만들어 주세요.", nodeId=None, flowId=None, sessionId="b1")
+    assert get(proj).build == "running"
+    monkeypatch.setattr(map_state, "live_ids", lambda: set())  # the server no longer runs it
+    assert get(proj).build == "ended"
+
+
+def test_a_planned_map_carries_its_screens_look_and_what_is_left(proj):
+    write_map(proj, undecided=["누가 글을 쓰나요"])
+    put(proj, "screens/order.html", '<main class="bg-page text-ink">주문</main>')
+    put(proj, "screens/gone.html", "<main>no card</main>")
+    before = get(proj).revision
+    look = {
+        "page": "#fff",
+        "surface": "#f5f5f5",
+        "ink": "#171717",
+        "muted": "#737373",
+        "line": "#e5e5e5",
+        "accent": "#ea580c",
+        "on_accent": "#fff",
+        "display": "serif",
+        "body": "sans-serif",
+        "radius": "10px",
+    }
+    put(proj, "look.json", look)
+    board = get(proj)
+    assert board.screens == {"order": '<main class="bg-page text-ink">주문</main>'}
+    assert board.look is not None and board.look.on_accent == "#fff"
+    assert board.undecided == ["누가 글을 쓰나요"]
+    assert board.revision != before  # a new look is a change to the map
+    put(proj, "look.json", {"page": "#fff"})
+    assert get(proj).look is None and any(p.file.endswith("look.json") for p in get(proj).problems)
+
+
+def test_a_card_keeps_its_decisions(proj):
+    decision = {"question": "누가 쓰나요?", "options": ["나만", "여럿"], "answer": "나만", "by": "ai"}
+    write_map(proj, features=[{"id": "order", "title": "Order", "decisions": [decision], "tentative": True}])
+    [node] = get(proj).document.nodes
+    assert (node.decisions[0].answer, node.decisions[0].by, node.tentative) == ("나만", "ai", True)
 
 
 def test_branch_is_attached_and_existing_work_survives(proj):

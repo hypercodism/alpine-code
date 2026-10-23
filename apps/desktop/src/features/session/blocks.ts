@@ -3,7 +3,7 @@ import type { ApprovalItem, ReviewBlockedItem, ToolCallItem } from '@alpine/prot
 import type { Item } from '@/shared/server';
 import { editDiff, toolKind } from '@/shared/tool-calls';
 
-import { PROPOSE_DIRECTIONS } from './directions';
+import { ASK_USER } from '@/shared/questions';
 
 /** A tool call with the answer I gave when it asked, if it asked. */
 export interface ToolRow {
@@ -21,13 +21,13 @@ export type Block =
   | { type: 'tools'; id: string; rows: ToolRow[] }
   | { type: 'approval'; item: ApprovalItem }
   | { type: 'memory'; call: ToolCallItem }
-  | { type: 'directions'; call: ToolCallItem };
+  | { type: 'question'; call: ToolCallItem };
 
 /**
  * The items in the order they started, as blocks. Tool calls in a row become one block. A waiting approval is its
  * own block where the call will be; a finished one is not drawn on its own but goes with its call (a denied call
- * shows what I said). A memory the agent suggested gets its own block right after its call, where I answer it, and the
- * ways a new app could look are a block in place of their call. A call auto mode's reviewer blocked is drawn as its
+ * shows what I said). A memory the agent suggested gets its own block right after its call, where I answer it, and a
+ * question the agent asked is a block in place of its call. A call auto mode's reviewer blocked is drawn as its
  * own line in place of the call, so it is seen without opening the list.
  */
 export function toBlocks(items: Item[], activeIds: readonly string[]): Block[] {
@@ -47,8 +47,8 @@ export function toBlocks(items: Item[], activeIds: readonly string[]): Block[] {
     } else if (item.kind === 'tool_call') {
       if (blocked.has(item.id) && item.status === 'denied') continue;
       if (item.name === 'task_force') continue; // the TF's card is what it did
-      if (item.name === PROPOSE_DIRECTIONS) {
-        if (item.status === 'done') blocks.push({ type: 'directions', call: item }); // its card is what it did
+      if (item.name === ASK_USER) {
+        if (item.status === 'done') blocks.push({ type: 'question', call: item }); // its card is what it did
         continue;
       }
       const row = { call: item, approval: approvals.get(item.id) ?? null };

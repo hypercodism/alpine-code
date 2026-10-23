@@ -48,6 +48,7 @@ function NewSessionRoute() {
           onProjectChange={choose}
           onNewProject={makeNew}
           onStarted={(sessionId) => void navigate({ to: '/session/$sessionId', params: { sessionId } })}
+          onPlanning={(path) => void navigate({ to: '/board', search: { project: path } })}
         />
       ) : projects.isSuccess ? (
         <NoProject onProjectChange={choose} onNewProject={makeNew} />

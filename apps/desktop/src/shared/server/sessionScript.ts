@@ -408,11 +408,19 @@ export function sessionScript(options: SessionScriptOptions = {}): Script {
       model,
       mode,
       agent,
-    }: { cwd: string; model?: string | null; mode?: SessionInfo['mode'] | null; agent?: string | null },
+      purpose,
+    }: {
+      cwd: string;
+      model?: string | null;
+      mode?: SessionInfo['mode'] | null;
+      agent?: string | null;
+      purpose?: SessionInfo['purpose'];
+    },
   ): SessionInfo {
     const info = sessionInfo({
       id: `s-${nextSession++}`,
       cwd,
+      ...(purpose ? { purpose } : {}),
       ...(model ? { model } : {}),
       ...(mode ? { mode } : {}),
       agent: agent ?? 'default',
@@ -609,7 +617,8 @@ export function sessionScript(options: SessionScriptOptions = {}): Script {
         await pause();
         if (script.createFails === 'session')
           throw new ServerError(-32000, 'The session could not be started', { reason: 'other' });
-        const info = startSession(context, { cwd: project.path, agent, mode });
+        // As on the server, the idea goes to the project's map conversation, which plans it on the map.
+        const info = startSession(context, { cwd: project.path, agent, mode, purpose: 'map' });
         sendMessage(context, info.id, idea);
         context.emit({ method: 'projects/createChanged', params: { id, step: 'agent', project } });
         return { project, sessionId: info.id, address: script.address ? `${folder}.alpinesite.app` : null };

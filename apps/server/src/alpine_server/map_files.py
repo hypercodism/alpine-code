@@ -18,6 +18,7 @@ from alpine_protocol import (
     FlowFile,
     FlowNode,
     MapFile,
+    MapLook,
     MapProblem,
     NodeState,
     ProductFlow,
@@ -35,6 +36,9 @@ STATE = f"{MAP_DIR}/state"
 OVERVIEW = f"{MAP_DIR}/OVERVIEW.md"
 OVERVIEW_DIR = f"{MAP_DIR}/overview"
 SCHEMA_DIR = f"{MAP_DIR}/schema"
+SCREENS = f"{MAP_DIR}/screens"
+"""One planned screen per card, ``<card id>.html``, drawn with the theme tokens."""
+LOOK_FILE = f"{MAP_DIR}/look.json"
 
 
 @dataclass
@@ -50,6 +54,9 @@ class Layout:
     problems: list[MapProblem] = field(default_factory=list)
     files: dict[str, str] = field(default_factory=dict)
     """Project-relative path -> content hash of every agent-owned file."""
+    screens: dict[str, str] = field(default_factory=dict)
+    """Card id -> project-relative path of its planned screen, for cards that exist."""
+    look: MapLook | None = None
 
 
 # Parsed files: path -> (mtime_ns, size, lenient, digest, model or error text).
@@ -121,10 +128,10 @@ def _short(exc: Exception) -> str:
     return str(exc)
 
 
-def _names(root: Path, relative: str) -> list[str]:
+def _names(root: Path, relative: str, suffix: str = ".json") -> list[str]:
     folder = inside(root, relative)
     try:
-        return sorted(p.name for p in folder.iterdir() if p.suffix == ".json" and not p.name.startswith("."))
+        return sorted(p.name for p in folder.iterdir() if p.suffix == suffix and not p.name.startswith("."))
     except OSError:
         return []
 
@@ -186,6 +193,22 @@ def read_layout(root: Path) -> Layout:
             tags = card.tags if tag in card.tags else [*card.tags, tag][:50]
             cards[card.id] = card.model_copy(update={"area": None, "tags": tags})
     layout.features = cards
+    for name in _names(root, SCREENS, ".html"):
+        relative = f"{SCREENS}/{name}"
+        card_id = name.removesuffix(".html")
+        digest, error = _read(inside(root, relative))
+        layout.files[relative] = digest
+        if error is not None:
+            problems.append(MapProblem(file=relative, message=error.decode()))
+        elif card_id in cards:
+            layout.screens[card_id] = relative
+    if inside(root, LOOK_FILE).is_file():
+        digest, parsed = _load(root, LOOK_FILE, MapLook, lenient)
+        layout.files[LOOK_FILE] = digest
+        if isinstance(parsed, MapLook):
+            layout.look = parsed
+        else:
+            problems.append(MapProblem(file=LOOK_FILE, message=str(parsed)))
     flow_ids = {f.id for f in flows}
     layout.flows = [_clean_flow(f, cards, flow_ids, problems) for f in flows]
     return layout

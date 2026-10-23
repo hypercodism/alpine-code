@@ -75,16 +75,17 @@ afterEach(() => {
 });
 
 describe('making a new project from the new session screen', () => {
-  it('ends in the new project, with the session that works on the idea open', async () => {
+  it('ends on the map of the new project, where the AI plans the idea', async () => {
     const { router } = mount();
     fireEvent.input(await screen.findByLabelText('메시지'), {
       target: { value: '동네 공방 원데이 클래스를 예약받는 페이지를 만들어 줘' },
     });
     fireEvent.click(screen.getByRole('button', { name: '보내기' }));
     fireEvent.click(await screen.findByRole('button', { name: '만들기' }));
-    fireEvent.click(await screen.findByRole('button', { name: '세션으로 가기' }));
+    fireEvent.click(await screen.findByRole('button', { name: '지도로 가기' }));
 
-    await waitFor(() => expect(router.state.location.pathname).toMatch(/^\/session\/s-/));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/board'));
+    expect(router.state.location.search).toEqual({ project: MADE.path });
     // The rail is now in the new project: its new-session link goes there, and the project is the one shown.
     const rail = await screen.findByRole('navigation', { name: '주 메뉴' });
     await waitFor(() =>
@@ -121,7 +122,7 @@ describe('새로 만들기 (/?new=1)', () => {
     expect(await screen.findByRole('heading', { name: '무엇을 만들어 볼까요?' })).toBeTruthy();
   });
 
-  it('is reached from the project chip, and ends in the new project with its session open', async () => {
+  it('is reached from the project chip, and ends on the map of the new project', async () => {
     const { router } = mount();
     fireEvent.click(await screen.findByRole('button', { name: '프로젝트: alpine-code' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: '프로젝트 추가…' }));
@@ -130,8 +131,8 @@ describe('새로 만들기 (/?new=1)', () => {
 
     await send();
     fireEvent.click(await screen.findByRole('button', { name: '만들기' }));
-    fireEvent.click(await screen.findByRole('button', { name: '세션으로 가기' }));
-    await waitFor(() => expect(router.state.location.pathname).toMatch(/^\/session\/s-/));
+    fireEvent.click(await screen.findByRole('button', { name: '지도로 가기' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/board'));
   });
 
   it('is left by picking a project in the chip', async () => {

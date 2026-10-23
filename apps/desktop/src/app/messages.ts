@@ -16,6 +16,7 @@ export const messages = defineMessages({
     terminal: '터미널',
     servers: '개발 서버',
     processes: '에이전트 실행',
+    mapWorkDone: 'AI가 지도의 일을 마쳤어요. 열어서 확인해 보세요.',
   },
   en: {
     productMap: 'Product map',
@@ -32,6 +33,7 @@ export const messages = defineMessages({
     terminal: 'Terminal',
     servers: 'Dev servers',
     processes: 'Agent commands',
+    mapWorkDone: 'The AI finished its work on the map. Open it to have a look.',
   },
 });
 

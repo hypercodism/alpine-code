@@ -24,7 +24,7 @@ from .events import (
 from .work_changes import WorkChanges
 
 T = TypeVar("T")
-_READ_ONLY = {"read", "glob", "grep", "skill", "propose_memory"}
+_READ_ONLY = {"read", "glob", "grep", "skill", "propose_memory", "ask_user"}
 
 
 class EventReporter(Reporter):

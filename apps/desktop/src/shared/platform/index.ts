@@ -9,3 +9,4 @@ export {
   useOpenFolder,
 } from './folders';
 export { checkForUpdate, restartToUpdate, useUpdateReady, type UpdateCheck } from './update';
+export { notify } from './notify';

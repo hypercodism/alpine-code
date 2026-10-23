@@ -3,6 +3,7 @@ import json
 
 import pytest
 
+from alpine_core import skills as skills_module
 from alpine_server.stdio import serve
 
 
@@ -12,6 +13,7 @@ def skill_md(name: str, description: str = "Does a thing.") -> str:
 
 @pytest.fixture(autouse=True)
 def home(tmp_path, monkeypatch):
+    monkeypatch.setattr(skills_module, "BUILTIN_FOLDER", tmp_path / "builtin")  # only the skills each test makes
     monkeypatch.setenv("ALPINE_CODE_HOME", str(tmp_path / "home"))
     monkeypatch.setenv("HOME", str(tmp_path / "user"))  # other apps' skills live under the user's home
     return tmp_path / "home"

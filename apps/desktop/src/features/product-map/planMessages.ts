@@ -47,6 +47,14 @@ export const planMessages = defineMessages({
     more: (n: number) => `외 ${n}개`,
     changed: (n: number) => `바꾼 것 ${n}개`,
     seeInRecord: '기록에서 보기',
+    decideRestMessage: '나머지는 알아서 정해 줘',
+    activityOnCard: (title: string) => `${title} 만드는 중`,
+    activityEditing: '파일을 고치는 중',
+    activityRunning: '명령을 실행하는 중',
+    activityReading: '코드를 살펴보는 중',
+    activityThinking: '생각하는 중',
+    changeDecisionMessage: (card: string, question: string, answer: string) =>
+      `${card} · ${question} 답을 바꿀래요: ${answer}`,
   },
   en: {
     map: 'Map',
@@ -94,5 +102,13 @@ export const planMessages = defineMessages({
     more: (n: number) => `+${n}`,
     changed: (n: number) => `${n} changed`,
     seeInRecord: 'See in the record',
+    decideRestMessage: 'Decide the rest for me',
+    activityOnCard: (title: string) => `Building ${title}`,
+    activityEditing: 'Changing files',
+    activityRunning: 'Running a command',
+    activityReading: 'Reading the code',
+    activityThinking: 'Thinking',
+    changeDecisionMessage: (card: string, question: string, answer: string) =>
+      `${card} · ${question} I want another answer: ${answer}`,
   },
 });

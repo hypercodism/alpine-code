@@ -1,4 +1,4 @@
-"""``projects/create``: a template becomes a project on the rail, and a session starts on the idea."""
+"""``projects/create``: a template becomes a project on the rail, and its map conversation plans the idea."""
 
 from __future__ import annotations
 
@@ -15,8 +15,9 @@ from alpineagents.testing import FakeModel
 from alpine_core import ConfigError, ProjectList, Settings
 from alpine_core import session as session_module
 from alpine_core import templates as templates_module
-from alpine_protocol import ProjectsCreateParams, SessionOpenParams
+from alpine_protocol import FlowGetParams, ProjectsCreateParams, SessionOpenParams
 from alpine_server import new_projects as new_projects_module
+from alpine_server.flow import get_flow
 from alpine_server.methods import MethodError
 from alpine_server.new_projects import NewProjects
 from alpine_server.sessions import SessionManager
@@ -106,9 +107,12 @@ def test_a_project_is_made_from_the_template_and_the_agent_gets_the_idea(monkeyp
         assert [p.path for p in ProjectList.default().list()] == [folder]
 
         items = await harness.items(result.session_id)
-        assert [(i.kind, i.text) for i in items] == [("user_message", "예약을 받는 앱"), ("agent_message", "On it.")]
+        assert [i.kind for i in items] == ["user_message", "agent_message"]
+        # The idea starts the project's map as a plan, with the planning skill (map-first decisions 3 and 15).
+        assert items[0].text.startswith("예약을 받는 앱") and '<skill_content name="product-planning">' in items[0].text
         opened = await harness.sessions.open(SessionOpenParams(session_id=result.session_id))
-        assert Path(opened.info.cwd) == folder
+        assert Path(opened.info.cwd) == folder and opened.info.purpose == "map"
+        assert get_flow(FlowGetParams(cwd=str(folder))).planned
         await harness.close()
 
     run(scenario())
@@ -316,7 +320,7 @@ def test_creations_at_the_same_time_with_the_same_name_get_different_folders(mon
             assert git(Path(result.project.path), "rev-list", "--count", "HEAD").strip() == "1"
         ideas = {}
         for result in results:  # each session got the idea of its own request
-            ideas[result.project.name] = (await harness.items(result.session_id))[0].text
+            ideas[result.project.name] = (await harness.items(result.session_id))[0].text.split("\n")[0]
         assert sorted(ideas.values()) == [f"idea {n}" for n in range(5)]
         assert len({p.path for p in ProjectList.default().list()}) == 5
         await harness.close()

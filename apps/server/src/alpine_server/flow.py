@@ -11,6 +11,7 @@ from uuid import uuid4
 
 from pydantic import ValidationError
 
+from alpine_core import builtin_skill, skill_content
 from alpine_protocol import (
     FeatureFile,
     FlowActorParams,
@@ -70,6 +71,8 @@ from .map_io import (
 from .methods import APP_ERROR, MethodError
 
 _MAX_PREVIEW = 6 * 1024 * 1024
+_MAX_SCREEN = 200 * 1024
+_MAX_SCREENS = 4 * 1024 * 1024
 _STALE_SYNC = 24 * 3600
 # Per project, in this process: the last head and live sessions seen, and whether replays are due.
 _seen: dict[str, dict] = {}
@@ -258,6 +261,15 @@ def _result(root: Path, layout: Layout) -> FlowGetResult:
         if node.sketch and node.id not in previews and (loaded := image(root, node.sketch, budget, sketch=True)):
             sketches[node.id], size = loaded
             budget -= size
+    screens: dict[str, str] = {}
+    budget = _MAX_SCREENS
+    for card_id, relative in layout.screens.items():
+        try:
+            html = read_bytes(inside(root, relative), min(_MAX_SCREEN, budget)).decode("utf-8", errors="replace")
+        except (OSError, ValueError, MethodError):
+            continue  # a screen too large or unreadable shows as none
+        screens[card_id] = html
+        budget -= len(html.encode())
     changes = map_state.history(root, layout, extra, write=writable)
     result = FlowGetResult(
         revision=_revision(root, layout),
@@ -266,6 +278,9 @@ def _result(root: Path, layout: Layout) -> FlowGetResult:
         read_only=layout.read_only,
         previews=previews,
         sketches=sketches,
+        screens=screens,
+        look=layout.look,
+        undecided=list(layout.map.undecided),
         changes=changes,
         states=states,
         provenance=_shown_provenance(labels, cards, witness, layout),
@@ -277,6 +292,8 @@ def _result(root: Path, layout: Layout) -> FlowGetResult:
         removed_cards=map_state.removed_cards(root, layout.features),
         review=_review(root, layout, sessions),
         unmapped=list(layout.map.unmapped),
+        planned=bool(project.get("planned")),
+        build=_build_state(project, sessions),
     )
     result = _with_etag(result)
     if writable:
@@ -294,6 +311,21 @@ def _result(root: Path, layout: Layout) -> FlowGetResult:
             except OSError:
                 _overview_etag.pop(str(root), None)
     return result
+
+
+def _build_state(project: dict, sessions: list) -> str:
+    """Whether the plan's last build is still working: its session is live, or has not been updated since it began
+    (it is about to get the request). A build that went quiet for a day counts as ended."""
+    pending = project.get("buildSession")
+    if not pending:
+        return "none"
+    info = next((s for s in sessions if s.id == pending), None)
+    started = parse_time(project.get("buildStarted"))
+    if info is None or (started and time.time() - started > _STALE_SYNC):
+        return "ended"
+    if map_state.is_live(info) or (parse_time(info.updated_at) or 0) <= (started or 0):
+        return "running"
+    return "ended"
 
 
 def _with_etag(result: FlowGetResult) -> FlowGetResult:
@@ -764,13 +796,13 @@ def prepare_flow(params: FlowPrepareParams) -> FlowPrepareResult:
             raise MethodError(APP_ERROR, "Select a feature first", "invalid_flow")
         if params.action == "verify" and node is None and not (flow or params.node_ids):
             raise MethodError(APP_ERROR, "Select a feature or flow first", "invalid_flow")
-        if params.action in ("change", "extend", "reshape") and not params.request.strip():
+        if params.action in ("plan", "change", "extend", "reshape") and not params.request.strip():
             raise MethodError(APP_ERROR, "Describe the change", "invalid_flow")
         selected = node.id if node else None
         linked = [node.id] if node else []
         if params.action == "verify":
             linked = list(dict.fromkeys([*linked, *params.node_ids]))
-        if params.action in ("discover", "extend") and not inside(root, MAP_FILE).exists():
+        if params.action in ("plan", "discover", "extend") and not inside(root, MAP_FILE).exists():
             atomic(lpath(root, MAP_FILE), dump(MapFile().model_dump(mode="json", by_alias=True)))
         if params.action == "extend":
             selected = f"feature-{uuid4().hex[:12]}"
@@ -802,6 +834,13 @@ def prepare_flow(params: FlowPrepareParams) -> FlowPrepareResult:
             map_state.save_card(root, node_id, state)
         if params.action == "reshape":
             _snapshot_for_review(root, params.session_id)
+        if params.action in ("plan", "build"):
+            project = map_state.load_project(root)
+            if params.action == "plan":
+                project["planned"] = True
+            else:
+                project["buildSession"], project["buildStarted"] = params.session_id, iso(precise=True)
+            map_state.save_project(root, project)
         if params.action in ("discover", "sync"):
             project = map_state.load_project(root)
             # Precise: the session was created moments before; a start cut to the second would read as before its
@@ -958,6 +997,29 @@ generated files) in map.json `exclude` so they do not count as changes the map m
 
 _NO_CHECKS = "Do not record checks: checking promises is a separate step the user starts from the map.\n"
 
+_BUILD = """\
+Build the whole planned product now; the person approved the map and need not watch. The map is the contract: its
+promises are what done means. Choose your own order: with every journey in hand, design the data and structure for
+all of them first. While you work on a card set its phase to building, and to built once it works; list in its
+`sources` the files that make it (open each in this session). A screen you can run: capture it into the card's
+`preview` (a real screenshot, project-relative, never under .alpine-code/) once it looks right.
+When a product question comes up that the map does not answer, do not stop: take the pick you would recommend, record
+it on the card as a decision with "by": "ai" (with the options you weighed), and go on. Stop to ask with ask_user only
+when no sensible default exists.
+Check every promise you built and record the checks, as below. A promise is done only when a recorded check says so.
+Finish with one short line: what was built, how many promises were checked, and what you decided on your own.
+"""
+
+#: The skill sent with every planning request, so the model does not have to think of loading it.
+PLANNING_SKILL = "product-planning"
+
+_PLAN = """\
+The product does not exist yet: plan it with the person on this map before anything is built, as the planning skill
+below says. Draw the first map now, then ask what is left with ask_user, one question per turn. Write cards with
+phase planned, kind screen for screens, conditions for the promises you assume, no sources and no checks. Do not
+write product code, install anything or start servers until the person says to build.
+"""
+
 
 def _scope_line(include: list[str]) -> str:
     if not include:
@@ -1001,6 +1063,8 @@ def _sync_brief(root: Path, board: FlowGetResult) -> str:
 def _prompt(params: FlowPrepareParams, selected: str | None, board: FlowGetResult) -> str:
     batch = bool(params.node_ids) and not params.node_id
     task = {
+        "plan": "Plan a new product on the map from the person's words. Do not build it yet.",
+        "build": "Build the planned product on the map, in your own order, and check its promises.",
         "discover": "Map what is ALREADY implemented. Do not implement new product features.",
         "extend": "Implement the new branch attached to the selected feature, preserving existing behavior.",
         "change": "Modify the selected feature as requested, preserving surrounding flows.",
@@ -1032,7 +1096,11 @@ def _prompt(params: FlowPrepareParams, selected: str | None, board: FlowGetResul
         if shown:
             extra += "Sources never opened by the sessions that wrote these cards (open them, or remove them):\n"
             extra += "".join(f"- {cid}: {', '.join(unread[cid][:10])}\n" for cid in shown[:20])
-    if params.action == "discover":
+    if params.action == "plan":
+        body = _PLAN + skill_content(builtin_skill(PLANNING_SKILL)) + "\n"
+    elif params.action == "build":
+        body = _BUILD + _CHECKS.replace("SESSION", params.session_id)
+    elif params.action == "discover":
         body = _CARDS + _DISCOVER + _CHECKS.replace("SESSION", params.session_id)
     elif params.action in ("sync", "reshape"):
         body = _CARDS + _NO_CHECKS

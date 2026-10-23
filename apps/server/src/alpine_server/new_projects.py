@@ -2,7 +2,8 @@
 
 Three steps, each announced as ``projects/createChanged`` when it is done: the template becomes a folder (committed, on
 the rail); when signed in to Alpine and the template can be published, its app is made and the web address is announced
-(``address``; a failure skips this step and the project is made anyway); then a session starts in it and gets the idea.
+(``address``; a failure skips this step and the project is made anyway); then the project's map conversation starts and
+gets the idea as a ``plan`` of the map, so the product is planned on its map before it is built.
 The request answers after the last step. Copying, git and the app's creation run in a thread.
 
 The folder is picked by ``create_project``, which claims it with ``mkdir``, so two creations that run at once never get
@@ -40,6 +41,8 @@ from alpine_core.cloud import (
     read_description,
 )
 from alpine_protocol import (
+    FlowGetParams,
+    FlowPrepareParams,
     ProjectsCreateChangedParams,
     ProjectsCreateParams,
     ProjectsCreateResult,
@@ -47,6 +50,7 @@ from alpine_protocol import (
     SessionSendParams,
 )
 
+from .flow import get_flow, prepare_flow
 from .methods import APP_ERROR, INVALID_PARAMS, MethodError, project_info
 from .sessions import SessionManager
 
@@ -100,11 +104,23 @@ class NewProjects:
             self._notify(ProjectsCreateChangedParams(id=params.id, step="address", project=project, address=address))
 
         # From here on the project stays whatever happens: a session that cannot start answers with its own error.
-        started = await self._sessions.new(SessionNewParams(cwd=str(folder), agent=params.agent, mode=params.mode))
+        started = await self._sessions.new(
+            SessionNewParams(cwd=str(folder), agent=params.agent, mode=params.mode, purpose="map")
+        )
         session_id = started.info.id
-        await self._sessions.send(SessionSendParams(session_id=session_id, text=params.idea))
+        prompt = await asyncio.to_thread(_plan, folder, params.idea, session_id)
+        await self._sessions.send(SessionSendParams(session_id=session_id, text=prompt))
         self._notify(ProjectsCreateChangedParams(id=params.id, step="agent", project=project))
         return ProjectsCreateResult(project=project, session_id=session_id, address=address)
+
+
+def _plan(folder: Path, idea: str, session_id: str) -> str:
+    """Starts the project's map as the plan of ``idea``; returns the request for the map conversation."""
+    cwd = str(folder)
+    revision = get_flow(FlowGetParams(cwd=cwd)).revision
+    return prepare_flow(
+        FlowPrepareParams(cwd=cwd, revision=revision, action="plan", request=idea, session_id=session_id)
+    ).prompt
 
 
 def _make_app(folder: Path) -> str | None:

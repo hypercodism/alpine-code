@@ -10,6 +10,7 @@ import { DroppedSkillsDialog } from '../DroppedSkills';
 import { TopBar } from '../TopBar';
 import { useAppMenu } from '../useAppMenu';
 import { useFolderOpening } from '../useFolderOpening';
+import { useMapNotifications } from '../useMapNotifications';
 import { useNewSessionShortcut } from '../useNewSessionShortcut';
 
 const RAIL_KEY = 'alpine.rail.open';
@@ -46,6 +47,7 @@ export const Route = createRootRoute({
 
 function Root() {
   const [dropped, closeDropped, openFolder] = useFolderOpening();
+  useMapNotifications();
   const [railOpen, toggleRail] = useRailOpen();
   const page = useRouterState({ select: (state) => state.location.pathname + (state.location.search.project ?? '') });
   const onNewSession = useRouterState({ select: (state) => state.location.pathname === '/' });

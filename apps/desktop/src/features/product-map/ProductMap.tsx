@@ -36,6 +36,7 @@ import { changedCards } from './FlowTree';
 import { toTreeMap } from './flowTreeData';
 import { flowTreeMessages } from './flowTreeMessages';
 import { JourneyMap } from './JourneyMap';
+import { PlannedMap } from './PlannedMap';
 import { AskFlight, MapAsk } from './MapAsk';
 import { DeleteMap, MapMenu, ScopeEditor } from './MapSettings';
 import { Unmapped } from './Unmapped';
@@ -74,6 +75,7 @@ export function ProductMap({
   sessionId = null,
   onSession,
   onShowConversation,
+  onOpenApp,
   demo = false,
   dockOpen = false,
   hidden = false,
@@ -83,6 +85,8 @@ export function ProductMap({
   onSession: (id: string) => void;
   /** Shows the attached session's conversation (the page keeps it in the dock). */
   onShowConversation?: () => void;
+  /** Runs and shows the project's app (its development server, in the dock). */
+  onOpenApp?: () => void;
   demo?: boolean;
   /** Whether the right dock sits beside the map; when it does and the window is narrow, the changes list overlays it. */
   dockOpen?: boolean;
@@ -247,6 +251,12 @@ export function ProductMap({
   const nodeOf = (id: string) => document?.nodes?.find((n) => n.id === id) ?? null;
   // The project's map conversation (newest first in the list), kept going across every request to the map.
   const mapConversation = (sessions ?? []).find((s) => s.cwd === cwd && s.purpose === 'map' && !s.archived) ?? null;
+  const conversation = useSession(mapConversation?.id ?? null);
+  const conversationWorking = mapConversation?.status === 'running' || mapConversation?.status === 'waiting';
+  // My words to the map's conversation, as they are: answers to its questions and anything else about the plan.
+  const say = (text: string) => {
+    if (mapConversation) send.mutate({ sessionId: mapConversation.id, text });
+  };
   // Who does the map's work: the conversation's agent once it exists, until then my pick for it (else the project's
   // last agent, as a new conversation would take).
   const agents = useAgents().data?.agents;
@@ -481,6 +491,23 @@ export function ProductMap({
       onRecheck={recheckAll}
     />
   );
+
+  if (data?.planned && treeMap) {
+    return (
+      <main ref={area} className="flex min-h-0 min-w-0 grow flex-col contain-inline-size" aria-label={t.title}>
+        <PlannedMap
+          board={data}
+          tree={treeMap}
+          items={conversation.data?.items ?? []}
+          working={conversationWorking}
+          onSay={say}
+          onBuild={() => void start('build', { request: t.buildRequest })}
+          onOpenApp={() => onOpenApp?.()}
+          headerEnd={mapMenu}
+        />
+      </main>
+    );
+  }
 
   return (
     <main ref={area} className="flex min-h-0 min-w-0 grow flex-col bg-canvas contain-inline-size" aria-label={t.title}>

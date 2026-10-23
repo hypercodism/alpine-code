@@ -61,8 +61,8 @@ if TYPE_CHECKING:
 #: The tools the session's model keeps while a TF runs (decision 7): it reads and answers, it does not change files.
 READING = frozenset({"read", "glob", "grep", "skill"})
 
-#: Tools a TF agent never gets: proposing memory is the session's (decision 2).
-NEVER = frozenset({"propose_memory", "task_force", "task_force_status"})
+#: Tools a TF agent never gets: proposing memory and asking the person are the session's (decision 2).
+NEVER = frozenset({"propose_memory", "ask_user", "task_force", "task_force_status"})
 
 #: Statuses of a TF that is still going.
 LIVE: frozenset[TaskForceStatus] = frozenset({"running", "over", "stopping"})

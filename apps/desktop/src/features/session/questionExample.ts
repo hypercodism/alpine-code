@@ -1,6 +1,6 @@
-import type { Direction } from './directions';
+import type { QuestionOption } from '@/shared/questions';
 
-/** What a model might draw for "개발 블로그 만들어 줘": three ways the blog could look, as `propose_directions` takes. */
+/** What a model might draw for "개발 블로그 만들어 줘": three ways the blog could look, as `ask_user` takes. */
 
 interface Post {
   title: string;
@@ -173,23 +173,23 @@ const terminal = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   </main>
 </body></html>`;
 
-export const BLOG_DIRECTIONS: Direction[] = [
+export const BLOG_LOOKS: QuestionOption[] = [
   {
-    title: '조용한 글방',
-    summary: '흰 바탕에 명조체 제목, 글 목록 하나만 길게. 글 읽기에 집중하는 블로그예요.',
-    reference: 'Medium',
+    label: 'Medium 참고',
+    detail: '흰 바탕에 명조체 제목, 글 목록 하나만 길게. 글 읽기에 집중하는 블로그예요.',
     html: quiet,
+    look: null,
   },
   {
-    title: '매거진',
-    summary: '대표 글을 크게 걸고 나머지는 카드로. 색이 있고 첫 화면이 화려해요.',
-    reference: 'Ghost',
+    label: 'Ghost 참고',
+    detail: '대표 글을 크게 걸고 나머지는 카드로. 색이 있고 첫 화면이 화려해요.',
     html: magazine,
+    look: null,
   },
   {
-    title: '터미널 노트',
-    summary: '어두운 화면에 코드 글꼴을 섞은 개발자 느낌. 날짜와 태그가 앞에 나와요.',
-    reference: 'GitHub 블로그',
+    label: 'GitHub 블로그 참고',
+    detail: '어두운 화면에 코드 글꼴을 섞은 개발자 느낌. 날짜와 태그가 앞에 나와요.',
     html: terminal,
+    look: null,
   },
 ];

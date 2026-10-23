@@ -114,7 +114,7 @@ export function Creating({
       {(failure || finished) && (
         <div className="motion-step flex justify-end">
           <Button variant="primary" autoFocus onClick={failure ? onBack : onOpen}>
-            {failure ? (failure.kind === 'not_started' ? t.openProject : t.back) : t.goToSession}
+            {failure ? (failure.kind === 'not_started' ? t.openProject : t.back) : t.goToMap}
           </Button>
         </div>
       )}

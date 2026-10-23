@@ -235,7 +235,7 @@ export function PlanMap({
                 empty={false}
                 disabled={phase === 'drawing' || thinking}
                 onSend={async (text) => {
-                  if (phase === 'asking' && text) onAnswerInWords(text);
+                  if (text) onAnswerInWords(text);
                   return true;
                 }}
               />

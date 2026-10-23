@@ -27,7 +27,13 @@ function Example({
 }) {
   return (
     <div className="flex h-screen">
-      <NewSession project={project} onProjectChange={fn()} onNewProject={fn()} onStarted={started} />
+      <NewSession
+        project={project}
+        onProjectChange={fn()}
+        onNewProject={fn()}
+        onStarted={started}
+        onPlanning={started}
+      />
     </div>
   );
 }
@@ -106,7 +112,7 @@ export const MakingNewCreated: Story = {
     started.mockClear();
     await send('공방 수업 예약 페이지를 만들어 줘');
     await userEvent.click(await screen.findByRole('button', { name: /^(만들기|Create)$/ }, { timeout: 5000 }));
-    const open = await screen.findByRole('button', { name: /세션으로 가기|Go to the session/ }, { timeout: 8000 });
+    const open = await screen.findByRole('button', { name: /지도로 가기|Go to the map/ }, { timeout: 8000 });
     await userEvent.click(open);
     expect(started).toHaveBeenCalledWith(expect.stringMatching(/^s-/));
   },
@@ -165,7 +171,7 @@ export const CreatingFromJudgement: Story = {
     await send('공방 수업 예약 페이지를 만들어 줘');
     await userEvent.click(await screen.findByRole('button', { name: /^(만들기|Create)$/ }, { timeout: 5000 }));
     await waitFor(() => expect(screen.getByText(/AlpineCode\/craft-booking/)).toBeInTheDocument(), { timeout: 5000 });
-    const open = await screen.findByRole('button', { name: /세션으로 가기|Go to the session/ }, { timeout: 8000 });
+    const open = await screen.findByRole('button', { name: /지도로 가기|Go to the map/ }, { timeout: 8000 });
     await userEvent.click(open);
     expect(started).toHaveBeenCalledWith(expect.stringMatching(/^s-/));
   },
@@ -210,10 +216,9 @@ export const CreatingOnThisMac: Story = {
   play: async () => {
     await send('공방 수업 예약 페이지를 만들어 줘');
     await userEvent.click(await screen.findByRole('button', { name: /^(만들기|Create)$/ }, { timeout: 5000 }));
-    await waitFor(
-      () => expect(screen.getByRole('button', { name: /세션으로 가기|Go to the session/ })).toBeInTheDocument(),
-      { timeout: 6000 },
-    );
+    await waitFor(() => expect(screen.getByRole('button', { name: /지도로 가기|Go to the map/ })).toBeInTheDocument(), {
+      timeout: 6000,
+    });
     expect(screen.queryByText(/인터넷 주소 만들기|Make the web address/)).not.toBeInTheDocument();
   },
 };
@@ -292,7 +297,14 @@ function WhileCloning({ clone }: { clone: CloneInfo }) {
   };
   return (
     <div className="flex h-screen">
-      <NewSession project={project} clone={clone} onProjectChange={fn()} onNewProject={fn()} onStarted={started} />
+      <NewSession
+        project={project}
+        clone={clone}
+        onProjectChange={fn()}
+        onNewProject={fn()}
+        onStarted={started}
+        onPlanning={started}
+      />
     </div>
   );
 }

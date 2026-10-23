@@ -39,6 +39,7 @@ function mount(newProject: NewProjectScript = fast, overrides: Script = {}, star
     subscribe: base.subscribe,
   };
   const onStarted = vi.fn();
+  const onPlanning = vi.fn();
   const onProjectChange = vi.fn();
   const onNewProject = vi.fn();
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -51,6 +52,7 @@ function mount(newProject: NewProjectScript = fast, overrides: Script = {}, star
             onProjectChange={onProjectChange}
             onNewProject={onNewProject}
             onStarted={onStarted}
+            onPlanning={onPlanning}
           />
         </LocaleProvider>
       </ServerProvider>
@@ -60,7 +62,7 @@ function mount(newProject: NewProjectScript = fast, overrides: Script = {}, star
   const sent = (method: string) => requests.filter((r) => r.method === method).map((r) => r.params);
   // The rail picks another project: the same screen gets another `project`.
   const switchTo = (next: ProjectInfo | null) => view.rerender(tree(next));
-  return { onStarted, onProjectChange, onNewProject, sent, switchTo };
+  return { onStarted, onPlanning, onProjectChange, onNewProject, sent, switchTo };
 }
 
 async function send(text: string) {
@@ -112,20 +114,21 @@ describe('NewSession', () => {
     expect(sent('session/new')).toEqual([]);
   });
 
-  it('makes the project with the judged name and the picked setup, shows the steps and the real folder, then opens the session', async () => {
-    const { sent, onStarted } = mount();
+  it('makes the project with the judged name and the picked setup, shows the steps and the real folder, then opens its map', async () => {
+    const { sent, onStarted, onPlanning } = mount();
     await send(IDEA);
     await create();
     expect(await screen.findByText('/Users/me/AlpineCode/craft-booking')).toBeTruthy();
-    const open = await screen.findByRole('button', { name: '세션으로 가기' });
+    const open = await screen.findByRole('button', { name: '지도로 가기' });
 
     expect(sent('projects/create')).toEqual([
       { id: expect.any(String), idea: IDEA, template: 'web-lite', name: 'craft-booking', agent: 'a-site' },
     ]);
-    expect(onStarted).not.toHaveBeenCalled();
+    expect(onPlanning).not.toHaveBeenCalled();
     fireEvent.click(open);
-    expect(onStarted).toHaveBeenCalledWith(expect.stringMatching(/^s-/));
-    // The server started the session on the idea itself; the screen starts none.
+    expect(onPlanning).toHaveBeenCalledWith('/Users/me/AlpineCode/craft-booking');
+    expect(onStarted).not.toHaveBeenCalled();
+    // The server started the map conversation on the idea itself; the screen starts none.
     expect(sent('session/new')).toEqual([]);
     expect(sent('session/send')).toEqual([]);
   });
@@ -135,7 +138,7 @@ describe('NewSession', () => {
     await send(IDEA);
     fireEvent.click(await screen.findByRole('radio', { name: /빈 프로젝트/ }));
     await create();
-    await screen.findByRole('button', { name: '세션으로 가기' });
+    await screen.findByRole('button', { name: '지도로 가기' });
     expect(sent('projects/create')).toEqual([expect.objectContaining({ template: 'blank', name: 'craft-booking' })]);
     // Not signed in to Alpine: no web address step.
     expect(screen.queryByText('인터넷 주소 만들기')).toBeNull();
@@ -210,7 +213,7 @@ describe('NewSession', () => {
     expect(alert.textContent).toContain('Permission denied');
     expect(screen.getByRole('heading', { name: '만들지 못했어요' })).toBeTruthy();
     expect(screen.queryByText('진행 중')).toBeNull();
-    expect(screen.queryByRole('button', { name: '세션으로 가기' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '지도로 가기' })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: '돌아가기' }));
     expect(await screen.findByRole('radiogroup', { name: '구성' })).toBeTruthy();
@@ -317,7 +320,7 @@ describe('NewSession', () => {
     expect(await screen.findByText('/Users/me/AlpineCode/craft-booking')).toBeTruthy();
 
     switchTo(other);
-    expect(await screen.findByRole('button', { name: '세션으로 가기' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: '지도로 가기' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: '프로젝트를 만들었어요' })).toBeTruthy();
     expect(sent('projects/create')).toHaveLength(1);
   });
@@ -421,22 +424,22 @@ describe('NewSession making a new project (새로 만들기)', () => {
   });
 
   it("makes the project with the agent shown, not a project's last one, and the setup picked", async () => {
-    const { sent, onStarted } = asNew();
+    const { sent, onPlanning } = asNew();
     await send(IDEA);
     await create();
-    const open = await screen.findByRole('button', { name: '세션으로 가기' });
+    const open = await screen.findByRole('button', { name: '지도로 가기' });
     expect(sent('projects/create')).toEqual([
       { id: expect.any(String), idea: IDEA, template: 'web-lite', name: 'craft-booking', agent: 'default' },
     ]);
     fireEvent.click(open);
-    expect(onStarted).toHaveBeenCalledWith(expect.stringMatching(/^s-/));
+    expect(onPlanning).toHaveBeenCalledWith(expect.stringMatching(/craft-booking$/));
   });
 
   it('lets the server name the folder when nobody picked a setup', async () => {
     const { sent } = asNew({ ...fast, judgeFails: true });
     await send(IDEA);
     await create();
-    await screen.findByRole('button', { name: '세션으로 가기' });
+    await screen.findByRole('button', { name: '지도로 가기' });
     expect(sent('projects/create')).toEqual([expect.objectContaining({ template: 'web-lite', name: '' })]);
   });
 
@@ -515,7 +518,7 @@ describe('NewSession folder chip', () => {
     await create();
     await screen.findByText('/Users/me/AlpineCode/craft-booking');
     expect(screen.getByRole('button', { name: '프로젝트: alpine-code' })).toHaveProperty('disabled', true);
-    await screen.findByRole('button', { name: '세션으로 가기' });
+    await screen.findByRole('button', { name: '지도로 가기' });
   });
 
   it('comes first in the input bar, before the agent', async () => {
@@ -540,7 +543,7 @@ describe('NewSession folder chip', () => {
       await send(IDEA);
       await create();
       expect(await screen.findByText('craft-booking.alpinesite.app')).toBeTruthy();
-      await screen.findByRole('button', { name: '세션으로 가기' });
+      await screen.findByRole('button', { name: '지도로 가기' });
       expect(screen.getByText('인터넷 주소 만들기')).toBeTruthy();
       expect(sent('projects/create')).toHaveLength(1);
     });
@@ -549,7 +552,7 @@ describe('NewSession folder chip', () => {
       mount({ ...fast }, cloudScript({ signedIn: true }));
       await send(IDEA);
       await create();
-      await screen.findByRole('button', { name: '세션으로 가기' });
+      await screen.findByRole('button', { name: '지도로 가기' });
       expect(screen.queryByText('인터넷 주소 만들기')).toBeNull();
     });
 
@@ -565,7 +568,7 @@ describe('NewSession folder chip', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Google로 계속하기' }));
       // A new account is on the free plan, so Pro is the next thing asked for.
       fireEvent.click(await screen.findByRole('button', { name: '7일 무료로 써 보기' }));
-      await screen.findByRole('button', { name: '세션으로 가기' });
+      await screen.findByRole('button', { name: '지도로 가기' });
       expect(window.open).toHaveBeenCalledWith(expect.stringContaining('provider=google'), '_blank', 'noopener');
       expect(sent('projects/create')).toEqual([expect.objectContaining({ template: 'web-pro' })]);
     });
@@ -578,7 +581,7 @@ describe('NewSession folder chip', () => {
       expect(sent('projects/create')).toEqual([]);
 
       fireEvent.click(screen.getByRole('button', { name: '7일 무료로 써 보기' }));
-      await screen.findByRole('button', { name: '세션으로 가기' });
+      await screen.findByRole('button', { name: '지도로 가기' });
       expect(sent('cloud/startTrial')).toHaveLength(1);
       expect(sent('projects/create')).toEqual([expect.objectContaining({ template: 'web-pro' })]);
     });
@@ -587,7 +590,7 @@ describe('NewSession folder chip', () => {
       const { sent } = mount(withPro, cloudScript({ signedIn: true, plan: 'pro' }));
       await send(CHAT);
       await create();
-      await screen.findByRole('button', { name: '세션으로 가기' });
+      await screen.findByRole('button', { name: '지도로 가기' });
       expect(sent('cloud/startTrial')).toEqual([]);
       expect(sent('projects/create')).toEqual([expect.objectContaining({ template: 'web-pro' })]);
     });
@@ -611,7 +614,7 @@ describe('NewSession folder chip', () => {
       expect(sent('projects/create')).toEqual([]);
 
       fireEvent.click(screen.getByRole('button', { name: '설치하고 이어가기' }));
-      await screen.findByRole('button', { name: '세션으로 가기' });
+      await screen.findByRole('button', { name: '지도로 가기' });
       expect(sent('projects/installNodeTools')).toHaveLength(1);
       expect(sent('projects/create')).toHaveLength(1);
     });
@@ -633,7 +636,7 @@ describe('NewSession folder chip', () => {
       await send(IDEA);
       fireEvent.click(await screen.findByRole('radio', { name: /빈 프로젝트/ }));
       await create();
-      await screen.findByRole('button', { name: '세션으로 가기' });
+      await screen.findByRole('button', { name: '지도로 가기' });
       expect(sent('projects/installNodeTools')).toEqual([]);
     });
   });

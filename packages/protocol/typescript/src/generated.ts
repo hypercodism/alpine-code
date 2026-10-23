@@ -198,6 +198,21 @@ export interface ApprovalItem {
   askedBy: AgentAsk[];
 }
 /**
+ * A product question about a card and the answer it got, kept on the card.
+ *
+ * This interface was referenced by `AlpineProtocol`'s JSON-Schema
+ * via the `definition` "CardDecision".
+ */
+export interface CardDecision {
+  question: string;
+  /**
+   * @maxItems 4
+   */
+  options?: [] | [string] | [string, string] | [string, string, string] | [string, string, string, string];
+  answer: string;
+  by?: 'person' | 'ai';
+}
+/**
  * The ChatGPT account behind a connection that signs in instead of using a key. Tokens never leave the server.
  *
  * This interface was referenced by `AlpineProtocol`'s JSON-Schema
@@ -1096,6 +1111,218 @@ export interface FeatureFile {
    * @maxItems 60
    */
   checks?: FlowCheck[];
+  /**
+   * @maxItems 20
+   */
+  decisions?:
+    | []
+    | [CardDecision]
+    | [CardDecision, CardDecision]
+    | [CardDecision, CardDecision, CardDecision]
+    | [CardDecision, CardDecision, CardDecision, CardDecision]
+    | [CardDecision, CardDecision, CardDecision, CardDecision, CardDecision]
+    | [CardDecision, CardDecision, CardDecision, CardDecision, CardDecision, CardDecision]
+    | [CardDecision, CardDecision, CardDecision, CardDecision, CardDecision, CardDecision, CardDecision]
+    | [CardDecision, CardDecision, CardDecision, CardDecision, CardDecision, CardDecision, CardDecision, CardDecision]
+    | [
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision
+      ]
+    | [
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision
+      ]
+    | [
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision
+      ]
+    | [
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision
+      ]
+    | [
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision
+      ]
+    | [
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision
+      ]
+    | [
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision
+      ]
+    | [
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision
+      ]
+    | [
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision
+      ]
+    | [
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision
+      ]
+    | [
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision
+      ]
+    | [
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision
+      ];
+  tentative?: boolean;
 }
 /**
  * This interface was referenced by `AlpineProtocol`'s JSON-Schema
@@ -2000,6 +2227,11 @@ export interface FlowGetResult {
   sketches?: {
     [k: string]: string;
   };
+  screens?: {
+    [k: string]: string;
+  };
+  look?: MapLook | null;
+  undecided?: string[];
   changes?: FlowChange[];
   states?: {
     [k: string]: NodeState;
@@ -2015,6 +2247,8 @@ export interface FlowGetResult {
   removedCards?: RemovedCard[];
   review?: MapReview | null;
   unmapped?: UnmappedPart[];
+  planned?: boolean;
+  build?: 'none' | 'running' | 'ended';
 }
 /**
  * The assembled map the app shows.
@@ -2079,10 +2313,241 @@ export interface FlowNode {
    * @maxItems 60
    */
   checks?: FlowCheck[];
+  /**
+   * @maxItems 20
+   */
+  decisions?:
+    | []
+    | [CardDecision]
+    | [CardDecision, CardDecision]
+    | [CardDecision, CardDecision, CardDecision]
+    | [CardDecision, CardDecision, CardDecision, CardDecision]
+    | [CardDecision, CardDecision, CardDecision, CardDecision, CardDecision]
+    | [CardDecision, CardDecision, CardDecision, CardDecision, CardDecision, CardDecision]
+    | [CardDecision, CardDecision, CardDecision, CardDecision, CardDecision, CardDecision, CardDecision]
+    | [CardDecision, CardDecision, CardDecision, CardDecision, CardDecision, CardDecision, CardDecision, CardDecision]
+    | [
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision
+      ]
+    | [
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision
+      ]
+    | [
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision
+      ]
+    | [
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision
+      ]
+    | [
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision
+      ]
+    | [
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision
+      ]
+    | [
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision
+      ]
+    | [
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision
+      ]
+    | [
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision
+      ]
+    | [
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision
+      ]
+    | [
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision
+      ]
+    | [
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision,
+        CardDecision
+      ];
+  tentative?: boolean;
   priority?: ('must' | 'should' | 'later') | null;
   scope?: ('now' | 'next' | 'out') | null;
   decision?: string;
   sessionId?: string | null;
+}
+/**
+ * ``.alpine-code/map/look.json``: the look the planned screens wear, as the values behind the theme tokens they
+ * draw with (``bg-page``, ``text-ink``, ``font-display``...). Picking a look restyles every screen at once.
+ *
+ * This interface was referenced by `AlpineProtocol`'s JSON-Schema
+ * via the `definition` "MapLook".
+ */
+export interface MapLook {
+  page: string;
+  surface: string;
+  ink: string;
+  muted: string;
+  line: string;
+  accent: string;
+  onAccent: string;
+  display: string;
+  body: string;
+  radius: string;
 }
 /**
  * This interface was referenced by `AlpineProtocol`'s JSON-Schema
@@ -2399,7 +2864,7 @@ export interface FlowNodeResult {
 export interface FlowPrepareParams {
   cwd: string;
   revision: string;
-  action: 'discover' | 'extend' | 'change' | 'verify' | 'sync' | 'reshape';
+  action: 'plan' | 'build' | 'discover' | 'extend' | 'change' | 'verify' | 'sync' | 'reshape';
   request?: string;
   nodeId?: string | null;
   flowId?: string | null;
@@ -2940,6 +3405,10 @@ export interface MapFile {
    * @maxItems 100
    */
   unmapped?: UnmappedPart[];
+  /**
+   * @maxItems 50
+   */
+  undecided?: string[];
 }
 /**
  * This interface was referenced by `AlpineProtocol`'s JSON-Schema
@@ -3255,8 +3724,9 @@ export interface ProjectsCreateChangedParams {
  * Makes a project from a template and starts the agent on the idea.
  *
  * The template is copied into ``<clone folder>/<name>`` (``<name>-2``, ``<name>-3``... when taken, as for clones),
- * the folder becomes a git repository with the template as its first commit, and joins the projects. Then a session
- * starts there and gets ``idea`` as its first message. Each step is announced through ``projects/createChanged``
+ * the folder becomes a git repository with the template as its first commit, and joins the projects. Then the
+ * project's map conversation starts there and gets ``idea`` as the plan of its map (``flow/prepare`` ``plan``), so
+ * the product is planned on the map before it is built. Each step is announced through ``projects/createChanged``
  * as it finishes; the request answers after the last one. Fails with ``not_found`` when the server has no such
  * template, ``invalid_config`` when config.toml cannot be read. When the session cannot start, the project stays
  * made and on the rail, and the error is the session's.
@@ -4026,7 +4496,7 @@ export interface SkillHit {
 export interface SkillInfo {
   name: string;
   description: string;
-  origin: 'project' | 'alpine' | 'agents' | 'claude' | 'codex';
+  origin: 'project' | 'alpine' | 'agents' | 'claude' | 'codex' | 'builtin';
   source: string | null;
   folder: string;
   hasScripts: boolean;

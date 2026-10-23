@@ -17,6 +17,7 @@ from typing import Any
 
 from alpine_core import (
     ApprovalRequest,
+    Asking,
     Builtins,
     ConfigError,
     Decision,
@@ -192,9 +193,9 @@ class SessionManager:
         }
 
     def tool_sources(self, project: Path) -> list[ToolSource]:
-        """Where a folder's tools come from, for its sessions and for ``tools/list``: the built-ins, the project's
-        memory, then (when Alpine Cloud is on) the live data of its published app."""
-        sources: list[ToolSource] = [Builtins(Workspace(project)), self.memories.of(project)]
+        """Where a folder's tools come from, for its sessions and for ``tools/list``: the built-ins, asking the
+        person, the project's memory, then (when Alpine Cloud is on) the live data of its published app."""
+        sources: list[ToolSource] = [Builtins(Workspace(project)), Asking(), self.memories.of(project)]
         return [*sources, LiveData(project)] if cloud_settings.enabled() else sources
 
     async def shutdown(self) -> None:
