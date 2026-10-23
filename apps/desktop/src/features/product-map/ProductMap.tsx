@@ -1,7 +1,7 @@
 import type { FlowNode, FlowPrepareParams, FlowPrepareResult } from '@alpine/protocol';
 import { Button, LinkButton, Popover, SlidingPanel } from '@alpine/ui/primitives';
 import clsx from 'clsx';
-import { ChevronRight, CircleX, RotateCcw, Search, Sparkles } from 'lucide-react';
+import { ChevronRight, CircleX, RotateCcw, Search, Sparkles, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from 'react';
 
@@ -29,6 +29,7 @@ import {
   useSetSessionDetails,
   useSetSessionMode,
   useServer,
+  useSettings,
   useTaskForceAction,
 } from '@/shared/server';
 
@@ -169,7 +170,8 @@ export function ProductMap({
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
-  const [error, setError] = useState<{ text: string; detail?: string } | null>(null);
+  // `model`: the work could not start for want of a working model; the line leads to the model connection.
+  const [error, setError] = useState<{ text: string; detail?: string; model?: boolean } | null>(null);
   const [retry, setRetry] = useState<{ action: Action; target?: Target } | null>(null);
   // A failed send retries exactly the prepared prompt and branch, rather than creating duplicate work.
   const attempt = useRef<{ key: string; session: string; prepared?: FlowPrepareResult } | null>(null);
@@ -197,6 +199,15 @@ export function ProductMap({
     replay_changed: t.replayChanged,
     reason_required: t.reasonRequired,
     flow_busy: t.busyEdit,
+    invalid_config: t.modelNotReady,
+  };
+  const failed = (error: unknown) => {
+    const reason = error instanceof ServerError ? String(error.data?.reason) : '';
+    setError({
+      text: reasons[reason] ?? t.failedStart,
+      detail: error instanceof Error ? error.message : undefined,
+      model: reason === 'invalid_config',
+    });
   };
   const readOnly = !!data?.readOnly;
   const hasMap = !!(document?.nodes?.length || document?.flows?.length);
@@ -422,8 +433,7 @@ export function ProductMap({
       await send.mutateAsync({ sessionId, text: prepared.prompt });
       onSession(sessionId);
     } catch (error) {
-      const known = error instanceof ServerError ? reasons[String(error.data?.reason)] : undefined;
-      setError({ text: known ?? t.failedStart, detail: error instanceof Error ? error.message : undefined });
+      failed(error);
     } finally {
       lock.current = false;
       setBusy(false);
@@ -452,12 +462,13 @@ export function ProductMap({
   // The plan's conversation follows a change made while the build talks, so the two never work by different rules.
   const alsoMap = mapConversation && mapConversation.id !== talkInfo?.id ? mapConversation : null;
   // How much the map's agents may do without asking (a TF's agents follow it too): the conversation's, until it
-  // exists my pick for it.
+  // exists my pick for it, else the default in Settings, which is what a new conversation is made with.
   const [newMode, setNewMode] = useState<Mode | null>(null);
+  const defaultMode = useSettings().data?.mode;
   const setMode = useSetSessionMode();
   const modeChip = (
     <ModeChip
-      mode={talkInfo?.mode ?? newMode ?? 'default'}
+      mode={talkInfo?.mode ?? newMode ?? defaultMode ?? 'default'}
       onChange={(mode) => {
         if (!talkInfo) return setNewMode(mode);
         setMode.mutate({ sessionId: talkInfo.id, mode });
@@ -548,11 +559,7 @@ export function ProductMap({
       setRetry(null);
       return true;
     } catch (error) {
-      const known = error instanceof ServerError ? reasons[String(error.data?.reason)] : undefined;
-      setError({
-        text: known ?? t.failedStart,
-        detail: error instanceof Error ? error.message : undefined,
-      });
+      failed(error);
       return false;
     } finally {
       lock.current = false;
@@ -1005,11 +1012,26 @@ export function ProductMap({
               </details>
             )}
           </span>
-          {retry && (
-            <Button disabled={busy} onClick={() => void start(retry.action, retry.target)}>
-              {t.retry}
+          {error.model && onFixConnection ? (
+            <Button variant="primary" onClick={onFixConnection}>
+              {plan.fixConnection}
             </Button>
+          ) : (
+            retry && (
+              <Button disabled={busy} onClick={() => void start(retry.action, retry.target)}>
+                {t.retry}
+              </Button>
+            )
           )}
+          <button
+            type="button"
+            aria-label={t.closeError}
+            title={t.closeError}
+            onClick={() => setError(null)}
+            className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-fg-muted hover:bg-hover"
+          >
+            <X size={15} aria-hidden />
+          </button>
         </div>
       )}
       {board.isError && data && (

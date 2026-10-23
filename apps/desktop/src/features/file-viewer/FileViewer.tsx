@@ -163,9 +163,11 @@ export function FileViewer() {
                 {path}
               </button>
             ))}
+            {search.isPending && query.trim() && <p className="px-2 py-1 text-meta text-fg-muted">{t.searching}</p>}
+            {search.data?.paths.length === 0 && <p className="px-2 py-1 text-meta text-fg-muted">{t.searchEmpty}</p>}
             {search.error && (
-              <p role="alert" className="text-meta text-danger">
-                {search.error.message}
+              <p role="alert" title={search.error.message} className="text-meta text-danger">
+                {t.searchFailed}
               </p>
             )}
           </div>

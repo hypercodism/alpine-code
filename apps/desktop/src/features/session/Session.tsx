@@ -1,4 +1,4 @@
-import { LinkButton } from '@alpine/ui/primitives';
+import { Button, LinkButton } from '@alpine/ui/primitives';
 import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { useEffect, useRef, useState } from 'react';
@@ -120,9 +120,22 @@ export function Session({
           compact ? 'min-w-0' : 'min-w-120',
         )}
       >
-        {(missing || session.isError) && (
+        {missing ? (
           <p role="status" className="text-body text-fg-muted">
-            {missing ? t.notFound : t.loadFailed}
+            {t.notFound}
+          </p>
+        ) : session.isError ? (
+          <div className="flex flex-col items-center gap-3">
+            <p role="alert" className="text-body text-fg-muted">
+              {t.loadFailed}
+            </p>
+            <Button disabled={session.isFetching} onClick={() => void session.refetch()}>
+              {t.retry}
+            </Button>
+          </div>
+        ) : (
+          <p role="status" className="text-body text-fg-muted">
+            {t.loading}
           </p>
         )}
       </main>
