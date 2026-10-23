@@ -10,8 +10,9 @@ import shlex
 import shutil
 import socket
 import sys
+import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -114,6 +115,13 @@ def how_to_run(project: Path) -> tuple[str, int] | None:
     return None
 
 
+#: A managed server still starting that prints nothing new for this long, with nothing listening where it should, is
+#: given up on: it never listens, or listens where no one looks (a port of its own, no address printed). It is stopped
+#: and shown as failed, which offers to have the AI fix it, instead of "starting" for ever. Long enough for a quiet
+#: first install.
+QUIET_LIMIT = 180.0
+
+
 @dataclass
 class DevelopmentServer:
     id: str
@@ -125,6 +133,10 @@ class DevelopmentServer:
     session_id: str | None = None
     requested_port: int | None = None
     external_pid: int | None = None
+    # How much output was seen last and since when it stayed so, while starting (``QUIET_LIMIT``).
+    heard: int = 0
+    quiet_since: float = field(default_factory=time.monotonic)
+    gave_up: bool = False
 
     async def snapshot(self) -> dict[str, Any]:
         if self.process_id:
@@ -146,10 +158,20 @@ class DevelopmentServer:
         else:
             process = process_manager().get(self.process_id)
             state = process.snapshot()
-            if state.get("status") in {"exited", "failed", "stopped", "cancelled"}:
+            if self.gave_up:
+                status = "failed"
+            elif state.get("status") in {"exited", "failed", "stopped", "cancelled"}:
                 status = "stopped" if state.get("cancelled") or state.get("exit_code") in (0, None) else "failed"
             elif state.get("status") == "stopping":
                 status = "stopping"
+            elif status == "starting":
+                now = time.monotonic()
+                if state.get("output_size", 0) != self.heard:
+                    self.heard, self.quiet_since = state.get("output_size", 0), now
+                elif now - self.quiet_since >= QUIET_LIMIT:
+                    self.gave_up = True
+                    status = "failed"
+                    await process.stop()
         return {
             "id": self.id,
             "cwd": self.cwd,

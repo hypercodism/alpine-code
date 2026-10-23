@@ -256,3 +256,34 @@ def test_port_reaches_every_step_of_the_command(tmp_path: Path):
         finally:
             await process_manager().shutdown()
     asyncio.run(check())
+
+
+def test_a_server_that_never_listens_fails_instead_of_starting_for_ever(tmp_path: Path, monkeypatch):
+    # Like a dev script that ignores PORT and says nothing: once quiet for QUIET_LIMIT it is stopped and failed, so the
+    # preview can offer the AI's fix. Output keeps it starting (a first install that takes a while).
+    from alpine_core import dev_servers
+
+    monkeypatch.setattr(dev_servers, "QUIET_LIMIT", 0.6)
+
+    async def check():
+        manager = DevelopmentServerManager()
+        port = free_port()
+        quiet = f"{shlex.quote(sys.executable)} -u -c 'import time; time.sleep(60)'"
+        talking = (
+            f"{shlex.quote(sys.executable)} -u -c "
+            "'import time\nfor i in range(60):\n    print(i, flush=True); time.sleep(0.2)'"
+        )
+        try:
+            given_up = (await manager.start(str(tmp_path), quiet, port))["server"]
+            busy = (await manager.start(str(tmp_path), talking, free_port()))["server"]
+            for _ in range(60):
+                listed = {s["id"]: s for s in await manager.list(str(tmp_path))}
+                if listed[given_up["id"]]["status"] == "failed":
+                    break
+                await asyncio.sleep(0.1)
+            assert listed[given_up["id"]]["status"] == "failed"
+            assert process_manager().get(given_up["process_id"]).snapshot()["status"] != "running"
+            assert listed[busy["id"]]["status"] == "starting"
+        finally:
+            await process_manager().shutdown()
+    asyncio.run(check())
