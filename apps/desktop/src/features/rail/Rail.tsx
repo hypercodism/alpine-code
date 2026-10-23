@@ -10,7 +10,14 @@ import { StatusWord } from '@/shared/components/status';
 import { useFormat, useMessages } from '@/shared/i18n';
 import { isUnread, useNavigation, visibleSessions, type RailView } from '@/shared/navigation';
 import { revealInFinder } from '@/shared/platform';
-import { useArchiveProject, useOpenProject, useProjects, useSessions, useSetSessionDetails } from '@/shared/server';
+import {
+  useArchiveProject,
+  useAsking,
+  useOpenProject,
+  useProjects,
+  useSessions,
+  useSetSessionDetails,
+} from '@/shared/server';
 
 import { useCurrentProject } from './currentProject';
 import { DeleteProjectDialog } from './DeleteProjectDialog';
@@ -58,15 +65,19 @@ export function Rail({ open = true }: { open?: boolean }) {
   const available = everything.filter((s) => activePaths.has(s.cwd) && !s.archived);
   // A map's answers are read on the map, which never marks them seen; only a conversation opened on its own is unread.
   const unseen = (s: SessionInfo) => !s.purpose && isUnread(s, prefs.seen, prefs.since);
+  // A question the AI asked ends its turn, so the session is idle; it still waits for me.
+  const asking = useAsking((state) => state.ids);
+  const needsMe = (s: SessionInfo) =>
+    s.status === 'waiting' || s.status === 'failed' || (s.status === 'idle' && asking.has(s.id));
   const counts = {
-    attention: available.filter((s) => s.status === 'waiting' || s.status === 'failed').length,
+    attention: available.filter(needsMe).length,
     running: available.filter((s) => s.status === 'running').length,
     unread: available.filter(unseen).length,
   };
   const matches = (s: SessionInfo, project: ProjectInfo) => {
     if (view === 'archived') return project.archived || !!s.archived;
     if (project.archived || (s.archived && s.id !== currentId)) return false;
-    if (view === 'attention') return s.status === 'waiting' || s.status === 'failed';
+    if (view === 'attention') return needsMe(s);
     if (view === 'running') return s.status === 'running';
     if (view === 'unread') return unseen(s);
     return true;
@@ -100,7 +111,11 @@ export function Rail({ open = true }: { open?: boolean }) {
           setUndo({ kind: 'session', id: session.id, archived: !!session.archived });
           setNotice(session.archived ? t.restoredNotice : t.archivedNotice);
           if (currentId === session.id && !session.archived) {
-            const next = sessions.find((s) => s.cwd === session.cwd && s.id !== session.id && !s.archived);
+            // Only a conversation of its own: a build record or an old map conversation opens on the map, which the
+            // project's map is anyway.
+            const next = sessions.find(
+              (s) => s.cwd === session.cwd && s.id !== session.id && !s.archived && !s.purpose,
+            );
             if (next) void navigate({ to: '/session/$sessionId', params: { sessionId: next.id } });
             else go(session.cwd);
           }
@@ -261,7 +276,10 @@ export function Rail({ open = true }: { open?: boolean }) {
                 onArchiveSession={archiveSession}
                 pending={pending}
                 busy={busy(project.path)}
-                state={projectState(everything.filter((s) => s.cwd === project.path && !s.archived))}
+                state={projectState(
+                  everything.filter((s) => s.cwd === project.path && !s.archived),
+                  asking,
+                )}
               />
             );
           })}
@@ -476,7 +494,7 @@ function ProjectGroup({
               <span
                 className={clsx(
                   'ml-auto shrink-0 pl-1 text-meta font-normal whitespace-nowrap',
-                  state === 'attention' ? 'text-attention' : 'text-fg-muted',
+                  state === 'attention' || state === 'asking' ? 'text-attention' : 'text-fg-muted',
                 )}
               >
                 {t[state]}
@@ -526,14 +544,15 @@ function ProjectGroup({
   );
 }
 
-type ProjectState = 'attention' | 'building' | 'running' | null;
+type ProjectState = 'attention' | 'asking' | 'building' | 'running' | null;
 
 /**
  * The one word a project row says about its work (map-first 1), counting the map's own conversations: a question or a
  * failure waiting for me first, then a build of its plan, then any other work.
  */
-function projectState(sessions: SessionInfo[]): ProjectState {
+function projectState(sessions: SessionInfo[], asking: ReadonlySet<string>): ProjectState {
   if (sessions.some((s) => s.status === 'waiting' || s.status === 'failed')) return 'attention';
+  if (sessions.some((s) => s.status === 'idle' && asking.has(s.id))) return 'asking';
   if (sessions.some((s) => s.purpose === 'build' && s.status === 'running')) return 'building';
   if (sessions.some((s) => s.status === 'running')) return 'running';
   return null;

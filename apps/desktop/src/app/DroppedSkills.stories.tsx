@@ -53,3 +53,6 @@ export const SeveralInOneZip: Story = {
 export const NotASkill: Story = {
   args: { outcome: { kind: 'failed', message: '파일이 깨졌거나 스킬 파일이 아니에요' } },
 };
+
+/** A file that is neither a skill nor a folder: nothing takes it yet, and the drop says what can be dropped. */
+export const NotTaken: Story = { args: { outcome: { kind: 'refused', names: ['photo.png'] } } };

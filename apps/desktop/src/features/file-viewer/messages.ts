@@ -24,6 +24,9 @@ export const messages = defineMessages({
     next: '다음 줄',
     line: '이동할 줄',
     search: '프로젝트 파일 검색',
+    searching: '찾는 중…',
+    searchEmpty: '맞는 파일이 없어요',
+    searchFailed: '파일을 찾지 못했어요',
     failure: '파일을 열 수 없어요',
   },
   en: {
@@ -50,6 +53,9 @@ export const messages = defineMessages({
     next: 'Next lines',
     line: 'Go to line',
     search: 'Search project files',
+    searching: 'Searching…',
+    searchEmpty: 'No matching files',
+    searchFailed: 'Could not search the files',
     failure: 'Could not open file',
   },
 });

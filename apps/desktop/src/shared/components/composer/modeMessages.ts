@@ -21,7 +21,7 @@ export const modeMessages = defineMessages({
       })[mode],
     chipTitle: '안전 · Shift+Tab으로 바꾸기',
     chipLabel: (name: string) => `안전: ${name}`,
-    changeDefault: '새 세션 기본값 바꾸기',
+    changeDefault: '기본 안전 바꾸기',
   },
   en: {
     name: (mode: Mode) =>
@@ -40,6 +40,6 @@ export const modeMessages = defineMessages({
       })[mode],
     chipTitle: 'Safety · Shift+Tab to change',
     chipLabel: (name: string) => `Safety: ${name}`,
-    changeDefault: 'Change the default for new sessions',
+    changeDefault: 'Change the default safety',
   },
 });

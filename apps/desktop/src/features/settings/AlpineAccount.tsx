@@ -10,15 +10,36 @@ import { messages } from './messages';
 
 /**
  * The Alpine account in Settings › General: who is signed in, the plan, the credits left and when they fill up
- * again. Signed out it is a way in. Nothing shows until the server has answered `cloud/status`.
+ * again. Signed out it is a way in. While `cloud/status` is asked it says so, and if it cannot be read, offers to ask
+ * again.
  */
 export function AlpineAccount() {
   const t = useMessages(messages);
   const format = useFormat();
-  const status = useCloudStatus().data;
+  const query = useCloudStatus();
+  const status = query.data;
   const portal = usePortal();
   const [sheet, setSheet] = useState<'sign-in' | 'sign-out' | 'upgrade' | null>(null);
-  if (!status) return null;
+  if (!status)
+    return (
+      <>
+        <dt className="text-fg-muted">{t.alpineAccount}</dt>
+        <dd className="flex flex-wrap items-center gap-2">
+          {query.isError ? (
+            <>
+              <span role="alert" className="text-danger">
+                {t.accountFailed}
+              </span>
+              <LinkButton disabled={query.isFetching} onClick={() => void query.refetch()}>
+                {t.retry}
+              </LinkButton>
+            </>
+          ) : (
+            <span className="text-fg-muted">{t.accountLoading}</span>
+          )}
+        </dd>
+      </>
+    );
 
   const { account, plan, credits } = status;
   const planName =

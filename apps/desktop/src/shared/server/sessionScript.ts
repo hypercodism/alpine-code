@@ -105,6 +105,32 @@ class Cancelled extends Error {}
 
 const ANSWER = 'I read the README, then ran the check you asked for. ';
 
+/** The files every demo project has, by path from its folder. */
+const DEMO_FILES: Record<string, string> = {
+  'README.md': '# 데모 프로젝트\n\n브라우저에서 보는 Alpine Code의 예시 파일이에요.\n',
+  'package.json': '{\n  "name": "demo",\n  "private": true\n}\n',
+  'src/main.tsx': "import { App } from './App';\n\nApp();\n",
+  'src/App.tsx': "export function App() {\n  return 'hello';\n}\n",
+  'src/components/Button.tsx': 'export function Button() {\n  return null;\n}\n',
+};
+
+/** What is directly in `folder` ('' for the project's own folder) of DEMO_FILES: its folders first, then its files. */
+function demoEntries(folder: string) {
+  const prefix = folder ? `${folder.replace(/\/$/, '')}/` : '';
+  const folders = new Set<string>();
+  const files: string[] = [];
+  for (const file of Object.keys(DEMO_FILES)) {
+    if (!file.startsWith(prefix)) continue;
+    const [name, ...rest] = file.slice(prefix.length).split('/');
+    if (rest.length > 0) folders.add(name!);
+    else files.push(name!);
+  }
+  return [
+    ...[...folders].sort().map((name) => ({ name, path: prefix + name, kind: 'directory' as const })),
+    ...files.sort().map((name) => ({ name, path: prefix + name, kind: 'file' as const })),
+  ];
+}
+
 /**
  * A simulated server for the session methods. `session/send` runs a script of a turn:
  *
@@ -598,20 +624,33 @@ export function sessionScript(options: SessionScriptOptions = {}): Script {
           throw new ServerError(-32000, 'The model could not be reached', { reason: 'model_failed' });
         return { judgement: standInJudgement(text, locale, pickable, newProject === true) };
       },
-      // What is in a folder, for the new-project screen's look at a picked one: the demo projects and the projects
-      // made here have files, so do the `filled` folders; any other folder is empty.
-      'files/list': ({ cwd }) => {
+      // What is in a folder, for the new-project screen's look at a picked one and the dock's file tree: the demo
+      // projects and the projects made here have the same few files (DEMO_FILES), so do the `filled` folders; any
+      // other folder is empty. Each folder lists only what is directly in it.
+      'files/list': ({ cwd, path }) => {
         const full =
           PROJECTS.some((p) => p.path === cwd) ||
           [...made].some((folder) => cwd.endsWith(`/${folder}`)) ||
           (options.newProject?.filled ?? []).includes(cwd);
-        const entries = full
-          ? [
-              { name: 'src', path: 'src', kind: 'directory' as const },
-              { name: 'README.md', path: 'README.md', kind: 'file' as const },
-            ]
-          : [];
+        const entries = full ? demoEntries(path ?? '') : [];
         return { entries, nextOffset: entries.length, hasMore: false };
+      },
+      'files/search': ({ query }) => ({
+        paths: Object.keys(DEMO_FILES).filter((file) => file.toLowerCase().includes(query.trim().toLowerCase())),
+      }),
+      'files/read': ({ cwd, path, line }) => {
+        const content = DEMO_FILES[path];
+        if (content === undefined) throw new ServerError(-32000, `No such file: ${path}`, { reason: 'not_found' });
+        const totalLines = content.split('\n').length;
+        return {
+          path: `${cwd}/${path}`,
+          relativePath: path,
+          content,
+          startLine: 1,
+          totalLines,
+          line: line ?? 1,
+          truncated: false,
+        };
       },
       'projects/create': async ({ id, idea, template, name, folder: chosen, agent, mode }, context) => {
         const script = options.newProject ?? {};

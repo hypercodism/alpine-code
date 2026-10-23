@@ -159,8 +159,9 @@ def fetched_templates() -> Path | None:
 
 def fetch_templates(repo: str | None = None) -> Path | None:
     """Fetches the public templates repository into ``~/.alpine-code/templates/<commit>`` (the latest commit, no
-    history) and returns the folder; the copy already there when it is the latest. Older copies are removed: only the
-    newest is ever used. ``None`` while there is no repository address (``TEMPLATES_REPO``) or git cannot run.
+    history) and returns the folder; the copy already there when it is the latest. Only the newest is used from then
+    on; the one before it is kept until the next fetch, since a project may be being made from it, and older ones are
+    removed. ``None`` while there is no repository address (``TEMPLATES_REPO``) or git cannot run.
 
     Raises:
         OSError: git failed.
@@ -180,9 +181,11 @@ def fetch_templates(repo: str | None = None) -> Path | None:
             os.utime(folder)  # fresh again: it is the latest
         else:
             scratch.rename(folder)
-        for old in root.glob("*"):
-            if old != folder and old.is_dir() and not old.name.startswith("fetch-"):
-                shutil.rmtree(old, ignore_errors=True)
+        # The copy that was newest until now may be what a new project is copying from at this moment, so it stays
+        # until the next fetch; only those older than it go.
+        others = [p for p in root.glob("*") if p != folder and p.is_dir() and not p.name.startswith("fetch-")]
+        for old in sorted(others, key=lambda p: p.stat().st_mtime, reverse=True)[1:]:
+            shutil.rmtree(old, ignore_errors=True)
         return folder
     finally:
         shutil.rmtree(scratch, ignore_errors=True)

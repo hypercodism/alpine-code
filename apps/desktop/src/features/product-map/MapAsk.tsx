@@ -1,6 +1,7 @@
 import { ArrowUp } from 'lucide-react';
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 
+import { useConnectPrompt, useNoModel } from '@/shared/components/connect';
 import { useMessages } from '@/shared/i18n';
 
 import { messages } from './messages';
@@ -9,7 +10,8 @@ const reducedMotion = () => globalThis.matchMedia?.('(prefers-reduced-motion: re
 
 /**
  * The map's own input, floating at the bottom of the canvas: what I ask the map (draw it, add a side of the product,
- * regroup) goes from here. With no map yet an empty message just draws it.
+ * regroup) goes from here. With no map yet an empty message just draws it. With no model connected, sending opens
+ * the connect sheet instead, as every input does, and the words stay.
  */
 export function MapAsk({
   empty,
@@ -32,8 +34,11 @@ export function MapAsk({
   const [text, setText] = useState('');
   const form = useRef<HTMLFormElement>(null);
   const canSend = !disabled && (empty || !!text.trim());
+  const ask = useConnectPrompt((state) => state.ask);
+  const unconnected = useNoModel();
   const send = async () => {
     if (!canSend) return;
+    if (unconnected) return ask();
     const words = text.trim();
     if (await onSend(words, form.current?.getBoundingClientRect() ?? null)) setText('');
   };

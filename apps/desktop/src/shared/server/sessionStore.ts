@@ -1,6 +1,7 @@
 import type { SessionEventParams, SessionInfo } from '@alpine/protocol';
 import type { QueryClient } from '@tanstack/react-query';
 
+import { askingChange, asksMe, noteAsking } from './asking';
 import type { Notification, ServerConnection } from './connection';
 import { applyEvent, fromSnapshot, type SessionState } from './sessionState';
 
@@ -41,6 +42,8 @@ export function removeSession(client: QueryClient, id: string) {
  * - while `session/open` is in flight, events for that session are kept, then those newer than the snapshot are applied
  * - once open, events are applied in order, all that arrived within a frame at once (`schedule`)
  * - a gap in `seq` means events were missed, so the session is opened again
+ *
+ * It also notes which sessions wait for my answer to a question (`useAsking`), from every session's events.
  */
 export class SessionStore {
   private readonly buffers = new Map<string, SessionEventParams[]>();
@@ -65,7 +68,14 @@ export class SessionStore {
     const { sessionId, event } = params;
 
     if (event.type === 'info_changed') upsertSession(this.client, event.info);
-    else if (event.type === 'deleted') removeSession(this.client, sessionId);
+    else if (event.type === 'deleted') {
+      removeSession(this.client, sessionId);
+      noteAsking(sessionId, false);
+    } else if (event.type === 'item_started' || event.type === 'item_completed') {
+      // Every session's events come here, opened or not, so a question is known wherever it was asked.
+      const asking = askingChange(event.item, event.type === 'item_completed');
+      if (asking !== null) noteAsking(sessionId, asking);
+    }
 
     const buffer = this.buffers.get(sessionId);
     if (buffer) return void buffer.push(params);
@@ -126,6 +136,7 @@ export class SessionStore {
         if (gap && attempt < MAX_REOPENS) continue;
         // Cached before the buffer is dropped, so no event falls between the two.
         this.client.setQueryData(sessionKey(sessionId), state);
+        noteAsking(sessionId, asksMe(state.items));
         return state;
       }
     } finally {

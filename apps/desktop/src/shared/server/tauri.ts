@@ -9,5 +9,6 @@ export function tauriConnection(): ServerConnection {
   return jsonRpcConnection({
     send: (line) => invoke('server_send', { line }),
     onLine: (listener) => void listen<string>('server://message', (event) => listener(event.payload)),
+    onExit: (listener) => void listen('server://exit', () => listener()),
   });
 }

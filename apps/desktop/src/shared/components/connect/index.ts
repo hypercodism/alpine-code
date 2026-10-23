@@ -4,4 +4,4 @@ export { connectionLabel } from './labels';
 export { LocalServerForm } from './LocalServerForm';
 export { messages as connectMessages } from './messages';
 export { PlanLine } from './PlanLine';
-export { useConnectPrompt } from './prompt';
+export { useConnectPrompt, useNoModel } from './prompt';

@@ -78,7 +78,23 @@ export function ConnectionTab({ onAlpineAccount }: { onAlpineAccount: () => void
   const cloud = useCloudEnabled();
   const alpine = useCloudStatus(cloud).data;
   const data = connections.data;
-  if (!data) return null;
+  if (!data)
+    return (
+      <div className="mx-auto flex w-full max-w-240 flex-col items-center gap-3 py-12 text-center">
+        {connections.isError ? (
+          <>
+            <p role="alert" className="text-body text-danger">
+              {t.connectionsFailed}
+            </p>
+            <Button disabled={connections.isFetching} onClick={() => void connections.refetch()}>
+              {t.retry}
+            </Button>
+          </>
+        ) : (
+          <p className="text-body text-fg-muted">{t.connectionsLoading}</p>
+        )}
+      </div>
+    );
 
   return (
     <div className="mx-auto flex w-full max-w-240 flex-col gap-8 pb-8">

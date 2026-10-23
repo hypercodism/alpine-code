@@ -192,3 +192,20 @@ it('opens the editor and folder with the selected location and copies the absolu
   await screen.findByText('Copied');
   expect(writeText).toHaveBeenCalledWith('/project/a.json');
 });
+
+it('says when no file matches the search, and while it is still searching (#78)', async () => {
+  let answer: (paths: string[]) => void = () => {};
+  mount({
+    results: {
+      'files/list': { entries: [{ name: 'src', path: 'src', kind: 'directory' }], nextOffset: 1, hasMore: false },
+      'files/search': () => new Promise((resolve) => (answer = (paths) => resolve({ paths }))),
+    },
+  });
+  await screen.findByRole('treeitem', { name: 'src' });
+  fireEvent.click(screen.getByRole('button', { name: 'Search project files' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Search project files' }), { target: { value: 'zzz' } });
+  expect(await screen.findByText('Searching…')).toBeTruthy();
+  answer([]);
+  expect(await screen.findByText('No matching files')).toBeTruthy();
+  expect(screen.queryByText('Searching…')).toBeNull();
+});

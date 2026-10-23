@@ -252,7 +252,11 @@ export function statefulScript(start: ScriptState): Script {
         projects: projects.map((p) => ({ ...p, lastAgent: start.agents?.lastAgent.get(p.path) ?? p.lastAgent })),
         clones,
       }),
+      // As on the server, only a folder opens: a file (by its extension, `photo.png`) or a folder that went to the
+      // Trash is refused.
       'projects/open': ({ path }) => {
+        if (/\.[a-z0-9]{1,5}$/i.test(path.split('/').pop() ?? '') || path.includes('/.Trash/'))
+          throw new ServerError(-32000, `Not a folder: ${path}`, { reason: 'not_a_folder' });
         const opened = project(path);
         projects = [opened, ...projects.filter((p) => p.path !== path)];
         return { project: opened };

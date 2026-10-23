@@ -2,20 +2,24 @@ import { Button } from '@alpine/ui/primitives';
 import { useNavigate } from '@tanstack/react-router';
 
 import { useMessages } from '@/shared/i18n';
-import { useOpenProject } from '@/shared/server';
+import { useOpenFolder } from '@/shared/platform';
+import { ServerError, useOpenProject } from '@/shared/server';
 
 import { messages } from './messages';
 
 /**
  * A map whose project is not in the list (deleted, or archived) reached from an old link or a notification: it says
  * why and offers the way back, putting the folder on the list again (its files stay when a project is deleted), or a
- * new project.
+ * new project. A folder that is no longer where it was (moved, or thrown away) cannot be opened again: it says so and
+ * offers to pick the folder where it is now.
  */
 export function MissingProject({ path, archived }: { path: string; archived: boolean }) {
   const t = useMessages(messages);
   const reopen = useOpenProject();
   const navigate = useNavigate();
+  const pick = useOpenFolder((opened) => void navigate({ to: '/board', search: { project: opened } }));
   const name = path.split('/').pop() || path;
+  const moved = reopen.error instanceof ServerError && reopen.error.data?.reason === 'not_a_folder';
   return (
     <div className="flex grow flex-col items-center justify-center gap-3 p-8 text-center">
       <p className="text-body font-medium">{archived ? t.missingArchived(name) : t.missingGone(name)}</p>
@@ -23,14 +27,20 @@ export function MissingProject({ path, archived }: { path: string; archived: boo
         {archived ? t.missingArchivedHint : t.missingGoneHint}
       </p>
       <div className="flex items-center gap-2 pt-1">
-        <Button variant="primary" disabled={reopen.isPending} onClick={() => reopen.mutate(path)}>
-          {archived ? t.restore : t.reopen}
-        </Button>
+        {moved ? (
+          <Button variant="primary" onClick={() => void pick()}>
+            {t.pickMoved}
+          </Button>
+        ) : (
+          <Button variant="primary" disabled={reopen.isPending} onClick={() => reopen.mutate(path)}>
+            {archived ? t.restore : t.reopen}
+          </Button>
+        )}
         <Button onClick={() => void navigate({ to: '/' })}>{t.newProject}</Button>
       </div>
       {reopen.error && (
-        <p role="alert" className="text-meta text-danger">
-          {reopen.error.message}
+        <p role="alert" title={reopen.error.message} className="max-w-md text-meta text-danger">
+          {moved ? t.folderMoved : t.reopenFailed}
         </p>
       )}
     </div>

@@ -42,6 +42,8 @@ async fn fetch(app: &AppHandle) -> tauri_plugin_updater::Result<Option<String>> 
     let Some(update) = app.updater()?.check().await? else {
         return Ok(None);
     };
+    // A check by hand shows that it found one and is downloading it, which can take a while.
+    let _ = app.emit("update-downloading", &update.version);
     let bytes = update.download(|_, _| {}, || {}).await?;
     let version = update.version.clone();
     if let Ok(mut slot) = updates.ready.lock() {

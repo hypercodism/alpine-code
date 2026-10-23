@@ -3,13 +3,14 @@ import { Link } from '@tanstack/react-router';
 import { memo, useMemo } from 'react';
 
 import { agentMessages, agentName, Character, toolLabel } from '@/shared/components/agent';
+import { useConnectPrompt, useNoModel } from '@/shared/components/connect';
 import { Markdown } from '@/shared/components/markdown';
 import { skillTitle } from '@/shared/components/skills';
 import { TaskForceCard } from '@/shared/components/taskforce';
 import { useFormat, useLocale, useMessages } from '@/shared/i18n';
 import { productMapMessage } from '@/shared/productMapMessage';
 import { openInBrowser } from '@/shared/platform';
-import { CHATGPT_USAGE_URL, useAgents, useCloudStatus, useSkills, type Item } from '@/shared/server';
+import { CHATGPT_USAGE_URL, useAgents, useCloudStatus, useSendMessage, useSkills, type Item } from '@/shared/server';
 
 import { ApprovalCard } from './ApprovalCard';
 import { CompactionLine } from './CompactionLine';
@@ -45,6 +46,10 @@ export function Chat({
   onShowTaskForce?: () => void;
 }) {
   const answered = useMemo(() => answers(items), [items]);
+  // A run that failed last can be asked again: what I last sent, sent again.
+  const last = items.at(-1);
+  const retryOf = last?.kind === 'run_stopped' && last.reason === 'failed' && activeIds.length === 0 ? last.id : null;
+  const retry = retryOf ? (items.findLast((item) => item.kind === 'user_message')?.text ?? null) : null;
   return (
     <div className="flex flex-col gap-4">
       {toBlocks(items, activeIds).map((block) =>
@@ -66,6 +71,8 @@ export function Chat({
           <ItemView
             key={block.item.id}
             item={block.item}
+            sessionId={sessionId}
+            retry={block.item.id === retryOf ? retry : null}
             cwd={cwd}
             active={activeIds.includes(block.item.id)}
             header={answered.get(block.item.id)?.header ?? true}
@@ -131,12 +138,17 @@ function UserText({ text, cwd }: { text: string; cwd: string }) {
 /** Drawn again only when its item changed (items keep their identity until an event changes them). */
 const ItemView = memo(function ItemView({
   item,
+  sessionId,
+  retry,
   cwd,
   active,
   header,
   remembered,
 }: {
   item: Extract<Block, { type: 'item' }>['item'];
+  sessionId: string;
+  /** For the failed run that ended the conversation: what I last sent, to send again. */
+  retry: string | null;
   cwd: string;
   active: boolean;
 } & Answer) {
@@ -190,8 +202,14 @@ const ItemView = memo(function ItemView({
             </LinkButton>
           </p>
         );
-      if (item.reason === 'signed_out') return <p className={quiet}>{t.stopped_signed_out}</p>;
+      if (item.reason === 'signed_out')
+        return (
+          <p className={quiet}>
+            {t.stopped_signed_out} · <ConnectionLink />
+          </p>
+        );
       if (item.reason === 'credits_exhausted') return <CreditsStopped />;
+      if (item.reason === 'failed') return <FailedLine sessionId={sessionId} message={item.message} retry={retry} />;
       return (
         <p className={quiet}>
           {t[`stopped_${item.reason}`]}
@@ -247,5 +265,63 @@ function CreditsStopped() {
   const t = useMessages(messages);
   const format = useFormat();
   const refills = useCloudStatus().data?.credits?.refillsAt;
-  return <p className={quiet}>{t.stopped_credits_exhausted(refills ? format.date(new Date(refills)) : null)}</p>;
+  return (
+    <p className={quiet}>
+      {t.stopped_credits_exhausted(refills ? format.date(new Date(refills)) : null)} · <ConnectionLink />
+    </p>
+  );
+}
+
+/** Where a model is signed in again or another one connected. */
+function ConnectionLink() {
+  const t = useMessages(messages);
+  return (
+    <Link to="/settings" search={{ tab: 'connection' }} className="text-interactive hover:underline">
+      {t.openConnection}
+    </Link>
+  );
+}
+
+/**
+ * The run failed: the core's words (English, and for whoever looks into it) fold away, and the last run of the
+ * conversation can be asked again, with what I last sent. With no model connected, asking again opens the connect
+ * sheet instead, as sending does.
+ */
+function FailedLine({
+  sessionId,
+  message,
+  retry,
+}: {
+  sessionId: string;
+  message: string | null;
+  retry: string | null;
+}) {
+  const t = useMessages(messages);
+  const send = useSendMessage();
+  const ask = useConnectPrompt((state) => state.ask);
+  const unconnected = useNoModel();
+  return (
+    <div className={quiet}>
+      <span>{t.stopped_failed}</span>
+      {retry !== null && (
+        <>
+          {' · '}
+          <LinkButton
+            className="min-h-5 px-0.5"
+            disabled={send.isPending}
+            onClick={() => (unconnected ? ask() : send.mutate({ sessionId, text: retry }))}
+          >
+            {t.retry}
+          </LinkButton>
+        </>
+      )}
+      {send.isError && <span className="text-danger"> · {t.retryFailed}</span>}
+      {message && (
+        <details className="mt-1">
+          <summary className="cursor-pointer">{t.details}</summary>
+          <span className="break-words">{message}</span>
+        </details>
+      )}
+    </div>
+  );
 }

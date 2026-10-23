@@ -5,6 +5,9 @@ import { defineMessages } from '@/shared/i18n';
 export const agentsMessages = defineMessages({
   ko: {
     screen: '에이전트 설정',
+    loading: '에이전트를 불러오는 중…',
+    loadFailed: '에이전트를 불러오지 못했어요',
+    retry: '다시 시도',
     library: '라이브러리',
     // strip
     strip: '에이전트',
@@ -102,6 +105,9 @@ export const agentsMessages = defineMessages({
   },
   en: {
     screen: 'Agent settings',
+    loading: 'Loading agents…',
+    loadFailed: "Couldn't load the agents",
+    retry: 'Try again',
     library: 'Library',
     strip: 'Agents',
     newAgent: 'New agent',

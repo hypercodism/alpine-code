@@ -88,6 +88,8 @@ export const messages = defineMessages({
     emptyLead: 'AI가 코드를 읽고 누가 어떤 길로 쓰는지 그려요. 보통 몇 분 걸려요.',
     loadFailed: '지도를 읽지 못했어요. 파일이 잘못된 경우 덮어쓰지 않고 그대로 보존합니다.',
     failedStart: '작업을 시작하지 못했어요. 아래 내용을 확인한 뒤 다시 시도해 주세요.',
+    modelNotReady: 'AI가 일할 모델이 준비되지 않았어요. 모델 연결을 확인해 주세요.',
+    closeError: '닫기',
     conflict: '다른 작업이 지도를 바꿨어요. 최신 지도를 불러왔으니 다시 요청해 주세요.',
     // Inspector
     noPromises: '이 기능에 정해 둔 약속이 아직 없어요.',
@@ -399,6 +401,8 @@ export const messages = defineMessages({
     emptyLead: 'The AI reads the code and draws who uses it and how. It usually takes a few minutes.',
     loadFailed: 'Could not read the map. Invalid files are preserved rather than overwritten.',
     failedStart: 'Could not start work. Review the error below and try again.',
+    modelNotReady: 'No model is ready for the AI to work with. Check the model connection.',
+    closeError: 'Close',
     conflict: 'Another task changed the map. The latest map is loaded; please try again.',
     noPromises: 'This feature has no promises set yet.',
     noPromisesLead: 'With promises set, you can keep checking that this feature works.',
