@@ -568,11 +568,20 @@ export function ProductMap({
 
   // Words that waited for the AI go, oldest first, once what they go to is free: a conversation between its turns, a
   // request to the map once nothing in the project works. Each place keeps its own order, so words that could not go
-  // (or failed) hold back only later words to the same place, and say so; the rest go on.
+  // (or failed) hold back only later words to the same place, and say so; the rest go on. Words for a conversation
+  // that is gone (deleted or archived meanwhile) go where the map talks now, rather than failing there for ever.
+  const here = talkTo ?? sessionId;
+  const gone = (to: string) => !!sessions && !sessions.some((s) => s.id === to && !s.archived);
+  const placeOf = (word: LaterWord) => (word.to && gone(word.to) ? here : word.to);
   const targetBusy = (to: string | null) =>
     to === null ? anyActive || busy : to === workId ? workBusy : atWork((sessions ?? []).find((s) => s.id === to));
+  // Until the conversations are known, no one can tell where words go. A word that failed at a conversation now gone
+  // is tried again where the map talks.
   const held = (word: LaterWord, index: number) =>
-    !!word.failed || targetBusy(word.to) || later.words.slice(0, index).some((before) => before.to === word.to);
+    !sessions ||
+    (!!word.failed && !(word.to && gone(word.to))) ||
+    targetBusy(placeOf(word)) ||
+    later.words.slice(0, index).some((before) => placeOf(before) === placeOf(word));
   const next = later.words.find((word, index) => !held(word, index));
   const [nudge, setNudge] = useState(0);
   const sending = useRef<string | null>(null);
@@ -580,8 +589,9 @@ export function ProductMap({
     if (!next || sending.current) return;
     sending.current = next.id;
     const word = next;
+    const to = placeOf(word);
     const done = () => (sending.current = null);
-    if (word.to === null) {
+    if (to === null) {
       // A request is prepared when it goes; if it fails, the error above the map offers to try again.
       const node = word.node ? nodeOf(word.node) : null;
       void (node ? start('change', { node, request: word.text }) : start('request', { request: word.text })).finally(
@@ -592,12 +602,12 @@ export function ProductMap({
       );
       return;
     }
+    // The dock stays on whatever I opened meanwhile: the words reach the conversation without taking me there.
     send.mutate(
-      { sessionId: word.to, text: word.text },
+      { sessionId: to, text: word.text },
       {
         onSuccess: () => {
           later.drop(word.id);
-          onSession(word.to!);
           done();
         },
         onError: (error) => {
@@ -605,7 +615,7 @@ export function ProductMap({
           // It started working a moment before: it goes when this turn is over.
           if (error instanceof ServerError && error.code === SESSION_RUNNING)
             setTimeout(() => setNudge((n) => n + 1), 1000);
-          else later.fail(word.id, true);
+          else later.fail(word.id, true, to);
         },
       },
     );
