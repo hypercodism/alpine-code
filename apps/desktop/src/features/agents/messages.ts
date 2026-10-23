@@ -29,7 +29,7 @@ export const agentsMessages = defineMessages({
     duplicate: '복제하기',
     delete: '지우기…',
     copyName: (name: string) => `${name} 복사본`,
-    startSession: '이 에이전트로 새 세션',
+    startSession: '이 에이전트로 새 프로젝트',
     deleteTitle: (name: string) => `${josa(name, '을/를')} 지울까요?`,
     deleteBody:
       '이 에이전트로 일하던 세션은 다음 메시지부터 기본 에이전트로 이어가요. 라이브러리의 도구는 그대로 남아요.',
@@ -124,7 +124,7 @@ export const agentsMessages = defineMessages({
     duplicate: 'Duplicate',
     delete: 'Delete…',
     copyName: (name: string) => `${name} copy`,
-    startSession: 'New session with this agent',
+    startSession: 'New project with this agent',
     deleteTitle: (name: string) => `Delete ${name}?`,
     deleteBody:
       'Sessions that worked with this agent carry on with the default agent from their next message. The tools in the library stay.',

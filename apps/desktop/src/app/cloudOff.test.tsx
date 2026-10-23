@@ -103,11 +103,11 @@ describe('프로젝트 추가', () => {
     return within(await screen.findByRole('dialog')).getAllByRole('button');
   };
 
-  it('lists 새로 만들기 first, with Alpine Cloud or without it (map-first 42)', async () => {
+  it('lists 새 프로젝트 first, with Alpine Cloud or without it (map-first 42)', async () => {
     for (const cloud of [true, false]) {
       mount('/session/work', cloud);
       await settle();
-      expect((await open()).map((row) => row.textContent?.slice(0, 5))).toEqual(['새로 만들', '회사·팀 ', '내 컴퓨터']);
+      expect((await open()).map((row) => row.textContent?.slice(0, 5))).toEqual(['새 프로젝', '회사·팀 ', '내 컴퓨터']);
       cleanup();
     }
   });

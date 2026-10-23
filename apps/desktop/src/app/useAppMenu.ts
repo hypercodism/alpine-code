@@ -10,6 +10,7 @@ import { checkForUpdate, inTauri, restartToUpdate } from '@/shared/platform';
 
 import appIcon from '../../src-tauri/icons/128x128@2x.png';
 import { menuMessages } from './messages';
+import { useWorkRunning } from './useWorkRunning';
 
 interface Actions {
   newSession: () => void;
@@ -26,10 +27,11 @@ export function useAppMenu(railOpen: boolean, actions: Actions) {
   const t = useMessages(menuMessages);
   const navigate = useNavigate();
   const router = useRouter();
+  const working = useWorkRunning();
   // The menu is rebuilt only when its text changes; its items call whatever the latest actions are.
-  const latest = useRef({ ...actions, navigate, router, t });
+  const latest = useRef({ ...actions, navigate, router, t, working });
   useEffect(() => {
-    latest.current = { ...actions, navigate, router, t };
+    latest.current = { ...actions, navigate, router, t, working };
   });
 
   useEffect(() => {
@@ -50,6 +52,8 @@ type Latest = Actions & {
   navigate: ReturnType<typeof useNavigate>;
   router: ReturnType<typeof useRouter>;
   t: (typeof menuMessages)['ko'];
+  /** The AI is at work, so restarting would stop it. */
+  working: boolean;
 };
 
 async function buildMenu(railOpen: boolean, get: () => Latest): Promise<Menu> {
@@ -70,7 +74,7 @@ async function buildMenu(railOpen: boolean, get: () => Latest): Promise<Menu> {
         text: name,
         items: [
           { item: { About: { name, version, icon } }, text: t.about(name) },
-          { text: t.checkUpdate, action: () => void checkByHand(get().t, version) },
+          { text: t.checkUpdate, action: () => void checkByHand(get, version) },
           { item: 'Separator' },
           {
             text: t.settings,
@@ -144,16 +148,24 @@ async function iconBytes(): Promise<Uint8Array | undefined> {
   }
 }
 
-/** "Check for Updates…": says what it found, and offers to restart when a newer version is ready. */
-async function checkByHand(t: Latest['t'], version: string) {
+/**
+ * "Check for Updates…": says what it found, and offers to restart when a newer version is ready; while the AI works,
+ * the offer says the work stops. A restart that fails says so.
+ */
+async function checkByHand(get: () => Latest, version: string) {
+  const { t } = get();
   const found = await checkForUpdate();
   if (found.kind === 'ready') {
-    const now = await ask(t.updateReadyBody, {
-      title: t.updateReadyTitle(found.version),
-      okLabel: t.restartNow,
+    const working = get().working;
+    const now = await ask(working ? t.workingBody : t.updateReadyBody, {
+      title: working ? t.workingTitle : t.updateReadyTitle(found.version),
+      okLabel: working ? t.restartAnyway : t.restartNow,
       cancelLabel: t.later,
     });
-    if (now) await restartToUpdate();
+    if (now)
+      await restartToUpdate().catch(() =>
+        message(t.restartFailed, { title: t.updateReadyTitle(found.version), kind: 'warning' }),
+      );
   } else if (found.kind === 'newest') {
     await message(t.newestBody(version), { title: t.newestTitle });
   } else {

@@ -31,7 +31,8 @@ function NewProjectRoute() {
   const clone = project && !arrived ? cloneAt(projects.data?.clones ?? [], project) : undefined;
   const openMap = (path: string) => void navigate({ to: '/board', search: { project: path } });
 
-  if (project && arrived) return <Navigate to="/board" search={{ project }} />;
+  // Replacing this stop, so ← goes back to the screen before the project was opened instead of bouncing here.
+  if (project && arrived) return <Navigate to="/board" search={{ project }} replace />;
   if (clone)
     return (
       <main className="flex min-w-120 grow flex-col items-center justify-center bg-canvas p-6">

@@ -14,10 +14,11 @@ const APP: Record<ExternalSessionInfo['source'], string> = { claude_code: 'Claud
 const NAMED = 2;
 
 /**
- * The conversations other apps (Claude Code, Codex, …) had in this project, to go on with here (on its map): one line saying from
- * where and how many, opening the list. Nothing shows when there are none. Picking one brings it over (its messages,
- * tool calls and results) as a session of the project and opens it; one already brought over, and not added to since,
- * opens again instead of being copied twice.
+ * The conversations other apps (Claude Code, Codex, …) had in this project, to read here (beside its map): one line
+ * saying from where and how many, opening the list. Nothing shows when there are none. Picking one brings it over (its
+ * messages, tool calls and results) as a session of the project, closes the list and opens it; one already brought
+ * over, and not added to since, opens again instead of being copied twice. The map's input talks to the map, so the
+ * link promises reading, not going on (until 기록 shows them, map-first 23).
  */
 export function ImportLink({ cwd, onOpen }: { cwd: string; onOpen: (sessionId: string) => void }) {
   const t = useMessages(messages);
@@ -36,7 +37,17 @@ export function ImportLink({ cwd, onOpen }: { cwd: string; onOpen: (sessionId: s
       <Dialog.Root open={open} onOpenChange={setOpen}>
         <Dialog.Popup>
           <Dialog.Title>{t.importFrom(named)}</Dialog.Title>
-          {open && <ImportList found={found} cwd={cwd} showApp={apps.length > 1} onOpen={onOpen} />}
+          {open && (
+            <ImportList
+              found={found}
+              cwd={cwd}
+              showApp={apps.length > 1}
+              onOpen={(sessionId) => {
+                setOpen(false);
+                onOpen(sessionId);
+              }}
+            />
+          )}
           <Dialog.Close render={<Button className="self-end" />}>{t.close}</Dialog.Close>
         </Dialog.Popup>
       </Dialog.Root>

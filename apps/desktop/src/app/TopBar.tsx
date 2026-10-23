@@ -1,6 +1,7 @@
+import { Button, Dialog } from '@alpine/ui/primitives';
 import { Link, useMatch, useNavigate, useRouter } from '@tanstack/react-router';
 import { ArrowLeft, ArrowRight, GitBranch, PanelLeft } from 'lucide-react';
-import { type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import { DockToggle } from '@/features/dock/Dock';
 import { PublishButton } from '@/features/publish/PublishButton';
@@ -12,6 +13,7 @@ import { restartToUpdate, useUpdateReady } from '@/shared/platform';
 import { useCloudEnabled, useProjectGit, useProjects, useSession } from '@/shared/server';
 
 import { menuMessages, messages } from './messages';
+import { useWorkRunning } from './useWorkRunning';
 
 const iconButton =
   'inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-fg-muted hover:bg-hover hover:text-fg';
@@ -62,20 +64,50 @@ export function TopBar({ railOpen, onToggleRail }: { railOpen: boolean; onToggle
   );
 }
 
-/** Once a newer version has downloaded: restart into it now (it installs on quit otherwise). */
+/**
+ * Once a newer version has downloaded: restart into it now (it installs on quit otherwise). Restarting stops the AI's
+ * work, so while it works this asks first; a restart that fails says so instead of doing nothing.
+ */
 function UpdateButton() {
   const t = useMessages(menuMessages);
   const version = useUpdateReady();
+  const working = useWorkRunning();
+  const [asking, setAsking] = useState(false);
+  const [failed, setFailed] = useState(false);
   if (!version) return null;
+  const restart = () => {
+    setAsking(false);
+    setFailed(false);
+    restartToUpdate().catch(() => setFailed(true));
+  };
   return (
-    <button
-      type="button"
-      title={t.updateReadyTitle(version)}
-      onClick={() => void restartToUpdate()}
-      className="ml-1 shrink-0 cursor-pointer rounded-full bg-interactive px-3 py-1 text-meta font-medium text-on-fill hover:bg-interactive-hover"
-    >
-      {t.restartToUpdate}
-    </button>
+    <>
+      {failed && (
+        <span role="alert" className="ml-2 min-w-0 truncate text-meta text-danger">
+          {t.restartFailed}
+        </span>
+      )}
+      <button
+        type="button"
+        title={t.updateReadyTitle(version)}
+        onClick={() => (working ? setAsking(true) : restart())}
+        className="ml-1 shrink-0 cursor-pointer rounded-full bg-interactive px-3 py-1 text-meta font-medium text-on-fill hover:bg-interactive-hover"
+      >
+        {t.restartToUpdate}
+      </button>
+      <Dialog.Root open={asking} onOpenChange={setAsking}>
+        <Dialog.Popup size="sm" role="alertdialog">
+          <div className="flex flex-col gap-2">
+            <Dialog.Title>{t.workingTitle}</Dialog.Title>
+            <Dialog.Description>{t.workingBody}</Dialog.Description>
+          </div>
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <Dialog.Close render={<Button variant="primary" />}>{t.later}</Dialog.Close>
+            <Button onClick={restart}>{t.restartAnyway}</Button>
+          </div>
+        </Dialog.Popup>
+      </Dialog.Root>
+    </>
   );
 }
 
@@ -112,9 +144,10 @@ function SessionPart({ sessionId }: { sessionId: string }) {
         {info && <StatusWord status={info.status} className="ml-1" />}
       </Drag>
       {info && (
+        // The project's map, as from the rail: with its own conversation, not this one.
         <Link
           to="/board"
-          search={{ project: info.cwd, session: sessionId }}
+          search={{ project: info.cwd }}
           className="mr-2 rounded-md px-2 py-1 text-body text-interactive hover:bg-hover"
         >
           {t.productMap}

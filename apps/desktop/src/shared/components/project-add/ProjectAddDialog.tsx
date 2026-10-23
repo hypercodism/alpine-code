@@ -11,7 +11,7 @@ import { ProjectChoices } from './ProjectChoices';
 /**
  * 프로젝트 추가: every way in opens this one dialog (the rail's +, the project menu over the input). It lists the ways a
  * project comes in; getting one from a repository goes on in the same dialog, opening a folder hands over to Finder.
- * `onDone` gets the project's folder, or the clone's on its way there. 새로 만들기 closes the dialog and calls `onNew`:
+ * `onDone` gets the project's folder, or the clone's on its way there. 새 프로젝트 closes the dialog and calls `onNew`:
  * making a project from an idea happens on the new-session screen, not here.
  */
 export function ProjectAddDialog({

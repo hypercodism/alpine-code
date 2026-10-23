@@ -10,13 +10,28 @@ import { messages } from './messages';
 /**
  * Board ProjectDelete: what goes and what stays, before anything is removed.
  * It cannot be undone, so Enter never confirms: focus starts on Cancel, and only a click or ⌘Enter deletes.
+ * `onDeleted` gets the folder once it is off the list, so a screen showing it can move on.
  */
-export function DeleteProjectDialog({ project, onClose }: { project: ProjectInfo | null; onClose: () => void }) {
+export function DeleteProjectDialog({
+  project,
+  onClose,
+  onDeleted,
+}: {
+  project: ProjectInfo | null;
+  onClose: () => void;
+  onDeleted?: (path: string) => void;
+}) {
   const t = useMessages(messages);
   const remove = useDeleteProject();
 
   const confirm = () => {
-    if (project) remove.mutate(project.path, { onSuccess: onClose });
+    if (!project) return;
+    remove.mutate(project.path, {
+      onSuccess: () => {
+        onDeleted?.(project.path);
+        onClose();
+      },
+    });
   };
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.key === 'Enter' && event.metaKey) {

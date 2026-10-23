@@ -134,13 +134,13 @@ describe('independent project browsing', () => {
     expect(await screen.findByRole('heading', { name: '무엇을 만들어 볼까요?' })).toBeTruthy();
   });
 
-  it('offers 새로 만들기 first in the project dialog, and it opens 새 프로젝트', async () => {
+  it('offers 새 프로젝트 first in the project dialog, and it opens 새 프로젝트', async () => {
     const { router } = mount('/session/cart');
     fireEvent.click(await screen.findByRole('button', { name: '프로젝트 추가' }));
     const dialog = await screen.findByRole('dialog');
     const rows = within(dialog).getAllByRole('button');
     expect(rows.map((row) => row.textContent)).toEqual([
-      '새로 만들기아이디어를 적으면 구성을 골라 줘요',
+      '새 프로젝트아이디어를 적으면 구성을 골라 줘요',
       '회사·팀 프로젝트 받기GitHub, GitLab 같은 저장소 주소로',
       '내 컴퓨터의 프로젝트 열기이미 이 컴퓨터에 있는 폴더⌘O',
     ]);
