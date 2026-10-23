@@ -13,6 +13,7 @@ import { CHATGPT_USAGE_URL, useAgents, useCloudStatus, useSkills, type Item } fr
 
 import { ApprovalCard } from './ApprovalCard';
 import { CompactionLine } from './CompactionLine';
+import { DirectionsCard } from './DirectionsCard';
 import { answers, type Answer } from './answers';
 import { toBlocks, type Block } from './blocks';
 import { MemoryCard, MemoryReviewLine } from './MemoryCard';
@@ -53,6 +54,8 @@ export function Chat({
           <BlockedLine key={block.item.id} item={block.item} />
         ) : block.type === 'approval' ? (
           <ApprovalCard key={block.item.id} sessionId={sessionId} approval={block.item} />
+        ) : block.type === 'directions' ? (
+          <DirectionsCard key={`directions-${block.call.id}`} sessionId={sessionId} call={block.call} items={items} />
         ) : block.type === 'memory' ? (
           <MemoryCard key={`memory-${block.call.id}`} sessionId={sessionId} cwd={cwd} call={block.call} />
         ) : block.item.kind === 'memory_review' ? (

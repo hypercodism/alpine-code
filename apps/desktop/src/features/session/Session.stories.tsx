@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
-import { expect, screen, userEvent, waitFor } from 'storybook/test';
+import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 
 import {
   MEMORY,
@@ -15,6 +15,7 @@ import {
   type SessionScriptOptions,
 } from '@/shared/server';
 
+import { BLOG_DIRECTIONS } from './directionsExample';
 import { Session } from './Session';
 
 const ID = 's-story';
@@ -852,5 +853,40 @@ export const SlashSkills: Story = {
     await userEvent.type(await screen.findByLabelText(/^(메시지|Message)$/), '/');
     await expect(await screen.findByRole('listbox')).toBeVisible();
     await expect(screen.getByRole('option', { name: /weekly-report/ })).toBeVisible();
+  },
+};
+
+/** A new blog's first answer: the agent drew three ways it could look, side by side, with its pick first. */
+const directionItems: Item[] = [
+  { id: 'd1', kind: 'user_message', text: '개발 블로그 만들어 줘' },
+  {
+    id: 'd2',
+    kind: 'agent_message',
+    agent: null,
+    text: '만들기 전에 어떤 느낌으로 할지 먼저 정하면 좋겠어요. 많이 쓰는 블로그 세 곳을 참고해서 그려 봤어요.',
+  },
+  {
+    id: 'd3',
+    kind: 'tool_call',
+    name: 'propose_directions',
+    args: { question: '블로그를 어떤 느낌으로 만들까요?', options: BLOG_DIRECTIONS },
+    status: 'done',
+    result: 'Shown. Wait for the user to pick one.',
+    images: 0,
+    commandResult: null,
+    fileChanges: null,
+  },
+];
+
+export const DirectionsProposed: Story = { parameters: { server: server(directionItems) } };
+
+/** Picking one on the card sends it as my message, and the card becomes one line. */
+export const DirectionPicked: Story = {
+  parameters: { server: server(directionItems) },
+  play: async () => {
+    const card = await screen.findByRole('region', { name: /방향 제안|Directions/ });
+    await userEvent.click(within(card).getByRole('button', { name: /매거진/ }));
+    await userEvent.click(within(card).getByRole('button', { name: /이 느낌으로 만들기|Build it like this/ }));
+    await expect(await screen.findByText(/'매거진' 느낌으로 정했어요|Going with '매거진'/)).toBeVisible();
   },
 };
