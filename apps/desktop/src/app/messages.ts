@@ -17,6 +17,16 @@ export const messages = defineMessages({
     servers: '개발 서버',
     processes: '에이전트 실행',
     mapWorkDone: 'AI가 지도의 일을 마쳤어요. 열어서 확인해 보세요.',
+    mapStopped: 'AI가 지도의 일을 하다 멈췄어요. 열어서 이유를 확인해 보세요.',
+    mapAsks: 'AI가 물어볼 게 있어요. 열어서 답해 주면 이어서 해요.',
+    mapNeedsYes: 'AI가 허락을 기다려요. 열어서 확인해 주세요.',
+    engineStopped: '앱 엔진이 멈췄어요.',
+    engineStoppedHint: '다시 시작하면 프로젝트와 지도, 대화는 그대로 있어요. 하던 AI 작업은 다시 부탁해 주세요.',
+    engineRestart: '다시 시작',
+    engineRestartFailed: '다시 시작하지 못했어요. 앱을 끄고 다시 열어 주세요.',
+    droppedFileTitle: '이 파일은 받을 수 없어요',
+    droppedFileBody: (names: string) =>
+      `${names}: 파일을 대화에 붙이는 건 아직 안 돼요. 끌어다 놓을 수 있는 건 프로젝트로 열 폴더나 스킬(.zip, .skill, SKILL.md)이에요.`,
   },
   en: {
     productMap: 'Product map',
@@ -34,6 +44,17 @@ export const messages = defineMessages({
     servers: 'Dev servers',
     processes: 'Agent commands',
     mapWorkDone: 'The AI finished its work on the map. Open it to have a look.',
+    mapStopped: 'The AI stopped while working on the map. Open it to see why.',
+    mapAsks: 'The AI has a question. Open it and answer to let it go on.',
+    mapNeedsYes: 'The AI is waiting for your OK. Open it to have a look.',
+    engineStopped: "The app's engine stopped.",
+    engineStoppedHint:
+      'Restart: your projects, maps and conversations stay. Ask again for any AI work that was going on.',
+    engineRestart: 'Restart',
+    engineRestartFailed: "Couldn't restart. Quit the app and open it again.",
+    droppedFileTitle: "This file can't be taken",
+    droppedFileBody: (names: string) =>
+      `${names}: attaching files to a conversation isn't possible yet. You can drop a folder to open as a project, or a skill (.zip, .skill, SKILL.md).`,
   },
 });
 
@@ -71,6 +92,8 @@ export const menuMessages = defineMessages({
     zoom: '확대/축소',
     bringAllToFront: '모두 앞으로 가져오기',
     restartToUpdate: '다시 시작해서 업데이트',
+    checkingUpdate: '업데이트 확인하는 중…',
+    downloadingUpdate: '새 버전 내려받는 중…',
     updateReadyTitle: (version: string) => `${version} 버전이 준비됐어요`,
     updateReadyBody: '지금 다시 시작해서 업데이트할까요? 나중에 해도 앱을 끌 때 설치돼요.',
     restartNow: '다시 시작',
@@ -116,6 +139,8 @@ export const menuMessages = defineMessages({
     zoom: 'Zoom',
     bringAllToFront: 'Bring All to Front',
     restartToUpdate: 'Restart to update',
+    checkingUpdate: 'Checking for updates…',
+    downloadingUpdate: 'Downloading the new version…',
     updateReadyTitle: (version: string) => `Version ${version} is ready`,
     updateReadyBody: 'Restart now to update? If you wait, it installs when you quit the app.',
     restartNow: 'Restart',

@@ -8,6 +8,7 @@ import { NavigationController } from '@/features/rail/NavigationController';
 import { useCloneUpdates } from '@/shared/server';
 
 import { DroppedSkillsDialog } from '../DroppedSkills';
+import { EngineStopped } from '../EngineStopped';
 import { TopBar } from '../TopBar';
 import { useAppMenu } from '../useAppMenu';
 import { useFolderOpening } from '../useFolderOpening';
@@ -66,6 +67,7 @@ function Root() {
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-canvas-sunken">
       <TopBar railOpen={railOpen} onToggleRail={toggleRail} />
+      <EngineStopped />
       <div className="flex min-h-0 grow">
         <Rail open={railOpen} />
         <div className="mr-2 mb-2 flex min-w-0 grow overflow-hidden rounded-xl border border-line bg-canvas">

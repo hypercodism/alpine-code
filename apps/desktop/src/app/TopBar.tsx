@@ -8,7 +8,7 @@ import { PublishButton } from '@/features/publish/PublishButton';
 import { useWorkResult } from '@/features/work-result/useWorkResult';
 import { StatusWord } from '@/shared/components/status';
 import { useMessages } from '@/shared/i18n';
-import { restartToUpdate, useUpdateReady } from '@/shared/platform';
+import { restartToUpdate, useUpdateCheck, useUpdateReady } from '@/shared/platform';
 import { useCloudEnabled, useProjectGit, useProjects, useSession } from '@/shared/server';
 
 import { menuMessages, messages } from './messages';
@@ -61,15 +61,28 @@ export function TopBar({ railOpen, onToggleRail }: { railOpen: boolean; onToggle
 
 /**
  * Once a newer version has downloaded: restart into it now (it installs on quit otherwise). Restarting stops the AI's
- * work, so while it works this asks first; a restart that fails says so instead of doing nothing.
+ * work, so while it works this asks first; a restart that fails says so instead of doing nothing. While "업데이트
+ * 확인…" checks or downloads, it says so here at once.
  */
 function UpdateButton() {
   const t = useMessages(menuMessages);
   const version = useUpdateReady();
+  const phase = useUpdateCheck((state) => state.phase);
   const working = useWorkRunning();
   const [asking, setAsking] = useState(false);
   const [failed, setFailed] = useState(false);
-  if (!version) return null;
+  if (!version)
+    return (
+      phase && (
+        <span role="status" className="ml-1 inline-flex shrink-0 items-center gap-1.5 text-meta text-fg-muted">
+          <span
+            aria-hidden="true"
+            className="size-1.5 animate-pulse rounded-full bg-interactive motion-reduce:animate-none"
+          />
+          {phase === 'checking' ? t.checkingUpdate : t.downloadingUpdate}
+        </span>
+      )
+    );
   const restart = () => {
     setAsking(false);
     setFailed(false);

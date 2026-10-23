@@ -44,7 +44,7 @@ function connect(): ServerConnection {
   const demo = demoOptions();
   // A planned product (dev-blog) walks through planning and building on its map.
   const sessions = [...SESSIONS.map((info) => ({ info })), ...PLAN_DEMO_SESSIONS];
-  return scriptedConnection(
+  const connection = scriptedConnection(
     planDemo(
       mergeScripts(
         chatScript({ stepMs: 400, wordMs: 80, sessions, newProject: demo.newProject }),
@@ -53,17 +53,21 @@ function connect(): ServerConnection {
       ),
     ),
   );
+  if (demo.engineStopsAfterMs !== undefined) setTimeout(() => connection.exit(), demo.engineStopsAfterMs);
+  return connection;
 }
 
 /**
  * For walking a path the demo does not take by itself (setups that cannot be fetched, a project whose AI did not
- * start, Alpine Cloud off): `alpine.demo` in localStorage, as `{ "newProject": {...}, "cloudOff": true }`.
+ * start, Alpine Cloud off, the server process ending after a while): `alpine.demo` in localStorage, as
+ * `{ "newProject": {...}, "cloudOff": true, "engineStopsAfterMs": 3000 }`.
  */
-function demoOptions(): { newProject?: NewProjectScript; cloudOff?: boolean } {
+function demoOptions(): { newProject?: NewProjectScript; cloudOff?: boolean; engineStopsAfterMs?: number } {
   try {
     return JSON.parse(localStorage.getItem('alpine.demo') ?? '{}') as {
       newProject?: NewProjectScript;
       cloudOff?: boolean;
+      engineStopsAfterMs?: number;
     };
   } catch {
     return {};

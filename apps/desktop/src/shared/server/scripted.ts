@@ -1,4 +1,13 @@
-import type { Notification, Method, Params, Result, ServerConnection } from './connection';
+import {
+  SERVER_EXITED,
+  SERVER_EXITED_CODE,
+  ServerError,
+  type Method,
+  type Notification,
+  type Params,
+  type Result,
+  type ServerConnection,
+} from './connection';
 
 /** What a scripted result can do besides answering: speak to the app without being asked. */
 export interface ScriptContext {
@@ -26,22 +35,42 @@ export function mergeScripts(...scripts: Script[]): Script {
   };
 }
 
-/** A server that follows a script: for Storybook stories and tests, where no server process runs. */
-export function scriptedConnection(script: Script = {}): ServerConnection {
+/**
+ * A server that follows a script: for Storybook stories and tests, where no server process runs. `exit()` plays the
+ * server process ending, as the real connection reports it: what waits fails, and so does every request after it.
+ */
+export function scriptedConnection(script: Script = {}): ServerConnection & { exit(): void } {
   const listeners = new Set<(notification: Notification) => void>();
   const context: ScriptContext = {
     emit: (notification) => [...listeners].forEach((listener) => listener(notification)),
   };
+  const gone = () => new ServerError(SERVER_EXITED_CODE, 'The server stopped');
+  let exited = false;
+  // Answers still on their way, failed when the server exits.
+  const waiting = new Set<(error: Error) => void>();
   return {
     async request(method, params) {
+      if (exited) throw gone();
       const result = script.results?.[method] as unknown;
       if (result === undefined) throw new Error(`The script has no result for ${method}`);
-      return (typeof result === 'function' ? result(params, context) : result) as Result<typeof method>;
+      const answer = (typeof result === 'function' ? result(params, context) : result) as Result<typeof method>;
+      if (!(answer instanceof Promise)) return answer;
+      return new Promise((resolve, reject) => {
+        waiting.add(reject);
+        answer.then(resolve, reject).finally(() => waiting.delete(reject));
+      });
     },
     subscribe(listener) {
       script.events?.forEach(listener);
       listeners.add(listener);
       return () => void listeners.delete(listener);
+    },
+    exit() {
+      if (exited) return;
+      exited = true;
+      waiting.forEach((reject) => reject(gone()));
+      waiting.clear();
+      context.emit({ method: SERVER_EXITED });
     },
   };
 }
