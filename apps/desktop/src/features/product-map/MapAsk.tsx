@@ -14,12 +14,15 @@ const reducedMotion = () => globalThis.matchMedia?.('(prefers-reduced-motion: re
 export function MapAsk({
   empty,
   disabled,
+  placeholder,
   onSend,
   agent,
 }: {
   /** No map yet: the placeholder invites drawing one, and sending with no words draws it. */
   empty: boolean;
   disabled: boolean;
+  /** In place of the usual invitation, e.g. that words wait while the AI works. */
+  placeholder?: string;
   /** Resolves true once the AI has the request; the words fly off as a bubble then. */
   onSend: (text: string, from: DOMRect | null) => Promise<boolean>;
   /** Who does the map's work (an agent chip), under the words as in every input. */
@@ -48,7 +51,7 @@ export function MapAsk({
         value={text}
         rows={1}
         aria-label={t.mapAskLabel}
-        placeholder={empty ? t.mapAskFirst : t.mapAskMore}
+        placeholder={placeholder ?? (empty ? t.mapAskFirst : t.mapAskMore)}
         onChange={(event) => setText(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {

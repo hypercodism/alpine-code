@@ -1,5 +1,7 @@
+import { LinkButton } from '@alpine/ui/primitives';
+import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { AgentChip, Composer, useSlashSkills } from '@/shared/components/composer';
 import { useMessages } from '@/shared/i18n';
@@ -13,6 +15,7 @@ import {
   useSendMessage,
   useSession,
   useSetSessionAgent,
+  useServer,
   useSetSessionMode,
 } from '@/shared/server';
 
@@ -64,6 +67,35 @@ export function Session({
   const state = session.data;
   const shown = Boolean(state && !state.deleted);
   const slash = useSlashSkills(state?.info.cwd);
+  // After a stop, the commands the agent started may still be ending: a line says so, and only then, with the way to
+  // them (the agent commands in the dock). An ordinary stop ends its commands with the run, so they are counted only a
+  // moment after the run is over, and the line never flashes by.
+  const server = useServer();
+  const [stopped, setStopped] = useState(false);
+  const [settled, setSettled] = useState(false);
+  const ended = !!state && state.info.status !== 'running' && state.info.status !== 'waiting';
+  useEffect(() => {
+    if (!stopped || !ended) return;
+    const timer = setTimeout(() => setSettled(true), 1500);
+    return () => clearTimeout(timer);
+  }, [stopped, ended]);
+  const cwd = state?.info.cwd ?? '';
+  const leftover = useQuery({
+    queryKey: ['processes', cwd, sessionId, 'command'],
+    queryFn: () => server.request('processes/list', { cwd, sessionId, kind: 'command' }),
+    enabled: settled && stopped && ended && !!cwd && !!onInspectProcesses,
+    refetchInterval: (query) =>
+      query.state.data?.processes.some((p) => p.status === 'running' || p.status === 'stopping') === false
+        ? false
+        : 750,
+    retry: false,
+  });
+  const commandsLeft =
+    settled && stopped && ended
+      ? (leftover.data?.processes ?? []).filter(
+          (p) => p.kind !== 'shell' && (p.status === 'running' || p.status === 'stopping'),
+        ).length
+      : 0;
 
   // Follow the end of the chat as it grows, unless the reader scrolled up. The chat's height is watched rather than
   // the items, because a reply keeps growing on screen after its text arrived (it is let out at an even pace).
@@ -136,6 +168,14 @@ export function Session({
             onShowTaskForce={onShowTaskForce}
           />
           {running && <ProgressLine info={info} />}
+          {commandsLeft > 0 && (
+            <p role="status" className="flex items-center gap-2 text-meta text-fg-muted">
+              {t.commandsLeft(commandsLeft)}
+              <LinkButton className="min-h-5 px-0.5" onClick={onInspectProcesses}>
+                {t.commandsShow}
+              </LinkButton>
+            </p>
+          )}
         </div>
       </div>
       {!readOnly && (
@@ -169,10 +209,13 @@ export function Session({
             bar={<ContextMeter info={info} />}
             onSend={(text) => {
               following.current = true;
+              setStopped(false);
+              setSettled(false);
               return send.mutateAsync({ sessionId, text });
             }}
             onStop={() => {
-              onInspectProcesses?.();
+              setStopped(true);
+              setSettled(false);
               cancel.mutate(sessionId);
             }}
             mode={{ value: info.mode, onChange: (mode) => setMode.mutate({ sessionId, mode }) }}

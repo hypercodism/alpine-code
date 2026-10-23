@@ -1,4 +1,4 @@
-import type { FlowGetResult, ToolCallItem } from '@alpine/protocol';
+import type { FlowGetResult, RunStoppedItem, ToolCallItem } from '@alpine/protocol';
 
 import { ASK_USER, lookCss, pageOf, readQuestion } from '@/shared/questions';
 import type { Item } from '@/shared/server';
@@ -24,8 +24,8 @@ export interface PlanOption {
 }
 
 /**
- * `team`: the build proposed a TF and waits for the person's yes. `stopped`: the build is over with cards left to
- * build.
+ * `team`: the build's TF waits for the person: proposed (its yes) or over (it needs more agents than planned).
+ * `stopped`: the build is over with cards left to build.
  */
 export type PlanPhase = 'drawing' | 'asking' | 'ready' | 'building' | 'team' | 'built' | 'stopped';
 
@@ -35,7 +35,8 @@ export interface BuildState {
   team: string | null;
 }
 
-const TEAM_WORKING = new Set(['running', 'over', 'stopping']);
+/** A TF that is still at work (or finishing), so the conversation that started it is not done. */
+export const TEAM_WORKING = new Set(['running', 'over', 'stopping']);
 
 /** What the AI is doing right now while building, in its words, and the cards that work touches. */
 export interface PlanActivity {
@@ -73,8 +74,8 @@ export function pendingQuestion(items: Item[]): { question: PlanQuestion; sample
 /**
  * Where the plan stands, from facts only: the AI drawing the first map, asking (a question waits, the AI is changing
  * the map, or decisions are still open), ready once nothing is left. Once built, it follows the build's conversation
- * and its TF: building while either works, `team` while a TF waits for the person's yes, and once both are quiet,
- * built when every card is, else stopped.
+ * and its TF: building while either works, `team` while a TF waits for the person (its yes, or more agents), and
+ * once both are quiet, built when every card is, else stopped.
  */
 export function planPhase(
   result: FlowGetResult,
@@ -84,7 +85,7 @@ export function planPhase(
 ): PlanPhase {
   const nodes = result.document?.nodes ?? [];
   if (result.build !== 'none' && result.build !== undefined) {
-    if (build.team === 'proposed' && !build.working) return 'team';
+    if ((build.team === 'proposed' && !build.working) || build.team === 'over') return 'team';
     if (result.build === 'running' || build.working || (build.team && TEAM_WORKING.has(build.team))) return 'building';
     return nodes.length && nodes.every((node) => node.phase === 'built') ? 'built' : 'stopped';
   }
@@ -154,4 +155,29 @@ export function buildActivity(items: Item[], result: FlowGetResult, words: Activ
           ? words.reading
           : words.thinking;
   return { text, touching };
+}
+
+/** Why the latest run of a conversation stopped on its own, when it did: the core's reason, after my last words. */
+export function stopReason(items: Item[]): RunStoppedItem['reason'] | null {
+  const start = items.findLastIndex((item) => item.kind === 'user_message');
+  const stopped = items.slice(start + 1).findLast((item) => item.kind === 'run_stopped');
+  return stopped?.kind === 'run_stopped' ? stopped.reason : null;
+}
+
+/**
+ * The AI's last words in a conversation, once its turn is over: what it said after my last message, unless it ended
+ * the turn with a question (which the map shows as a question). A turn that stopped before its end has no answer, only
+ * why it stopped (`stopped`, with the stop's own id). `null` while there is none.
+ */
+export function lastReply(
+  items: Item[],
+): { id: string; text: string; stopped?: undefined } | { id: string; stopped: RunStoppedItem['reason'] } | null {
+  const start = items.findLastIndex((item) => item.kind === 'user_message');
+  if (start < 0) return null;
+  const turn = items.slice(start + 1);
+  const stop = turn.findLast((item) => item.kind === 'run_stopped');
+  if (stop?.kind === 'run_stopped') return { id: stop.id, stopped: stop.reason };
+  if (turn.some((item) => item.kind === 'tool_call' && item.name === ASK_USER)) return null;
+  const reply = turn.findLast((item) => item.kind === 'agent_message' && !!item.text.trim());
+  return reply?.kind === 'agent_message' ? { id: reply.id, text: reply.text.trim() } : null;
 }

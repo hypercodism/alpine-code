@@ -501,11 +501,18 @@ export function sessionScript(options: SessionScriptOptions = {}): Script {
         sendMessage(context, sessionId, text);
         return {};
       },
-      'session/cancel': ({ sessionId }) => {
+      'session/cancel': ({ sessionId }, context) => {
         const live = find(sessionId);
         if (live.run) {
           live.run.cancelled = true;
           live.run.wake?.();
+        } else if (live.state.info.status === 'running' || live.state.info.status === 'waiting') {
+          // A session set up as working, with no scripted turn behind it, stops as a real one does.
+          emit(context, live, {
+            type: 'item_completed',
+            item: { id: id(live, 'stop'), kind: 'run_stopped', reason: 'interrupted', message: null },
+          });
+          finish(context, live, 'idle');
         }
         return {};
       },

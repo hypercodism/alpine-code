@@ -1,6 +1,7 @@
 import { createRouter, RouterProvider } from '@tanstack/react-router';
 import { useState } from 'react';
 
+import { PLAN_DEMO_SESSIONS, planDemo } from '@/features/product-map/planDemo';
 import {
   chatScript,
   EXAMPLE_MAP,
@@ -8,6 +9,7 @@ import {
   mergeScripts,
   scriptedConnection,
   READ_ONLY_MAP,
+  SESSIONS,
   STUDIO_MAP,
   tauriConnection,
   type ServerConnection,
@@ -28,7 +30,7 @@ declare module '@tanstack/react-router' {
 function connect(): ServerConnection {
   if ('__TAURI_INTERNALS__' in window) return tauriConnection();
   // Each demo project shows a different map: a realistic service, a small one, one made by a newer version
-  // (read-only, with unreadable files), and an empty project for any other folder.
+  // (read-only, with unreadable files), a product being planned, and an empty project for any other folder.
   const map = (cwd: string) =>
     cwd.endsWith('/alpine-code')
       ? STUDIO_MAP
@@ -37,7 +39,9 @@ function connect(): ServerConnection {
         : cwd.endsWith('/infra-terraform')
           ? READ_ONLY_MAP
           : {};
-  return scriptedConnection(mergeScripts(chatScript({ stepMs: 400, wordMs: 80 }), flowScript(map)));
+  // A planned product (dev-blog) walks through planning and building on its map.
+  const sessions = [...SESSIONS.map((info) => ({ info })), ...PLAN_DEMO_SESSIONS];
+  return scriptedConnection(planDemo(mergeScripts(chatScript({ stepMs: 400, wordMs: 80, sessions }), flowScript(map))));
 }
 
 export function App() {

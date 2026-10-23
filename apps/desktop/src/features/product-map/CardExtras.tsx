@@ -16,11 +16,14 @@ import { messages } from './messages';
  */
 export function CardAsk({
   locked,
+  askLocked = locked,
   onAsk,
   onRecheck,
 }: {
   /** Another run is going, or the map cannot be written. */
   locked: boolean;
+  /** Asking cannot go now; by default whenever `locked` (a map can also keep words until the AI is free). */
+  askLocked?: boolean;
   /** Resolves true once the AI has the request. */
   onAsk: (request: string) => Promise<boolean>;
   onRecheck: () => void;
@@ -56,7 +59,7 @@ export function CardAsk({
           />
         </label>
         <div className="flex gap-2">
-          <Button type="submit" variant="primary" disabled={locked || !text.trim()}>
+          <Button type="submit" variant="primary" disabled={askLocked || !text.trim()}>
             <Send size={14} aria-hidden />
             {t.askSend}
           </Button>
