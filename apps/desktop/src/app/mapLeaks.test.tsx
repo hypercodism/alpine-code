@@ -218,6 +218,71 @@ describe("another app's conversations on the map (#42, #71)", () => {
     const dialog = await screen.findByRole('dialog');
     fireEvent.click(within(dialog).getByRole('button', { name: /로그인 고치기/ }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    // Beside the map it only reads, so the note says where it came from and promises nothing more.
+    expect(await screen.findByText('여기까지 Claude Code에서 하던 대화예요')).toBeTruthy();
+    expect(screen.queryByText(/이어서 말하면/)).toBeNull();
+  });
+});
+
+describe('Ctrl+Tab and search with a map (#24, #41)', () => {
+  const sessions = [
+    sessionInfo({ id: 'plan', cwd: app, purpose: 'map', createdAt: '2026-10-01T00:00:00Z' }),
+    sessionInfo({ id: 'cart', cwd: app, title: '장바구니 고치기', createdAt: '2026-10-02T00:00:00Z' }),
+    sessionInfo({ id: 'readme', cwd: docs, title: 'README 다시 쓰기', createdAt: '2026-10-03T00:00:00Z' }),
+    sessionInfo({ id: 'build-1', cwd: app, purpose: 'build', createdAt: '2026-10-04T00:00:00Z' }),
+  ];
+  const ctrlTab = () => fireEvent.keyDown(window, { key: 'Tab', ctrlKey: true });
+
+  it("goes round the conversations of their own, past the map's, from the map too", async () => {
+    const { router } = mount('/board' + q(app), sessions);
+    await projectRow('alpine-code');
+    ctrlTab();
+    await waitFor(() => expect(router.state.location.pathname).toBe('/session/cart'));
+    ctrlTab();
+    await waitFor(() => expect(router.state.location.pathname).toBe('/session/readme'));
+    ctrlTab();
+    await waitFor(() => expect(router.state.location.pathname).toBe('/session/cart'));
+  });
+
+  it("names the map's conversations as the rail does, and opens them on the map", async () => {
+    const { router } = mount('/board' + q(docs), sessions);
+    await projectRow('docs-site');
+    fireEvent.keyDown(window, { key: 'k', metaKey: true });
+    const list = await screen.findByRole('listbox', { name: '프로젝트와 대화 찾기' });
+    expect(within(list).getByRole('option', { name: /^지도 대화/ })).toBeTruthy();
+    fireEvent.click(within(list).getByRole('option', { name: /^만든 기록/ }));
+    await waitFor(() => expect(router.state.location.search).toEqual({ project: app, session: 'build-1' }));
+    fireEvent.keyDown(window, { key: 'k', metaKey: true });
+    fireEvent.click(
+      within(await screen.findByRole('listbox', { name: '프로젝트와 대화 찾기' })).getByRole('option', {
+        name: /^지도 대화/,
+      }),
+    );
+    await waitFor(() => expect(router.state.location.href).toBe('/board' + q(app)));
+  });
+});
+
+describe('a map whose project is gone (#62, #56)', () => {
+  it('says why and opens the folder again', async () => {
+    const gone = '/Users/me/old-shop';
+    mount('/board' + q(gone), []);
+    expect(await screen.findByText('old-shop 프로젝트가 목록에 없어요')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '다시 열기' }));
+    expect(await within(await rail()).findByRole('button', { name: /^old-shop 열기/ })).toBeTruthy();
+    await waitFor(() => expect(screen.queryByText('old-shop 프로젝트가 목록에 없어요')).toBeNull());
+  });
+
+  it('offers to restore an archived one, or to start something new', async () => {
+    const { router } = mount('/board' + q(docs), []);
+    fireEvent.click(await screen.findByRole('button', { name: 'docs-site 메뉴' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: '보관' }));
+    // Archiving the open project moves on; an old link leads back to it.
+    await waitFor(() => expect(router.state.location.search.project).not.toBe(docs));
+    void router.navigate({ to: '/board', search: { project: docs } });
+    expect(await screen.findByText('docs-site 프로젝트는 보관했어요')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '복원' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '새 프로젝트' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/'));
   });
 });
 

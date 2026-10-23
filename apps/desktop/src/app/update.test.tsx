@@ -8,7 +8,7 @@ import { scriptedConnection, ServerProvider, setUpScript } from '@/shared/server
 
 import { routeTree } from './routeTree.gen';
 
-const update = vi.hoisted(() => ({ ready: null as string | null, restart: vi.fn() }));
+const update = vi.hoisted(() => ({ ready: null as string | null, restart: vi.fn(async () => {}) }));
 vi.mock('@/shared/platform', async (original) => ({
   ...(await original<typeof import('@/shared/platform')>()),
   useUpdateReady: () => update.ready,

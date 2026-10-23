@@ -48,7 +48,7 @@ export function useAppMenu(railOpen: boolean, actions: Actions) {
   }, [railOpen, locale]);
 }
 
-type Latest = Actions & {
+export type Latest = Actions & {
   navigate: ReturnType<typeof useNavigate>;
   router: ReturnType<typeof useRouter>;
   t: (typeof menuMessages)['ko'];
@@ -152,7 +152,7 @@ async function iconBytes(): Promise<Uint8Array | undefined> {
  * "Check for Updates…": says what it found, and offers to restart when a newer version is ready; while the AI works,
  * the offer says the work stops. A restart that fails says so.
  */
-async function checkByHand(get: () => Latest, version: string) {
+export async function checkByHand(get: () => Latest, version: string) {
   const { t } = get();
   const found = await checkForUpdate();
   if (found.kind === 'ready') {

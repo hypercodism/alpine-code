@@ -2,7 +2,7 @@ import type { SessionInfo } from '@alpine/protocol';
 import { Dialog, Input } from '@alpine/ui/primitives';
 import { useMatch, useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
-import { Archive, Folder, MessageSquare, Search } from 'lucide-react';
+import { Archive, Folder, Map as MapIcon, MessageSquare, Search } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 
 import { StatusWord } from '@/shared/components/status';
@@ -61,10 +61,11 @@ export function NavigationController() {
         !useNavigation.getState().searchOpen
       ) {
         const paths = new Set(projects?.filter((p) => !p.archived).map((p) => p.path));
-        // Creation order stays stable while background sessions update their activity times.
+        // Creation order stays stable while background sessions update their activity times. The map's own
+        // conversations are its map, which the rail opens; this goes through the conversations of their own.
         const listed =
           sessions
-            ?.filter((s) => !s.archived && paths.has(s.cwd))
+            ?.filter((s) => !s.archived && !s.purpose && paths.has(s.cwd))
             .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)) ?? [];
         if (!listed.length) return;
         event.preventDefault();
@@ -118,9 +119,18 @@ function SearchContents({ onClose, title }: { onClose: () => void; title: string
   const listRef = useRef<HTMLDivElement>(null);
   const needle = term.trim().toLocaleLowerCase();
   const byPath = new Map(projects.map((p) => [p.path, p]));
+  // The map's own conversations are named as the rail names them, not as chats.
+  const named = (session: SessionInfo) =>
+    session.purpose === 'build'
+      ? t.buildRecord
+      : session.purpose === 'map'
+        ? session.archived
+          ? t.oldMapTalk
+          : t.mapTalk
+        : session.title || t.untitledSession;
   const sessionEntry = (session: SessionInfo, excerpt = session.summary): SearchEntry => ({
     key: session.id,
-    title: session.title || t.untitledSession,
+    title: named(session),
     path: session.cwd,
     project: byPath.get(session.cwd)?.name ?? session.cwd.split('/').pop() ?? session.cwd,
     session,
@@ -155,8 +165,11 @@ function SearchContents({ onClose, title }: { onClose: () => void; title: string
   }, [selectedKey]);
   const choose = (entry: SearchEntry) => {
     const go = () => {
-      // A project opens its map, as on the rail.
-      if (entry.session) void navigate({ to: '/session/$sessionId', params: { sessionId: entry.session.id } });
+      // A project opens its map, as on the rail; so does the map's own conversation, and a record opens beside it.
+      const session = entry.session;
+      if (session && !session.purpose) void navigate({ to: '/session/$sessionId', params: { sessionId: session.id } });
+      else if (session && (session.purpose === 'build' || session.archived))
+        void navigate({ to: '/board', search: { project: entry.path, session: session.id } });
       else void navigate({ to: '/board', search: { project: entry.path } });
       onClose();
     };
@@ -220,7 +233,9 @@ function SearchContents({ onClose, title }: { onClose: () => void; title: string
               i === selected ? 'bg-selected' : 'hover:bg-hover',
             )}
           >
-            {entry.session ? (
+            {entry.session?.purpose ? (
+              <MapIcon size={16} className="mt-0.5 shrink-0 text-fg-muted" aria-hidden="true" />
+            ) : entry.session ? (
               <MessageSquare size={16} className="mt-0.5 shrink-0 text-fg-muted" aria-hidden="true" />
             ) : (
               <Folder size={16} className="mt-0.5 shrink-0 text-fg-muted" aria-hidden="true" />
