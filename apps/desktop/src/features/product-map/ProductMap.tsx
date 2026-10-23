@@ -1179,6 +1179,8 @@ export function ProductMap({
               touching={touching}
               asked={phase === 'asking' ? (question?.about ?? null) : null}
               onPlan={planning ? (words) => void say(words) : undefined}
+              // A plan takes words while it works; checks and fixes wait until the AI is free, and say so.
+              waitNote={!planning && anyActive ? t.busyNote : null}
               stepParts={(cardId) => {
                 const node = nodeOf(cardId);
                 if (!node) return {};

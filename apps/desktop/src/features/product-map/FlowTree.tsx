@@ -81,6 +81,8 @@ export interface FlowTreeProps {
   onCheck?: (targets: PromiseTarget[]) => void;
   /** A plan not built yet: a journey's missing steps are drawn, not found in code. */
   planning?: boolean;
+  /** Why the AI cannot take work from here now (it is busy elsewhere): said at the top of the open details. */
+  waitNote?: string | null;
   onFix: (targets: PromiseTarget[]) => void;
   onAddPromise: (cardId: string, when: string, then: string) => void;
   onRemovePromise: (target: PromiseTarget) => void;
@@ -489,6 +491,11 @@ export function FlowTree(props: FlowTreeProps) {
             <X size={14} aria-hidden />
           </Dialog.Close>
           {focusScreen && <ScreenView key={focusScreen.src} screen={focusScreen} look={props.look ?? WIREFRAME} />}
+          {props.waitNote && (
+            <p role="status" className="mx-5 mt-5 mr-12 rounded-lg bg-canvas-sunken px-3 py-2 text-meta text-attention">
+              {props.waitNote}
+            </p>
+          )}
           <div>
             <Panel
               key={focusId ?? 'product'}

@@ -128,6 +128,8 @@ describe('what can not start now says why (#30)', () => {
     fireEvent.click(within(map).getByRole('button', { name: '요약' }));
     fireEvent.click(within(within(map).getByRole('complementary')).getAllByRole('button')[0]!);
     const person = await screen.findByRole('dialog');
+    // The details say it before anything is pressed, since they lie over the map's own line.
+    expect(within(person).getByText(/확인이나 고치기는 그 일이 끝나면 할 수 있어요/)).toBeTruthy();
     fireEvent.click(within(person).getAllByRole('button', { name: /AI에게 확인 맡기기|다시 확인 맡기기/ })[0]!);
     expect(await screen.findByText(/AI가 이 프로젝트에서 일하는 중이라 지금은 시작할 수 없어요/)).toBeTruthy();
     expect(screen.getByRole('button', { name: '다시 시도', hidden: true }).hasAttribute('disabled')).toBe(true);

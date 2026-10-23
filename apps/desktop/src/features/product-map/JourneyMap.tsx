@@ -35,6 +35,7 @@ export function JourneyMap({
   touching,
   asked,
   onPlan,
+  waitNote,
 }: {
   cwd: string;
   /** `board` read person first (`toTreeMap`). */
@@ -60,6 +61,8 @@ export function JourneyMap({
    * and people are words to the plan's conversation.
    */
   onPlan?: (words: string) => void;
+  /** Why asks from the open details cannot start now. */
+  waitNote?: string | null;
 }) {
   const t = useMessages(flowTreeMessages);
   const edit = useEditFlow();
@@ -90,6 +93,7 @@ export function JourneyMap({
       seenAt={seenAt ?? undefined}
       readSource={readSource}
       planning={!!onPlan}
+      waitNote={waitNote}
       onCheck={
         onPlan
           ? undefined

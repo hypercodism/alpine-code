@@ -95,7 +95,7 @@ export const ConnectionsReviewModel: Story = {
   args: { tab: 'connection' },
   parameters: { server: setUpScript() },
   play: async () => {
-    const picker = await screen.findByLabelText(/^(작업 승인 검토 모델|Action approval model)$/);
+    const picker = await screen.findByLabelText(/^(승인 검토 모델|Action approval model)$/);
     await expect(picker).toHaveDisplayValue(/대화에서 사용 중인 모델과 동일|Same as the chat's current model/);
   },
 };

@@ -78,7 +78,7 @@ export const messages = defineMessages({
     noModel: '찾는 모델이 없어요',
     defaultModel: '기본 모델',
     newSession: '기본 모델',
-    defaultModelLead: 'AI가 새로 시작하는 대화와 작업 승인 검토에 쓸 모델을 골라요.',
+    defaultModelLead: 'AI가 새로 시작하는 대화와 승인 검토에 쓸 모델을 골라요.',
     appliesToNewSessions: '바꾼 기본 모델은 새로 시작하는 대화부터 써요. 이미 하던 대화는 그대로예요.',
     chooseModel: '모델을 골라 주세요',
     reviewModel: '승인 검토 모델',

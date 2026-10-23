@@ -2,7 +2,7 @@ import type { SessionInfo } from '@alpine/protocol';
 import { createRouter, RouterProvider } from '@tanstack/react-router';
 import { useState } from 'react';
 
-import { PLAN_DEMO_SESSIONS, planDemo } from '@/features/product-map/planDemo';
+import { PLAN_DEMO_SESSIONS, PLAN_TEAM_SESSIONS, planDemo } from '@/features/product-map/planDemo';
 import {
   chatScript,
   cloudScript,
@@ -54,16 +54,18 @@ function connect(): ServerConnection {
     ...SESSIONS.map((info) => ({ info })),
     ...PLAN_DEMO_SESSIONS,
     ...(demo.stoppedRuns ? STOPPED_RUNS : []),
+    ...(demo.planTeam ? PLAN_TEAM_SESSIONS : []),
   ];
   const connection = scriptedConnection(
     planDemo(
       mergeScripts(
         chatScript({ stepMs: 400, wordMs: 80, sessions, newProject: demo.newProject }),
         flowScript(map),
-        devServersScript({ fails: demo.appFails }),
+        devServersScript({ fails: demo.appFails, unknown: demo.appUnknown }),
         demo.cloudOff ? cloudScript({ enabled: false }) : demo.cloud ? cloudScript(demo.cloud) : {},
         demo.noModel ? { results: { 'connections/list': NOTHING_CONNECTED } } : {},
       ),
+      { team: demo.planTeam },
     ),
   );
   if (demo.engineStopsAfterMs !== undefined) setTimeout(() => connection.exit(), demo.engineStopsAfterMs);
@@ -76,7 +78,8 @@ function connect(): ServerConnection {
  * open, no model connected, conversations whose run failed or whose model sign-in ended, the server process ending
  * after a while): `alpine.demo` in localStorage, as
  * `{ "newProject": {...}, "cloudOff": true, "noModel": true, "stoppedRuns": true, "engineStopsAfterMs": 3000 }`,
- * `{ "cloud": { "signedIn": true, "data": "live" } }` or `{ "appFails": true }`.
+ * `{ "cloud": { "signedIn": true, "data": "live" } }`, `{ "appFails": true }`, `{ "appUnknown": true }` or `{ "planTeam": true }` (dev-blog built by an
+ * AI 팀 at work).
  */
 function demoOptions(): DemoOptions {
   try {
@@ -91,6 +94,9 @@ interface DemoOptions {
   cloudOff?: boolean;
   cloud?: CloudScriptOptions;
   appFails?: boolean;
+  /** Nothing in a project says how it runs: 앱 열기 finds no way to start it. */
+  appUnknown?: boolean;
+  planTeam?: boolean;
   noModel?: boolean;
   stoppedRuns?: boolean;
   engineStopsAfterMs?: number;
