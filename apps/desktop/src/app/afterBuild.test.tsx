@@ -10,6 +10,7 @@ import { LocaleProvider } from '@/shared/i18n';
 import {
   mergeScripts,
   scriptedConnection,
+  type CloudScriptOptions,
   type Script,
   ServerProvider,
   sessionInfo,
@@ -34,12 +35,16 @@ const cwd = '/Users/me/alpine-code';
 function mount(
   moment: PlanMoment,
   extra: Script = {},
-  { cloud = true, build = {} }: { cloud?: boolean; build?: Parameters<typeof sessionInfo>[0] } = {},
+  {
+    cloud = true,
+    build = {},
+    account = {},
+  }: { cloud?: boolean; build?: Parameters<typeof sessionInfo>[0]; account?: CloudScriptOptions } = {},
 ) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const connection = scriptedConnection(
     mergeScripts(
-      setUpScript(undefined, { enabled: cloud }),
+      setUpScript(undefined, { enabled: cloud, ...account }),
       devServersScript({ upMs: 0 }),
       sessionScript({
         sessions: [
@@ -153,5 +158,19 @@ describe('the top bar on the map (#10)', () => {
     const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
     expect(within(dock).getByRole('tab', { name: '대화' })).toBeTruthy();
     expect(within(dock).queryByRole('tab', { name: '요약' })).toBeNull();
+  });
+});
+
+describe('되돌리기 from the data (#49)', () => {
+  it('opens the restore points from the live data, and goes back to the data', async () => {
+    mount('built', {}, { account: { signedIn: true, data: 'live' } });
+    fireEvent.click(await screen.findByRole('button', { name: /^오른쪽 창 열기/ }));
+    const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
+    fireEvent.click(await within(dock).findByRole('button', { name: '더보기' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: '데이터' }));
+    fireEvent.click(await within(dock).findByRole('button', { name: '되돌리기 지점' }));
+    expect(await within(dock).findByRole('radiogroup', { name: '되돌리기 지점' })).toBeTruthy();
+    fireEvent.click(within(dock).getByRole('button', { name: '데이터' }));
+    expect(await within(dock).findByRole('button', { name: '되돌리기 지점' })).toBeTruthy();
   });
 });

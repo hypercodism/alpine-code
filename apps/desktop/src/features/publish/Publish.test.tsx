@@ -4,17 +4,30 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { LocaleProvider, type Locale } from '@/shared/i18n';
 import {
+  mergeScripts,
   publishServer,
   scriptedConnection,
+  ServerError,
   ServerProvider,
   type CloudScriptOptions,
+  type Script,
   type ServerConnection,
 } from '@/shared/server';
 
 import { PublishButton } from './PublishButton';
 
-function mount(options: CloudScriptOptions = {}, locale: Locale = 'ko', withSession = true) {
-  const base = scriptedConnection(publishServer({ publishMs: 0, ...options }));
+const update = vi.hoisted(() => ({
+  check: vi.fn(async () => ({ kind: 'ready', version: '0.2.0' }) as const),
+  restart: vi.fn(async () => {}),
+}));
+vi.mock('@/shared/platform', async (original) => ({
+  ...(await original<typeof import('@/shared/platform')>()),
+  checkForUpdate: update.check,
+  restartToUpdate: update.restart,
+}));
+
+function mount(options: CloudScriptOptions = {}, locale: Locale = 'ko', withSession = true, extra: Script = {}) {
+  const base = scriptedConnection(mergeScripts(publishServer({ publishMs: 0, ...options }), extra));
   const requests: { method: string; params: Record<string, unknown> }[] = [];
   /** The files' tree `publish/status` reports from now on, as if they were edited; unset keeps the script's. */
   const disk: { source?: string } = {};
@@ -61,6 +74,39 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+});
+
+/** `publish/prepare` refused by the API with `reason`, as the server passes it on. */
+const refused = (reason: 'payment_required' | 'limit_reached' | 'update_required'): Script => ({
+  results: {
+    'publish/prepare': () => {
+      throw new ServerError(-32000, 'refused', { reason });
+    },
+  },
+});
+
+describe('a publish only Pro or an update gets past (#17)', () => {
+  it.each(['payment_required', 'limit_reached'] as const)(
+    '%s leads to the plans, not only to trying again',
+    async (reason) => {
+      mount({}, 'ko', true, refused(reason));
+      fireEvent.click(await screen.findByRole('button', { name: 'Pro 알아보기' }, { timeout: 4000 }));
+      expect(await screen.findByText('Pro로 더 쓰기')).toBeTruthy();
+    },
+  );
+
+  it('update_required looks for the new version and restarts into it', async () => {
+    mount({}, 'ko', true, refused('update_required'));
+    expect(
+      await screen.findByText('Alpine 앱을 새 버전으로 바꿔야 올릴 수 있어요.', {}, { timeout: 4000 }),
+    ).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '다시 해 보기' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '업데이트 확인' }));
+    expect(await screen.findByText('새 버전(0.2.0)을 받았어요. 다시 시작하면 바뀌어요.')).toBeTruthy();
+    update.restart.mockRejectedValueOnce(new Error('install failed'));
+    fireEvent.click(screen.getByRole('button', { name: '다시 시작해서 업데이트' }));
+    expect(await screen.findByText('업데이트를 설치하지 못했어요. 앱을 끄고 다시 켜 보세요.')).toBeTruthy();
+  });
 });
 
 describe('올리기 sheet', () => {
@@ -204,6 +250,31 @@ describe('올리기 sheet', () => {
     const { sent } = mount({ node: 'missing' });
     expect(await screen.findByText('올리려면 Node.js가 필요해요')).toBeTruthy();
     expect(sent('publish/prepare')).toEqual([]);
+    // The install says it goes on with publishing, not with making an app (#55).
+    fireEvent.click(screen.getByRole('button', { name: 'Node.js 받기' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('앱을 올리려면 Node.js가 필요해요')).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: '설치하고 이어가기' }));
+    expect(await within(dialog).findByText('끝나면 바로 이어서 올려요.')).toBeTruthy();
+  });
+
+  it('says why the restore points are not there while they load or when they could not be read (#52)', async () => {
+    let fail = true;
+    mount({}, 'ko', true, {
+      results: {
+        'publish/restorePoints': () => {
+          if (fail) throw new Error('offline');
+          return { points: [], windowDays: 7 };
+        },
+      },
+    });
+    await sheetPublish();
+    fireEvent.click(screen.getByRole('button', { name: '되돌리기' }));
+    expect(await screen.findByText('되돌리기 지점을 불러오지 못했어요.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '이 때로 되돌리기' })).toBeNull();
+    fail = false;
+    fireEvent.click(screen.getByRole('button', { name: '다시 불러오기' }));
+    expect(await screen.findByText(/아직 되돌리기 지점이 없어요/)).toBeTruthy();
   });
 
   it('shows the dot while changes wait, and no button for a project that is not a web app', async () => {

@@ -1,6 +1,6 @@
 import { useNavigate } from '@tanstack/react-router';
 import { Database, Diff, Folder, Globe, LayoutList, ListChecks, SquareTerminal } from 'lucide-react';
-import { type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { DataPanel } from '@/features/data/DataPanel';
@@ -8,9 +8,11 @@ import { DevelopmentServers } from '@/features/development-servers';
 import { DockLayout, type DockTab } from '@/features/dock/Dock';
 import { showDockTab, useDockOpen } from '@/features/dock/state';
 import { MiniMap } from '@/features/product-map/MiniMap';
+import { Restore } from '@/features/publish/Restore';
 import { FileViewer } from '@/features/file-viewer';
 import { ProcessControl } from '@/features/process-control';
 import { Terminal } from '@/features/terminal';
+import { UpgradeSheet } from '@/shared/components/cloud';
 import { FileNavigationProvider } from '@/shared/files';
 import { useMessages } from '@/shared/i18n';
 import { useCloudEnabled, useDataSources } from '@/shared/server';
@@ -110,7 +112,7 @@ export function WorkspaceDock({
                   icon: Database,
                   more: true,
                   bare: true,
-                  content: <DataPanel key={cwd} cwd={cwd} />,
+                  content: <DataPlace key={cwd} cwd={cwd} />,
                 },
               ]
             : []),
@@ -137,5 +139,30 @@ export function WorkspaceDock({
         {children}
       </DockLayout>
     </FileNavigationProvider>
+  );
+}
+
+/**
+ * The 데이터 place: the data, and from the live data its restore points (the same view as in the 올리기 sheet), so the
+ * points its read-only note promises are one press away; Pro's longer window opens the plans.
+ */
+function DataPlace({ cwd }: { cwd: string }) {
+  const t = useMessages(messages);
+  const [view, setView] = useState<'data' | 'restore' | 'upgrade'>('data');
+  if (view === 'data') return <DataPanel cwd={cwd} onRestorePoints={() => setView('restore')} />;
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4">
+      {view === 'restore' ? (
+        <Restore
+          cwd={cwd}
+          back={t.data}
+          onBack={() => setView('data')}
+          onClose={() => setView('data')}
+          onUpgrade={() => setView('upgrade')}
+        />
+      ) : (
+        <UpgradeSheet onBack={() => setView('restore')} onDone={() => setView('restore')} />
+      )}
+    </div>
   );
 }
