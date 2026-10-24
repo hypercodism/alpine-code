@@ -1598,6 +1598,29 @@ describe('beside its conversation (map-first 43)', () => {
     slot.remove();
   });
 
+  it('keeps the input a send button while the AI works: 멈추기 is in the top bar, words wait for its turn', async () => {
+    const slot = document.createElement('div');
+    document.body.append(slot);
+    mount(
+      {
+        results: {
+          'session/list': {
+            sessions: [sessionInfo({ id: 'map-1', cwd, purpose: 'map', title: '지도', status: 'running' })],
+          },
+        },
+      },
+      vi.fn(),
+      vi.fn(),
+      vi.fn(),
+      { talkSlot: slot, onShowTalk: vi.fn() },
+    );
+    const box = await within(slot).findByRole('textbox', { name: '지도에 부탁하기' });
+    await waitFor(() => expect(box.getAttribute('placeholder')).toBe('지금 일이 끝나면 전해요'));
+    expect(within(slot).queryByRole('button', { name: '멈추기' })).toBeNull();
+    expect(within(slot).getByRole('button', { name: '보내기' })).toBeTruthy();
+    slot.remove();
+  });
+
   it('leads to the conversation when it is not shown, instead of an input of its own', async () => {
     const onShowTalk = vi.fn();
     mount({}, vi.fn(), vi.fn(), vi.fn(), { talkSlot: null, onShowTalk });

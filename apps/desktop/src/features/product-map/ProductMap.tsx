@@ -1558,12 +1558,14 @@ export function ProductMap({
               <MapAsk
                 empty={!hasMap && !planned}
                 disabled={busy || (!hasMap && !planned && anyActive && !approval)}
-                placeholder={approval ? t.answerInstead : waitsForWork ? t.busyAsk : undefined}
+                // Beside the conversation the input only sends: 멈추기 is the top bar's, and words written while the
+                // AI works wait for its turn.
+                placeholder={
+                  approval ? t.answerInstead : waitsForWork || (docked && (workBusy || talking)) ? t.busyAsk : undefined
+                }
                 onSend={sendWords}
                 about={aboutCard ? (nodeOf(aboutCard)?.title ?? null) : null}
                 onClearAbout={() => setAboutCard(null)}
-                // Beside the conversation, the input stops what the AI does, as every chat does.
-                onStop={docked && (workBusy || talking) ? stopWork : undefined}
                 agent={
                   <>
                     {agentChip}
