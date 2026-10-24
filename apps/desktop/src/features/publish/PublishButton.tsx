@@ -30,7 +30,7 @@ export function PublishButton({
   onEvidence?: () => void;
   /**
    * No button, only the sheet, opened by `openPublish` (the map's completion card has 인터넷에 올리기, so the top bar
-   * does not repeat it). The sheet still drops from where the button would be.
+   * does not repeat it). The sheet opens beside the button that asked for it.
    */
   sheetOnly?: boolean;
 }) {
@@ -40,6 +40,7 @@ export function PublishButton({
   const [shown, setShown] = useState(defaultOpen);
   // 인터넷에 올리기 elsewhere (the map's done line) opens this sheet, until it is closed.
   const asked = usePublishRequest((state) => state.cwd === cwd);
+  const from = usePublishRequest((state) => (state.cwd === cwd ? state.from : null));
   const open = shown || asked;
   const setOpen = (next: boolean) => {
     if (!next) usePublishRequest.getState().take();
@@ -68,7 +69,9 @@ export function PublishButton({
           )}
         </Popover.Trigger>
       )}
-      <Popover.Popup align="end">
+      {/* Asked from a button elsewhere (the completion card, at the bottom of the conversation), it opens over that
+          button, not under an invisible trigger in the top bar. */}
+      <Popover.Popup anchor={sheetOnly ? from : null} side={sheetOnly && from ? 'top' : 'bottom'} align="end">
         <PublishPanel
           cwd={cwd}
           name={name}

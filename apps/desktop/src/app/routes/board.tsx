@@ -245,7 +245,7 @@ function BoardRoute() {
                 // The app opens itself in the app view: Alpine starts the project's server and shows it.
                 onOpenApp={() => showApp(cwd)}
                 onOpenInApp={openInApp}
-                onPublish={publishable ? () => openPublish(cwd) : undefined}
+                onPublish={publishable ? (from) => openPublish(cwd, from) : undefined}
                 onFixConnection={() => void navigate({ to: '/settings', search: { tab: 'connection' } })}
                 onMemory={() => void navigate({ to: '/memory', search: { project: cwd } })}
                 onNewHere={(folder) => void navigate({ to: '/', search: { folder } })}

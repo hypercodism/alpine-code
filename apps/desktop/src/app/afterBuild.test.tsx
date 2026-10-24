@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAppViewState } from '@/features/app-view/state';
 import { showDockTab, useDockOpen, useDockTab } from '@/features/dock/state';
 import { useMapActionStore } from '@/features/product-map/mapActions';
+import { usePublishRequest } from '@/features/publish/publishRequest';
 import { blogBoard, blogConversation, type PlanMoment } from '@/features/product-map/planExample';
 import { boardScript } from '@/features/product-map/testBoard';
 import { LocaleProvider } from '@/shared/i18n';
@@ -346,9 +347,12 @@ describe('the app that fails to open (#7)', () => {
 describe('올리기 from the map (#13, #23)', () => {
   it('offers 인터넷에 올리기 on the completion card, which opens the top bar sheet', async () => {
     mount('built');
-    fireEvent.click(within(await done()).getByRole('button', { name: '인터넷에 올리기' }));
+    const press = within(await done()).getByRole('button', { name: '인터넷에 올리기' });
+    fireEvent.click(press);
     // Signed out, the sheet asks for the account first.
     expect(await screen.findByText('인터넷에 올리려면 Alpine 계정이 필요해요. 무료예요.')).toBeTruthy();
+    // It opens over the button pressed, not under the top bar's hidden trigger.
+    expect(usePublishRequest.getState().from).toBe(press);
     // The completion card holds 인터넷에 올리기, so the top bar has no button of its own for a plan.
     expect(screen.queryByRole('button', { name: /^올리기/ })).toBeNull();
   });

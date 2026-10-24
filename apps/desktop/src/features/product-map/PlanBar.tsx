@@ -151,7 +151,7 @@ export function PlanBar({
   /** Opens the running app at a screen; absent where the page cannot, or for a screen without an address. */
   onOpenInApp?: (cardId: string) => boolean | void;
   /** Puts the app online (Alpine Cloud); absent when there is nowhere to put it. */
-  onPublish?: () => void;
+  onPublish?: (from: HTMLElement) => void;
   onTeam: (answer: PlanTeamAnswer) => void;
   /** Continues a build that stopped with cards left. */
   onContinue: () => void;
@@ -304,7 +304,7 @@ function Done({
   onReviewPicks: () => void;
   onFix: (cardId: string, promiseId: string) => void;
   onOpenInApp?: (cardId: string) => boolean | void;
-  onPublish?: () => void;
+  onPublish?: (from: HTMLElement) => void;
 }) {
   const t = useMessages(messages);
   const shown = built.open.slice(0, OPEN_ROWS);
@@ -372,7 +372,7 @@ function Done({
         </ul>
       )}
       {onPublish && (
-        <Button variant="primary" className="w-full" onClick={onPublish}>
+        <Button variant="primary" className="w-full" onClick={(event) => onPublish(event.currentTarget)}>
           {t.publish}
         </Button>
       )}

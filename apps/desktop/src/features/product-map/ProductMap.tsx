@@ -121,7 +121,7 @@ export function ProductMap({
   /** Runs and shows the project's app (its development server, in the dock). */
   onOpenApp?: () => void;
   /** Puts the app online, offered beside 앱 열기 once it is built; absent without Alpine Cloud or a web app. */
-  onPublish?: () => void;
+  onPublish?: (from?: HTMLElement) => void;
   /** Opens 새 프로젝트 for this folder, which is empty (map-first 41). */
   onNewHere?: (folder: string) => void;
   /** Opens 새 프로젝트, the one place something new starts. */

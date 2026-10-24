@@ -3,6 +3,8 @@ import clsx from 'clsx';
 import type { ReactNode } from 'react';
 
 interface PopupProps {
+  /** What it opens beside, when that is not its trigger (a button elsewhere that asked for it). */
+  anchor?: Element | null;
   side?: 'top' | 'bottom' | 'left' | 'right';
   align?: 'start' | 'center' | 'end';
   className?: string;
@@ -10,11 +12,12 @@ interface PopupProps {
 }
 
 /** A small sheet beside the button that opened it, looking like a menu. A click outside or Esc closes it. */
-function Popup({ side = 'bottom', align = 'start', className, children }: PopupProps) {
+function Popup({ anchor, side = 'bottom', align = 'start', className, children }: PopupProps) {
   return (
     <BasePopover.Portal>
       {/* A sheet taller than the room stays on its side and scrolls, instead of jumping beside its button. */}
       <BasePopover.Positioner
+        {...(anchor ? { anchor } : {})}
         side={side}
         align={align}
         sideOffset={8}
