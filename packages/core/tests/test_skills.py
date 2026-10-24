@@ -17,8 +17,10 @@ from alpine_core import (
     SkillFetcher,
     SkillLibrary,
     UserMessage,
+    builtin_skill,
     parse_source,
     search_skills,
+    skill_content,
     skill_text,
 )
 from alpine_core import session as session_module
@@ -91,6 +93,7 @@ def test_alpines_skills_come_first_then_other_apps_and_the_project_wins(home, tm
     assert [(s.name, s.origin) for s in library.installed()] == [
         ("pdf", "alpine"),
         ("notes", "claude"),
+        ("product-design", "builtin"),
         ("product-planning", "builtin"),
     ]
     assert library.get("pdf").source == "anthropics/skills/pdf"
@@ -109,6 +112,24 @@ def test_a_skill_that_comes_with_alpine_cannot_be_removed_or_changed(home):
         library.write("product-planning", "---\ndescription: mine\n---\n", new=True)
     assert (removed.value.reason, written.value.reason) == ("not_owned", "exists")
     assert library.get("product-planning").origin == "builtin"
+
+
+def test_the_design_skill_comes_with_alpine_with_its_references(home):
+    library = SkillLibrary(home, [])
+    design = library.get("product-design")
+    assert design.origin == "builtin" and len(design.body().splitlines()) < 250
+    files, _ = design.files()
+    assert files == [
+        "references/directions.md",
+        "references/images.md",
+        "references/korean-type.md",
+        "references/layout.md",
+        "references/writing.md",
+    ]
+    content = skill_content(builtin_skill("product-design"))
+    assert "references/images.md" in content and "api.openverse.org" in (design.folder / files[1]).read_text()
+    with pytest.raises(SkillError):
+        library.remove("product-design")
 
 
 def test_installing_again_replaces_and_only_alpines_skills_can_be_removed(home, tmp_path):

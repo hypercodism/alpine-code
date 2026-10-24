@@ -108,8 +108,9 @@ def test_a_project_is_made_from_the_template_and_the_agent_gets_the_idea(monkeyp
 
         items = await harness.items(result.session_id)
         assert [i.kind for i in items] == ["user_message", "agent_message"]
-        # The idea starts the project's map as a plan, with the planning skill (map-first decisions 3 and 15).
+        # The idea starts the project's map as a plan, with the planning and design skills (map-first 3, 15).
         assert items[0].text.startswith("예약을 받는 앱") and '<skill_content name="product-planning">' in items[0].text
+        assert '<skill_content name="product-design">' in items[0].text
         opened = await harness.sessions.open(SessionOpenParams(session_id=result.session_id))
         assert Path(opened.info.cwd) == folder and opened.info.purpose == "map"
         assert get_flow(FlowGetParams(cwd=str(folder))).planned
