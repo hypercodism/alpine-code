@@ -973,6 +973,7 @@ def test_planning_starts_from_words_with_the_planning_skill(proj):
     assert not prepare(proj, action="discover", nodeId=None, flowId=None).board.document.nodes
     assert get(proj).planned  # a map that began as a plan stays one
     assert '<skill_content name="product-planning">' in prepared.prompt and "ask_user" in prepared.prompt
+    assert '<skill_content name="product-design">' in prepared.prompt  # the look is planned too
     assert "a `device` (phone or computer)" in prepared.prompt and "about 1280 px wide" in prepared.prompt
     assert "Do not record checks" not in prepared.prompt and "ALREADY implemented" not in prepared.prompt
     with pytest.raises(MethodError, match="Describe"):
@@ -985,7 +986,10 @@ def test_building_a_plan_goes_on_without_asking_and_checks_the_promises(proj):
     assert "Choose your own order" in prepared.prompt and '"by": "ai"' in prepared.prompt
     assert "new unique `id`" in prepared.prompt  # building records checks
     assert "write `path`" in prepared.prompt  # so the app view can open each built screen
-    assert "<skill_content" not in prepared.prompt  # the skill came with the plan, in the same conversation
+    # The planning skill came with the plan, in the same conversation; the design skill comes again, since the
+    # screens are made and looked at now.
+    assert '<skill_content name="product-planning">' not in prepared.prompt
+    assert '<skill_content name="product-design">' in prepared.prompt and "look at it" in prepared.prompt
 
 
 def test_the_map_is_written_without_asking_only_while_its_product_is_planned(proj):

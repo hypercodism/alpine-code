@@ -1022,8 +1022,8 @@ promises are what done means. Choose your own order: with every journey in hand,
 all of them first. While you work on a card set its phase to building, and to built once it works; list in its
 `sources` the files that make it (open each in this session). On each screen card write `path`: the address inside
 the running app that shows that screen (`/reservations`), a path only, so the app can open it. A screen you can run:
-capture it into the card's `preview` (a real screenshot, project-relative, never under .alpine-code/) once it looks
-right.
+capture it into the card's `preview` (a real screenshot, project-relative, never under .alpine-code/), look at it
+as the design skill below says, and fix what fails before you call it built.
 When a product question comes up that the map does not answer, do not stop: take the pick you would recommend, record
 it on the card as a decision with "by": "ai" (with the options you weighed), and go on. Stop to ask with ask_user only
 when no sensible default exists.
@@ -1033,14 +1033,21 @@ Finish with one short line: what was built, how many promises were checked, and 
 
 #: The skill sent with every planning request, so the model does not have to think of loading it.
 PLANNING_SKILL = "product-planning"
+#: The skill sent with every planning and building request: how the product should look is decided in both.
+DESIGN_SKILL = "product-design"
 
 _PLAN = """\
 The product does not exist yet: plan it with the person on this map before anything is built, as the planning skill
-below says. Draw the first map now, then ask what is left with ask_user, one question per turn. Write cards with
-phase planned, kind screen for screens, conditions for the promises you assume, no sources and no checks. Give each
-flow a `device` (phone or computer) and draw a computer journey's screens at desktop width. Do not write product
-code, install anything or start servers until the person says to build.
+below says, and give it a look of its own as the design skill below says. Draw the first map now, then ask what is
+left with ask_user, one question per turn. Write cards with phase planned, kind screen for screens, conditions for the
+promises you assume, no sources and no checks. Give each flow a `device` (phone or computer) and draw a computer
+journey's screens at desktop width. Do not write product code, install anything or start servers until the person
+says to build.
 """
+
+
+def _skills(*names: str) -> str:
+    return "".join(skill_content(builtin_skill(name)) + "\n" for name in names)
 
 
 def _scope_line(include: list[str]) -> str:
@@ -1123,9 +1130,9 @@ def _prompt(params: FlowPrepareParams, selected: str | None, board: FlowGetResul
             extra += "Sources never opened by the sessions that wrote these cards (open them, or remove them):\n"
             extra += "".join(f"- {cid}: {', '.join(unread[cid][:10])}\n" for cid in shown[:20])
     if params.action == "plan":
-        body = _PLAN + skill_content(builtin_skill(PLANNING_SKILL)) + "\n"
+        body = _PLAN + _skills(PLANNING_SKILL, DESIGN_SKILL)
     elif params.action == "build":
-        body = _BUILD + _CHECKS.replace("SESSION", params.session_id)
+        body = _BUILD + _CHECKS.replace("SESSION", params.session_id) + _skills(DESIGN_SKILL)
     elif params.action == "discover":
         body = _CARDS + _DISCOVER + _CHECKS.replace("SESSION", params.session_id)
     elif params.action in ("sync", "reshape"):

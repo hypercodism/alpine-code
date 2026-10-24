@@ -27,6 +27,8 @@ Do not ask anything before the map exists. People fix a wrong picture more easil
   "댓글을 받을까요", "어떤 느낌으로 만들까요"). The look is always last.
 
 Think about what the best products of this kind do (see "References") and draw that, not the plainest version.
+Before the first screen, write the product's concept sentence and draw in the direction you would pick, as the
+design skill (`product-design`) says: the sketches already have the product's layout, not a neutral wireframe.
 Public pages need no sign-in unless the person asked for it. Write every word in the person's language.
 
 ## 2. Ask one question at a time
@@ -49,10 +51,12 @@ your turn. Ask the question whose answer changes the map most first.
 
 ## 3. The look comes last
 
-Ask how it should look with `ask_user`: three options, each named after a real site it takes after ("Medium 참고",
-"Notion 참고"), each with a `look` (the token values below) and a `detail` saying what it feels like. Give the first
-option the `html` of the product's most telling screen, so every look is shown on it. Once they pick, write the look to
-`.alpine-code/map/look.json` (the same keys) and drop the line from `undecided`. The app restyles every screen at once.
+Ask how it should look with `ask_user`: two to four options that are different directions (layout, type, palette and
+imagery; see the design skill's "In the plan"), not colourways of one screen. Name each after a real product it takes
+after ("당근 참고", "Kinfolk 참고"), give it a `look` (the token values below), a `detail` saying what it feels like,
+and its own `html`: the product's most telling screen drawn in that direction. Once they pick, write the look to
+`.alpine-code/map/look.json` (the same keys) and drop the line from `undecided`. The app restyles every screen at once;
+if the picked direction's layout differs from the sketches, redraw them in it.
 
 When `undecided` is empty and nothing is being asked, tell them in one short line that the plan is ready to build.
 Do not build until they say so.
@@ -61,8 +65,9 @@ Do not build until they say so.
 
 A screen file is the `<body>` content of one screen, drawn with Tailwind 4 classes: a phone screen (390 px wide) for
 a phone journey, a desktop window (about 1280 px wide, with room for a side menu or a table) for a computer journey.
-A screen in both kinds of journey is drawn for the first one it appears in. Tailwind is loaded for you; add no `<script>`, `<link>` or `<style>`, and no images (use `bg-surface` blocks where a picture
-goes). Use only these tokens for colour, type and corners, so a look restyles it:
+A screen in both kinds of journey is drawn for the first one it appears in. Tailwind is loaded for you; add no
+`<script>`, `<link>` or `<style>`, and no images (a `bg-surface` block at the picture's real crop, with a short muted
+line of what goes there). Use only these tokens for colour, type and corners, so a look restyles it:
 
 | Token | For |
 | --- | --- |
@@ -74,7 +79,8 @@ goes). Use only these tokens for colour, type and corners, so a look restyles it
 
 Spacing, sizes and layout are plain Tailwind (`p-4`, `text-2xl`, `flex`, `grid-cols-2`). Use real, specific content
 (real-sounding titles, names, prices, dates), never lorem ipsum. Show the screen as someone would see it on a good day,
-with enough items to read as real (four posts, not one).
+with enough items to read as real (four posts, not one). How to make a screen look designed rather than generic
+(type scale, one primary action, varied compositions, the tells to avoid) is in the design skill.
 
 ```html
 <header class="flex items-center justify-between border-b border-line px-4 py-3">
@@ -92,8 +98,11 @@ with enough items to read as real (four posts, not one).
 
 ## Looks
 
-A look sets every token. Fonts that are always available: `'Pretendard Variable', Pretendard, system-ui, sans-serif`,
-`'Noto Serif KR', serif`, `'JetBrains Mono', monospace`. Starting points to adapt to the product:
+A look sets every token. Fonts that are always available in sketches: `'Pretendard Variable', Pretendard`,
+`'SUIT Variable'`, `'Wanted Sans Variable'`, `'IBM Plex Sans KR'`, `'Gowun Dodum'`, `'Noto Serif KR'`,
+`'Gowun Batang'`, `'MaruBuri'`, `'Hahmlet'`, `'Nanum Myeongjo'`, `'Do Hyeon'`, `'Jua'`, `'JetBrains Mono'`; end each
+with a fallback (`sans-serif`, `serif`, `monospace`). Pairings are in the design skill. Starting points to adapt to
+the product, not to use as they are:
 
 | Look | page | surface | ink | muted | line | accent | on_accent | display | radius |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -103,8 +112,9 @@ A look sets every token. Fonts that are always available: `'Pretendard Variable'
 | Friendly shop (Toss) | #f9fafb | #ffffff | #191f28 | #6b7684 | #e5e8eb | #3182f6 | #ffffff | Pretendard | 16px |
 | Warm local (당근) | #fffaf5 | #ffffff | #212124 | #868b94 | #f0e6dc | #ff6f0f | #ffffff | Pretendard | 12px |
 | Calm tool (Notion) | #ffffff | #f7f6f3 | #37352f | #787774 | #e9e9e7 | #2383e2 | #ffffff | Pretendard | 6px |
+| Warm craft (동네 빵집) | #faf6ef | #ffffff | #2b2118 | #8a7b6c | #ece3d6 | #c8682c | #ffffff | Gowun Batang | 12px |
 
-`body` is Pretendard unless the look is all monospace.
+`body` is a text face (Pretendard, SUIT, Wanted Sans) unless the look is all monospace.
 
 ## References
 
@@ -137,7 +147,8 @@ When the person says to build, the map is the contract. Some things that help:
 
 - Skeleton first, then flesh: make every screen reachable with its real layout and the plan's look, then make each
   promise work, then polish.
-- Use the look's tokens as the product's own theme, so the built screens look like the planned ones.
+- Use the look's tokens as the product's own theme, so the built screens look like the planned ones, and follow the
+  design skill for type, pictures, states and the look-then-fix pass.
 - Keep the person's words: the texts on the planned screens are the texts of the product.
 - Run the product and look at every screen you built before you call a card built.
 - Write each screen card's `path`: the address that shows that screen in the running app (`/reservations`,

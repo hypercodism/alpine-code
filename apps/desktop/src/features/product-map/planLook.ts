@@ -27,9 +27,15 @@ export const WIREFRAME = lookCss({
 /** The look of a map, as theme CSS. */
 export const mapLookCss = (look: MapLook) => lookCss({ ...look, on_accent: look.onAccent });
 
-/** The fonts every look may use, loaded by every screen so a new look shows at once. */
+/**
+ * The fonts every look may use (the planning skill lists them), loaded by every screen so a new look shows at once.
+ * A browser downloads a face only when a screen uses it.
+ */
 const FONTS = `<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@600;700&family=JetBrains+Mono:wght@500;700&display=swap">`;
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/sun-typeface/SUIT@2/fonts/variable/woff2/SUIT-Variable.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/wanteddev/wanted-sans@v1.0.3/packages/wanted-sans/fonts/webfonts/variable/split/WantedSansVariable.min.css">
+<link rel="stylesheet" href="https://hangeul.pstatic.net/hangeul_static/css/maru-buri.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@600;700&family=JetBrains+Mono:wght@500;700&family=Gowun+Batang:wght@400;700&family=Gowun+Dodum&family=Hahmlet:wght@400..800&family=IBM+Plex+Sans+KR:wght@400;600;700&family=Nanum+Myeongjo:wght@400;700;800&family=Do+Hyeon&family=Jua&display=swap">`;
 
 /** A screen's body as a whole page, with every look's fonts and the page's ground and ink from the theme. */
 export const screenPage = (body: string) =>
