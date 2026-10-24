@@ -23,5 +23,6 @@ export default defineConfig({
   worker: { format: 'es' },
   clearScreen: false,
   server: { port: 1420, strictPort: true, watch: { ignored: ['**/src-tauri/**'] } },
-  test: { environment: 'jsdom' },
+  // Tailwind's own CSS is read as text by the sketch frames (HtmlFrame); tests need its real text too.
+  test: { environment: 'jsdom', css: { include: [/tailwindcss\/index\.css/] } },
 });
