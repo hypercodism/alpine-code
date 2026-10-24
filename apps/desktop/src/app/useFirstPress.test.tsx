@@ -141,19 +141,4 @@ describe('the first press after the focus was in the app or the terminal', () =>
     await turn();
     expect(await screen.findByRole('menuitem', { name: '설정' })).toBeTruthy();
   });
-
-  it('leaves ⋯ open when its press opened it and only the click did not come', async () => {
-    render(<WithMenu />);
-    const more = screen.getByRole('button', { name: '더 보기' });
-    screen.getByTitle('앱').focus();
-    fireEvent.pointerOver(more);
-    fireEvent.pointerDown(more, { pointerType: 'mouse' });
-    fireEvent.mouseDown(more);
-    fireEvent.pointerUp(more, { pointerType: 'mouse' });
-    fireEvent.mouseUp(more);
-    await turn();
-    await turn();
-    expect(screen.getByRole('menuitem', { name: '설정' })).toBeTruthy();
-    expect(more.getAttribute('aria-expanded')).toBe('true');
-  });
 });

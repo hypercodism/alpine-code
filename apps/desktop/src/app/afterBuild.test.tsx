@@ -49,8 +49,11 @@ function mount(
     board = (b) => b,
     mapItems = [],
     session,
+    reply,
   }: {
     session?: string;
+    /** What the AI answers to whatever is sent. */
+    reply?: string;
     cloud?: boolean;
     build?: Parameters<typeof sessionInfo>[0];
     account?: CloudScriptOptions;
@@ -68,6 +71,7 @@ function mount(
           { info: sessionInfo({ id: 'map-1', cwd, purpose: 'map', title: '지도' }), items: mapItems },
           { info: sessionInfo({ id: 'build-1', cwd, purpose: 'build', title: '만들기', ...build }) },
         ],
+        ...(reply === undefined ? {} : { reply }),
       }),
       boardScript(board(blogBoard(moment))),
       extra,
@@ -167,6 +171,27 @@ describe('a built screen opened from its card', () => {
     expect(screen.getByRole('button', { name: '앱', pressed: true })).toBeTruthy();
     expect(await screen.findByText(/화면을 보면서 말하는 중/)).toBeTruthy();
     expect(request).toHaveBeenCalledWith('devServers/open', expect.objectContaining({ cwd }));
+  });
+});
+
+describe('words sent while the app shows a screen', () => {
+  it('go as a request about that screen, and the AI answers in the conversation as usual', async () => {
+    const { request } = mount('built', {}, { reply: '글 쓰기 화면의 버튼을 크게 했어요.' });
+    await openApp();
+    await screen.findByText(/화면을 보면서 말하는 중/, {}, { timeout: 3000 });
+    const dock = screen.getByRole('complementary', { name: '오른쪽 창' });
+    fireEvent.change(within(dock).getByRole('textbox', { name: '지도에 부탁하기' }), {
+      target: { value: '버튼을 더 크게 해 줘' },
+    });
+    fireEvent.click(within(dock).getByRole('button', { name: '보내기' }));
+    await vi.waitFor(() =>
+      expect(request.mock.calls.find(([method]) => method === 'flow/prepare')?.[1]).toMatchObject({
+        action: 'change',
+        nodeId: 'write',
+        request: '버튼을 더 크게 해 줘',
+      }),
+    );
+    expect(await within(dock).findByText('글 쓰기 화면의 버튼을 크게 했어요.', {}, { timeout: 3000 })).toBeTruthy();
   });
 });
 
