@@ -2,7 +2,7 @@ import { useNavigate, useRouter } from '@tanstack/react-router';
 import { getName, getVersion } from '@tauri-apps/api/app';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { Menu, Submenu } from '@tauri-apps/api/menu';
+import { Menu, MenuItem, Submenu, type MenuItemOptions } from '@tauri-apps/api/menu';
 import { ask, message } from '@tauri-apps/plugin-dialog';
 import { useEffect, useRef } from 'react';
 
@@ -49,13 +49,19 @@ export function useAppMenu(railOpen: boolean, actions: Actions) {
     return () => void unlisten.then((stop) => stop());
   }, []);
 
+  // Tauri forgets an item's action once nothing holds the item, so the menu in use keeps its items with actions here
+  // until the next menu replaces it.
+  const held = useRef<MenuItem[]>([]);
   useEffect(() => {
     if (!inTauri()) return;
     let current = true;
-    void buildMenu(railOpen, () => latest.current).then(async (menu) => {
-      if (!current) return void menu.close();
+    void buildMenu(railOpen, () => latest.current).then(async ({ menu, items }) => {
+      if (!current) return void Promise.all([menu, ...items].map((each) => each.close()));
       const previous = await menu.setAsAppMenu();
+      const before = held.current;
+      held.current = items;
       await previous?.close();
+      await Promise.all(before.map((item) => item.close()));
     });
     return () => {
       current = false;
@@ -72,8 +78,16 @@ export type Latest = Actions & {
   working: boolean;
 };
 
-async function buildMenu(railOpen: boolean, get: () => Latest): Promise<Menu> {
+export async function buildMenu(railOpen: boolean, get: () => Latest): Promise<{ menu: Menu; items: MenuItem[] }> {
   const { t } = get();
+  // An item written inline in Menu.new loses its action as soon as the menu is made; one made with MenuItem.new and
+  // held keeps it.
+  const items: MenuItem[] = [];
+  const act = async (options: MenuItemOptions) => {
+    const item = await MenuItem.new(options);
+    items.push(item);
+    return item;
+  };
   const [name, version, icon] = await Promise.all([getName(), getVersion(), iconBytes()]);
   const windowMenu = await Submenu.new({
     text: t.window,
@@ -90,13 +104,13 @@ async function buildMenu(railOpen: boolean, get: () => Latest): Promise<Menu> {
         text: name,
         items: [
           { item: { About: { name, version, icon } }, text: t.about(name) },
-          { text: t.checkUpdate, action: () => void checkByHand(get, version) },
+          await act({ text: t.checkUpdate, action: () => void checkByHand(get, version) }),
           { item: 'Separator' },
-          {
+          await act({
             text: t.settings,
             accelerator: 'CmdOrCtrl+,',
             action: () => void get().navigate({ to: '/settings' }),
-          },
+          }),
           { item: 'Separator' },
           { item: 'Services', text: t.services },
           { item: 'Separator' },
@@ -104,22 +118,22 @@ async function buildMenu(railOpen: boolean, get: () => Latest): Promise<Menu> {
           { item: 'HideOthers', text: t.hideOthers },
           { item: 'ShowAll', text: t.showAll },
           { item: 'Separator' },
-          { text: t.quit(name), accelerator: 'CmdOrCtrl+Q', action: () => void quitAsking(get) },
+          await act({ text: t.quit(name), accelerator: 'CmdOrCtrl+Q', action: () => void quitAsking(get) }),
         ],
       },
       {
         text: t.file,
         items: [
-          { text: t.newSession, accelerator: 'CmdOrCtrl+N', action: () => get().newSession() },
-          {
+          await act({ text: t.newSession, accelerator: 'CmdOrCtrl+N', action: () => get().newSession() }),
+          await act({
             text: t.searchConversations,
             accelerator: 'CmdOrCtrl+K',
             action: () => useNavigation.getState().setSearchOpen(true),
-          },
-          { text: t.addProject, accelerator: 'CmdOrCtrl+O', action: () => get().openFolder() },
+          }),
+          await act({ text: t.addProject, accelerator: 'CmdOrCtrl+O', action: () => get().openFolder() }),
           { item: 'Separator' },
           // The only window: closing it is quitting.
-          { text: t.closeWindow, accelerator: 'CmdOrCtrl+W', action: () => void quitAsking(get) },
+          await act({ text: t.closeWindow, accelerator: 'CmdOrCtrl+W', action: () => void quitAsking(get) }),
         ],
       },
       {
@@ -137,14 +151,14 @@ async function buildMenu(railOpen: boolean, get: () => Latest): Promise<Menu> {
       {
         text: t.view,
         items: [
-          {
+          await act({
             text: railOpen ? t.hideSidebar : t.showSidebar,
             accelerator: 'CmdOrCtrl+B',
             action: () => get().toggleRail(),
-          },
+          }),
           { item: 'Separator' },
-          { text: t.back, accelerator: 'CmdOrCtrl+[', action: () => get().router.history.back() },
-          { text: t.forward, accelerator: 'CmdOrCtrl+]', action: () => get().router.history.forward() },
+          await act({ text: t.back, accelerator: 'CmdOrCtrl+[', action: () => get().router.history.back() }),
+          await act({ text: t.forward, accelerator: 'CmdOrCtrl+]', action: () => get().router.history.forward() }),
           { item: 'Separator' },
           { item: 'Fullscreen', text: t.fullscreen },
         ],
@@ -153,7 +167,7 @@ async function buildMenu(railOpen: boolean, get: () => Latest): Promise<Menu> {
     ],
   });
   await windowMenu.setAsWindowsMenuForNSApp();
-  return menu;
+  return { menu, items };
 }
 
 /** Quits the app; while the AI works, only once the person says so. */
