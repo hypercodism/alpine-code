@@ -30,7 +30,8 @@ const KINDS: ToolKind[] = ['skill', 'run', 'read', 'search', 'edit', 'memory', '
  * The tool calls of one stretch of work as one line, as Claude Code's app does: what they did, counted ("명령 3개
  * 실행 · 파일 2개 읽음"), and how many failed or did not run. Opening it lists each call as Claude Code draws it:
  * `Kind(target)`, then an indented line with what came of it. A call still running shows under the line even
- * while it is closed, so the work never looks frozen.
+ * while it is closed, so the work never looks frozen: as a plain line ("명령 실행 중"), with the call itself one level
+ * deeper, as a finished one is.
  */
 export function ToolCalls({ rows }: { rows: ToolRow[] }) {
   const t = useMessages(messages);
@@ -64,12 +65,42 @@ export function ToolCalls({ rows }: { rows: ToolRow[] }) {
       </button>
       <Collapse open={open || running.length > 0}>
         <ul className="flex flex-col gap-3 border-l border-line-subtle pl-3">
-          {(open || running.length === 0 ? rows : running).map((row) => (
-            <Call key={row.call.id} row={row} />
-          ))}
+          {open || running.length === 0
+            ? rows.map((row) => <Call key={row.call.id} row={row} />)
+            : running.map((row) => <RunningLine key={row.call.id} row={row} />)}
         </ul>
       </Collapse>
     </div>
+  );
+}
+
+/** A call still running while its stretch is closed: what it does in plain words, and the call itself when opened. */
+function RunningLine({ row }: { row: ToolRow }) {
+  const t = useMessages(messages);
+  const [open, setOpen] = useState(false);
+  return (
+    <li className="flex flex-col gap-1">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+        className="inline-flex min-h-6 w-fit cursor-pointer items-center gap-1.5 rounded-md text-body text-fg hover:text-fg-muted"
+      >
+        <span aria-hidden="true" className="size-1.5 shrink-0 animate-pulse rounded-full bg-interactive" />
+        {t[`doing_${toolKind(row.call.name)}`]}
+        <span
+          aria-hidden="true"
+          className={clsx('inline-block text-fg-muted transition-transform', open && 'rotate-90')}
+        >
+          ›
+        </span>
+      </button>
+      <Collapse open={open}>
+        <ul className="border-l border-line-subtle pl-3">
+          <Call row={row} />
+        </ul>
+      </Collapse>
+    </li>
   );
 }
 
