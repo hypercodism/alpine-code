@@ -53,7 +53,7 @@ import { JourneyMap } from './JourneyMap';
 import { useMapActionStore, useMapMenuStore } from './mapActions';
 import { Bar, CONNECTION, PlanBar, Working, type PlanReview, type PlanTeamAnswer } from './PlanBar';
 import { buildActivity, lastReply, pendingQuestion, planPhase, stopReason, TEAM_WORKING } from './planData';
-import { mapLookCss } from './planLook';
+import { mapLookCss, type PickedLook, wornLook } from './planLook';
 import { planMessages } from './planMessages';
 import { useMapRequest } from './askRequest';
 import { AskFlight, MapAsk } from './MapAsk';
@@ -397,8 +397,15 @@ export function ProductMap({
   const shownQuestion = phase === 'stopped' ? buildQuestion : question;
   const [lookPreview, setLookPreview] = useState<{ question: string; option: number } | null>(null);
   const previewing = shownQuestion && lookPreview?.question === shownQuestion.id ? lookPreview.option : 0;
-  // Looking at a look option restyles every screen on the map at once; until then the map wears its own look.
-  const look = shownQuestion?.options[previewing]?.look ?? (data?.look ? mapLookCss(data.look) : undefined);
+  // The pointer on a look option tries it while it stays there; off them, the one pressed is tried again.
+  const [lookHover, setLookHover] = useState<{ question: string; option: number } | null>(null);
+  const tried = (shownQuestion && lookHover?.question === shownQuestion.id ? lookHover.option : null) ?? previewing;
+  const [pickedLook, setPickedLook] = useState<PickedLook | null>(null);
+  const mapLook = data?.look ? mapLookCss(data.look) : undefined;
+  const tryingLook = shownQuestion?.options[tried]?.look ? shownQuestion.options[tried] : null;
+  // Looking at a look option restyles every screen on the map at once; a look picked is worn until the AI writes the
+  // map's own look after the answer; else the map wears its own look.
+  const look = wornLook(tryingLook?.look, pickedLook, mapLook);
   const activity =
     phase === 'building' && data
       ? (buildActivity(buildItems ?? [], data, {
@@ -989,6 +996,13 @@ export function ProductMap({
           only when something does, and the map's menu. */}
       {hasMap && data && (
         <div className="flex min-h-11 shrink-0 flex-wrap items-center gap-2 bg-canvas-sunken px-10 py-1.5">
+          {/* Every screen wears the look being tried: the map says whose. */}
+          {tryingLook && (
+            <p role="status" className="flex items-center gap-1.5 text-meta text-fg-muted">
+              <span aria-hidden="true" className="size-1.5 rounded-full bg-interactive" />
+              {plan.previewingLook(tryingLook.label)}
+            </p>
+          )}
           {!planning && (
             <label className="relative flex w-52 min-w-36 items-center">
               <span className="sr-only">{t.searchLabel}</span>
@@ -1451,10 +1465,15 @@ export function ProductMap({
                 onTeam={answerTeam}
                 onContinue={continueBuild}
                 onAnswer={(option) => {
-                  const label = shownQuestion?.options[option]?.label;
-                  if (label) say(label);
+                  const picked = shownQuestion?.options[option];
+                  if (!picked) return;
+                  if (picked.look) setPickedLook({ css: picked.look, before: mapLook ?? '' });
+                  say(picked.label);
                 }}
                 onPreview={(option) => shownQuestion && setLookPreview({ question: shownQuestion.id, option })}
+                onHoverLook={(option) =>
+                  setLookHover(option === null || !shownQuestion ? null : { question: shownQuestion.id, option })
+                }
                 onDecideRest={() => say(plan.decideRestMessage)}
                 onAskOn={() => say(plan.askOnMessage)}
                 onDrawOn={() => say(plan.drawOnMessage)}

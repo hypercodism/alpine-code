@@ -88,6 +88,7 @@ export function PlanBar({
   stop,
   onAnswer,
   onPreview,
+  onHoverLook,
   onDecideRest,
   onAskOn,
   onDrawOn,
@@ -132,6 +133,8 @@ export function PlanBar({
   stop: PlanStop;
   onAnswer: (option: number) => void;
   onPreview: (option: number) => void;
+  /** The pointer is on a look option (`null`: off them): the map wears it while it stays there. */
+  onHoverLook?: (option: number | null) => void;
   onDecideRest: () => void;
   /** Asks the AI to go on asking what is left. */
   onAskOn: () => void;
@@ -196,6 +199,7 @@ export function PlanBar({
         sample={sample}
         onAnswer={onAnswer}
         onPreview={onPreview}
+        onHoverLook={onHoverLook}
         onDecideRest={onDecideRest}
       />
     );
@@ -389,6 +393,7 @@ function Question({
   position,
   onAnswer,
   onPreview,
+  onHoverLook,
   onDecideRest,
   onClose,
   onNext,
@@ -403,6 +408,7 @@ function Question({
   position?: { index: number; total: number } | null;
   onAnswer: (option: number) => void;
   onPreview: (option: number) => void;
+  onHoverLook?: (option: number | null) => void;
   onDecideRest?: () => void;
   onClose?: () => void;
   onNext?: () => void;
@@ -433,6 +439,8 @@ function Question({
               type="button"
               aria-pressed={i === preview}
               onClick={() => onPreview(i)}
+              onMouseEnter={() => onHoverLook?.(i)}
+              onMouseLeave={() => onHoverLook?.(null)}
               className={clsx(
                 'flex cursor-pointer flex-col gap-1.5 rounded-lg p-1.5 text-left',
                 i === preview ? 'bg-selected' : 'hover:bg-hover',
@@ -456,7 +464,9 @@ function Question({
           ))}
         </div>
       ) : (
-        <div className="flex flex-wrap gap-1.5">
+        // One option per line, the full width: its label (and the pick's mark), then why under it, so both read
+        // well beside the conversation.
+        <div className="flex flex-col gap-1.5">
           {question.options.map((option, i) => {
             const tag = picked === undefined ? option.recommended && t.recommended : picked === i && t.aiWentWith;
             return (
@@ -465,16 +475,17 @@ function Question({
                 type="button"
                 onClick={() => onAnswer(i)}
                 className={clsx(
-                  'flex min-h-8 cursor-pointer items-baseline gap-1.5 rounded-lg border px-3 py-1.5 text-left text-body',
+                  'flex min-h-8 w-full cursor-pointer flex-col gap-0.5 rounded-lg border px-3 py-1.5 text-left text-body',
                   marked(i)
                     ? 'border-interactive bg-selected text-interactive hover:bg-hover'
                     : 'border-line bg-canvas-raised text-fg hover:bg-hover',
                 )}
               >
-                {option.label}
-                {(tag || option.detail) && (
-                  <span className="text-meta text-fg-muted">{[tag, option.detail].filter(Boolean).join(' · ')}</span>
-                )}
+                <span className="flex items-baseline gap-1.5">
+                  <span className="min-w-0">{option.label}</span>
+                  {tag && <span className="shrink-0 text-meta">{tag}</span>}
+                </span>
+                {option.detail && <span className="text-meta text-fg-muted">{option.detail}</span>}
               </button>
             );
           })}

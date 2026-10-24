@@ -27,6 +27,23 @@ export const WIREFRAME = lookCss({
 /** The look of a map, as theme CSS. */
 export const mapLookCss = (look: MapLook) => lookCss({ ...look, on_accent: look.onAccent });
 
+/** A look picked in answer to the look question, and the map's own look when it was picked (`''`: none). */
+export interface PickedLook {
+  css: string;
+  before: string;
+}
+
+/**
+ * The look the map's screens wear: the one being tried on the look question; else, once one was picked, that one until
+ * the AI writes the map's own look after the answer (so the screens do not fall back to grey lines in between); else the
+ * map's own. `undefined` is the grey lines.
+ */
+export function wornLook(trying: string | undefined, picked: PickedLook | null, mapLook: string | undefined) {
+  if (trying) return trying;
+  if (picked && picked.before === (mapLook ?? '')) return picked.css;
+  return mapLook;
+}
+
 /** The fonts every look may use, loaded by every screen so a new look shows at once. */
 const FONTS = `<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@600;700&family=JetBrains+Mono:wght@500;700&display=swap">`;

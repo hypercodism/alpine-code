@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { toTreeMap } from './flowTreeData';
 import { blogBoard } from './planExample';
-import { DESKTOP_WIDTH, SCREEN_WIDTH, screenWidthFor } from './planLook';
+import { DESKTOP_WIDTH, SCREEN_WIDTH, screenWidthFor, wornLook } from './planLook';
 
 const words = { unnamed: { ko: '누군가', en: 'Someone' }, unnamedRole: { ko: '', en: '' } };
 
@@ -30,5 +30,19 @@ describe('devices and paths on the tree', () => {
     const tree = toTreeMap(blogBoard('built'), new Set(), 'blog', words);
     expect(tree.cards.read?.path).toBe('/posts/d1-batch');
     expect(tree.cards.write?.path).toBe('/write');
+  });
+});
+
+describe('wornLook', () => {
+  it('wears the look being tried, then the one picked until the map has its own, then the map’s', () => {
+    expect(wornLook('tried', null, 'map')).toBe('tried');
+    expect(wornLook(undefined, null, undefined)).toBeUndefined();
+    // Picked while the map had no look: worn until the AI writes one, which then wins.
+    const picked = { css: 'picked', before: '' };
+    expect(wornLook(undefined, picked, undefined)).toBe('picked');
+    expect(wornLook(undefined, picked, 'map')).toBe('map');
+    // Picked again over an old look: the old one is not worn back while the new one is on its way.
+    expect(wornLook(undefined, { css: 'new', before: 'old' }, 'old')).toBe('new');
+    expect(wornLook(undefined, { css: 'new', before: 'old' }, 'newer')).toBe('newer');
   });
 });
