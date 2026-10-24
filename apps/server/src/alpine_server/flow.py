@@ -1014,6 +1014,20 @@ test first). On a large map, work one flow or topic at a time. List files nobody
 generated files) in map.json `exclude` so they do not count as changes the map misses; never exclude tests.
 """
 
+_TALK = """\
+Talk to the person in their language (the one their request is written in), about screens, promises and choices: they
+see the map and the app, not their files, so never mention files, JSON, paths or code words to them (not "map.json",
+not "look.json", not a screenshot's file name, not a check's id, not "dev server": say the app is open). That holds
+for every message, the short ones while you work too, and the last one.
+"""
+
+_RECHECK = """\
+Before you end, check again every promise of each card that lists a file you changed in this session (in its sources
+or a check's dependsOn), and record those checks, not only the promises you set out to fix: Alpine asks for them to be
+checked again once those files change, and a change should leave the map checked, not waiting. A promise you cannot
+check gets a blocked check that says why.
+"""
+
 _NO_CHECKS = "Do not record checks: checking promises is a separate step the user starts from the map.\n"
 
 _BUILD = """\
@@ -1031,8 +1045,6 @@ when no sensible default exists.
 Check every promise you built and record the checks, as below. A promise is done only when a recorded check says so.
 Whatever the person needs to try a screen themselves (where to sign in, a password you set, a test card) goes into
 that card's `howToTry` in plain words ("사장님 비밀번호: bakery1234"), never only in your message.
-Talk to the person in their language, about screens, promises and choices: they see the map, not its files, so never
-mention files, JSON, paths or code words to them. That holds for every message, the short ones while you work too.
 Finish with one short line: what was built, how many promises were checked, and what you decided on your own.
 """
 
@@ -1048,8 +1060,6 @@ left with ask_user, one question per turn. Write cards with phase planned, kind 
 promises you assume, no sources and no checks. Give each flow a `device` (phone or computer) and draw a computer
 journey's screens at desktop width. Do not write product code, install anything or start servers until the person
 says to build.
-Talk to the person in their language, about screens, promises and choices: they see the map, not its files, so never
-mention files, JSON, paths or code words to them (not "map.json", not "look.json", not "the JSON is valid").
 """
 
 
@@ -1145,7 +1155,7 @@ def _prompt(params: FlowPrepareParams, selected: str | None, board: FlowGetResul
     elif params.action in ("sync", "reshape"):
         body = _CARDS + _NO_CHECKS
     else:
-        body = _CARDS + _CHECKS.replace("SESSION", params.session_id)
+        body = _CARDS + _CHECKS.replace("SESSION", params.session_id) + _RECHECK
     return f"""{request}
 
 <alpine-product-map-context>
@@ -1153,8 +1163,8 @@ Work on this project's living product map.
 Task: {task}
 User request: {params.request}
 Selected node: {selected or "none"}; flow: {params.flow_id or "none"}; session: {params.session_id}.
-{extra}{_FILES}{body}If execution is interrupted, leave the map truthful. Finish with what was implemented, actually
-checked, and still unknown.
+{extra}{_FILES}{body}{_TALK}If execution is interrupted, leave the map truthful. Finish with what was implemented,
+actually checked, and still unknown.
 </alpine-product-map-context>
 """.rstrip()
 
