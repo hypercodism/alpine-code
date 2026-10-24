@@ -758,12 +758,14 @@ export function ProductMap({
   const overlay = dockOpen && areaWidth < MIN_MAP_WIDTH + PANEL_WIDTH;
   const uncovered = data?.coverage?.git ? (data.coverage.uncoveredCount ?? 0) : 0;
   // A plan not built yet has no code to compare with or check against: only cards the AI removed are worth a look.
+  // A map that began as a plan is the contract, not a reading of the code, so the code it leaves off (the template's
+  // server, its settings) is never news on it.
   const notices =
     !!data &&
     hasMap &&
     (planning
       ? !!data.removedCards?.length
-      : uncovered > 0 || !!data.unmapped?.length || editedCount > 0 || !!data.removedCards?.length);
+      : (!planned && (uncovered > 0 || !!data.unmapped?.length)) || editedCount > 0 || !!data.removedCards?.length);
 
   // A deleted map starts over from nothing: its conversation is put away (archived, not deleted) and the next request
   // begins a new one, so nothing of the old drawing shows above the input.
@@ -930,7 +932,8 @@ export function ProductMap({
               {t.lensRecheck(lenses.recheck.size)}
             </Chip>
           )}
-          {lenses.changed.size > 0 && (
+          {/* While a plan is drawn or built every card is the AI's change: only later ones are news. */}
+          {lenses.changed.size > 0 && !planning && !building && (
             <Chip pressed={lens === 'changed'} onClick={() => pick('changed')}>
               <Sparkles size={13} aria-hidden />
               {t.lensChanged(lenses.changed.size)}
@@ -951,10 +954,10 @@ export function ProductMap({
           aria-label={t.noticesLabel}
           className="flex shrink-0 flex-wrap items-center gap-1 border-b border-line bg-canvas-sunken px-2 py-1"
         >
-          {!planning && uncovered > 0 && data.coverage && (
+          {!planned && uncovered > 0 && data.coverage && (
             <Coverage coverage={data.coverage} exclude={data.exclude ?? []} disabled={locked} onSync={syncMap} />
           )}
-          {!planning && <Unmapped parts={data.unmapped ?? []} disabled={locked} onContinue={continueMap} />}
+          {!planned && <Unmapped parts={data.unmapped ?? []} disabled={locked} onContinue={continueMap} />}
           {!planning && editedCount > 0 && (
             <li data-edited className="flex min-h-7 items-center gap-2 px-2 text-body">
               {t.editedPromises(editedCount)}

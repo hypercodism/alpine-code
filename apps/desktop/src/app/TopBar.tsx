@@ -6,13 +6,14 @@ import { useState, type ReactNode } from 'react';
 import { DockToggle } from '@/features/dock/Dock';
 import { useMapTalk } from '@/features/product-map/mapTalk';
 import { MapStatusWord } from '@/features/product-map/MapStatus';
+import { planPhase } from '@/features/product-map/planData';
 import { PublishButton } from '@/features/publish/PublishButton';
 import { usePublishable } from '@/features/publish/publishRequest';
 import { useWorkResult } from '@/features/work-result/useWorkResult';
 import { StatusWord } from '@/shared/components/status';
 import { useMessages } from '@/shared/i18n';
 import { restartToUpdate, useUpdateCheck, useUpdateReady } from '@/shared/platform';
-import { useCloudEnabled, useProjectGit, useProjects, useSession } from '@/shared/server';
+import { useCloudEnabled, useProductMap, useProjectGit, useProjects, useSession } from '@/shared/server';
 
 import { menuMessages, messages } from './messages';
 import { useWorkRunning } from './useWorkRunning';
@@ -191,7 +192,10 @@ function BoardPart({ project, sessionId }: { project?: string; sessionId: string
   // The board renders no dock for a project that is missing or archived, so the toggle would open nothing.
   const shown = !!listed && !listed.archived;
   const cloud = useCloudEnabled();
-  const publishable = usePublishable(shown ? (project ?? '') : '', cloud && shown);
+  // A plan is put on the internet once it is built, not while it is still being planned or made.
+  const board = useProductMap(shown ? (project ?? '') : '').data;
+  const unbuilt = !!board?.planned && planPhase(board, false, false) !== 'built';
+  const publishable = usePublishable(shown ? (project ?? '') : '', cloud && shown && !unbuilt);
   // The AI's fixes from the sheet go where the map's words go.
   const { talkTo } = useMapTalk(shown ? (project ?? '') : '');
   return (

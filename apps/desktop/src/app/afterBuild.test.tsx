@@ -19,6 +19,8 @@ import {
 } from '@/shared/server';
 import { devServersScript } from '@/shared/server/devServersScript';
 
+import type { FlowGetResult } from '@alpine/protocol';
+
 import { routeTree } from './routeTree.gen';
 
 /**
@@ -39,7 +41,13 @@ function mount(
     cloud = true,
     build = {},
     account = {},
-  }: { cloud?: boolean; build?: Parameters<typeof sessionInfo>[0]; account?: CloudScriptOptions } = {},
+    board = (b) => b,
+  }: {
+    cloud?: boolean;
+    build?: Parameters<typeof sessionInfo>[0];
+    account?: CloudScriptOptions;
+    board?: (b: FlowGetResult) => FlowGetResult;
+  } = {},
 ) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const connection = scriptedConnection(
@@ -52,7 +60,7 @@ function mount(
           { info: sessionInfo({ id: 'build-1', cwd, purpose: 'build', title: '만들기', ...build }) },
         ],
       }),
-      boardScript(blogBoard(moment)),
+      boardScript(board(blogBoard(moment))),
       extra,
     ),
   );
@@ -183,6 +191,54 @@ describe('올리기 from the map (#13, #23)', () => {
     await screen.findByRole('button', { name: '앱 열기' });
     expect(screen.queryByRole('button', { name: '인터넷에 올리기' })).toBeNull();
     expect(screen.queryByRole('button', { name: /^올리기/ })).toBeNull();
+  });
+});
+
+describe('a plan stays quiet until it is built', () => {
+  it.each([['asking'], ['building']] as const)('offers no 올리기 while it is %s', async (moment) => {
+    mount(moment, {}, { build: moment === 'building' ? { status: 'running' } : {} });
+    await screen.findByRole('button', { name: '사이드바 열기' });
+    // The top bar's word comes from the map, so once it shows the map has been read.
+    await screen.findByText(moment === 'asking' ? '기획 중' : '만드는 중');
+    expect(screen.queryByRole('button', { name: /^올리기/ })).toBeNull();
+  });
+
+  it("never counts the code a built plan leaves off its cards (the template's server)", async () => {
+    mount(
+      'built',
+      {},
+      {
+        board: (b) => ({
+          ...b,
+          coverage: { git: true, uncoveredCount: 13, uncovered: ['worker/db.ts'], outOfScope: 0, excluded: 0 },
+          unmapped: [{ title: '서버', paths: ['worker'] }],
+        }),
+      },
+    );
+    await screen.findByRole('button', { name: '앱 열기' });
+    expect(screen.queryByText('지도에 아직 담기지 않은 코드')).toBeNull();
+  });
+
+  it('shows no 바뀐 카드 while it is being built: every card is the AI changing it', async () => {
+    mount(
+      'building',
+      {},
+      {
+        build: { status: 'running' },
+        board: (b) => ({
+          ...b,
+          states: {
+            ...b.states,
+            list: {
+              ...b.states!.list!,
+              promises: { [Object.keys(b.states!.list!.promises ?? {})[0]!]: { status: 'recheck' } },
+            },
+          },
+        }),
+      },
+    );
+    await screen.findByText('만드는 중');
+    expect(screen.queryByText(/^바뀐 카드/)).toBeNull();
   });
 });
 
