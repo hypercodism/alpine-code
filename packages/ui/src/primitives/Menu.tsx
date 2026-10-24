@@ -51,6 +51,11 @@ function SubmenuTrigger({ className, ...props }: WithClass<typeof BaseMenu.Subme
   return <BaseMenu.SubmenuTrigger className={clsx(row, 'data-popup-open:bg-hover', className)} {...props} />;
 }
 
+/** A labelled part of a menu ("지도"): its label is a quiet line over its items. */
+function GroupLabel({ className, ...props }: WithClass<typeof BaseMenu.GroupLabel>) {
+  return <BaseMenu.GroupLabel className={clsx('px-2 pt-1.5 pb-1 text-meta text-fg-faint', className)} {...props} />;
+}
+
 function Separator({ className, ...props }: WithClass<typeof BaseMenu.Separator>) {
   return <BaseMenu.Separator className={clsx('my-1 border-t border-line-subtle', className)} {...props} />;
 }
@@ -63,6 +68,8 @@ export const Menu = {
   Item,
   RadioGroup: BaseMenu.RadioGroup,
   RadioItem,
+  Group: BaseMenu.Group,
+  GroupLabel,
   Separator,
   SubmenuRoot: BaseMenu.SubmenuRoot,
   SubmenuTrigger,

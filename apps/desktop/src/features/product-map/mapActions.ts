@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { create } from 'zustand';
 
 import type { PlanPhase } from './planData';
@@ -43,3 +44,30 @@ export const useMapActionStore = create<{
 
 /** The actions of the map of this project while it is on screen, else `null`. */
 export const useMapActions = (cwd: string) => useMapActionStore((state) => state.maps[cwd] ?? null);
+
+/** The map's menu as the window's ⋯ shows it: its items, and whether something new waits in them (the history). */
+export interface MapMenuEntry {
+  items: ReactNode;
+  dot: boolean;
+}
+
+/**
+ * The open maps' menus, by project folder: on the map's page the map has no ⋯ of its own, and its items are the "지도"
+ * part of the window's ⋯ (MoreMenu). The map registers them while it is on screen.
+ */
+export const useMapMenuStore = create<{
+  menus: Record<string, MapMenuEntry>;
+  register: (cwd: string, entry: MapMenuEntry | null) => void;
+}>((set) => ({
+  menus: {},
+  register: (cwd, entry) =>
+    set(({ menus }) => {
+      const next = { ...menus };
+      if (entry) next[cwd] = entry;
+      else delete next[cwd];
+      return { menus: next };
+    }),
+}));
+
+/** The menu of the map of this project while it is on screen and gives its menu to the window, else `null`. */
+export const useMapMenu = (cwd: string | null) => useMapMenuStore((state) => (cwd ? (state.menus[cwd] ?? null) : null));

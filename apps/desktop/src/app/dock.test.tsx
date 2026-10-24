@@ -321,7 +321,7 @@ describe('right dock on the routes', () => {
       board(),
       flowScript(() => STUDIO_MAP),
     );
-    fireEvent.click(await screen.findByRole('button', { name: '지도 메뉴' }));
+    fireEvent.click(await screen.findByRole('button', { name: '더 보기' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: /^지도 기록/ }));
     const panel = await screen.findByRole('complementary', { name: '지도 기록' });
     expect(panel.closest('[data-overlay]') !== null).toBe(overlaid);

@@ -200,6 +200,7 @@ function BoardRoute() {
                 cwd={cwd}
                 sessionId={session ?? null}
                 dockOpen
+                menuInWindow
                 hidden={showingApp}
                 talkSlot={talkSlot}
                 onShowTalk={() => showDockTab(SUMMARY_TAB)}

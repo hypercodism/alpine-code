@@ -50,14 +50,14 @@ import { toTreeMap } from './flowTreeData';
 import { hasScreenArea } from './flowTreeModel';
 import { flowTreeMessages } from './flowTreeMessages';
 import { JourneyMap } from './JourneyMap';
-import { useMapActionStore } from './mapActions';
+import { useMapActionStore, useMapMenuStore } from './mapActions';
 import { Bar, CONNECTION, PlanBar, Working, type PlanReview, type PlanTeamAnswer } from './PlanBar';
 import { buildActivity, lastReply, pendingQuestion, planPhase, stopReason, TEAM_WORKING } from './planData';
 import { mapLookCss } from './planLook';
 import { planMessages } from './planMessages';
 import { useMapRequest } from './askRequest';
 import { AskFlight, MapAsk } from './MapAsk';
-import { DeleteMap, MapMenu, ScopeEditor } from './MapSettings';
+import { DeleteMap, MapMenu, MapMenuItems, type MapMenuProps, ScopeEditor } from './MapSettings';
 import { Unmapped } from './Unmapped';
 import { messages } from './messages';
 import { type LaterWord, useLaterWords, useMapTalk } from './mapTalk';
@@ -111,6 +111,7 @@ export function ProductMap({
   talkSlot,
   onShowTalk,
   onOpenInApp,
+  menuInWindow = false,
 }: {
   cwd: string;
   sessionId?: string | null;
@@ -144,6 +145,11 @@ export function ProductMap({
   onShowTalk?: () => void;
   /** Opens the running app at a built screen's address (its card's `path`). */
   onOpenInApp?: (cardId: string) => void;
+  /**
+   * The window has a ⋯ of its own (the map's page): the map's menu is its "지도" part instead of a second ⋯ on the
+   * map (useMapMenuStore).
+   */
+  menuInWindow?: boolean;
 }) {
   const t = useMessages(messages);
   const tree = useMessages(flowTreeMessages);
@@ -941,29 +947,39 @@ export function ProductMap({
     if (requested) takeRequest(requested);
   }, [requested]);
 
-  const mapMenu = data && (
-    <MapMenu
-      cwd={cwd}
-      board={data}
-      readOnly={readOnly}
-      unseen={unseen}
-      canStart={!(locked || board.isError)}
-      planning={planning}
-      onChanges={data.changes?.length ? openChanges : undefined}
-      onRediscover={() => setConfirmRebuild(true)}
-      onScope={() => setScopeOpen(true)}
-      onDelete={() => setDeleting(true)}
-      recheck={recheck.length}
-      onRecheck={recheckAll}
-      onMemory={onMemory}
-    />
-  );
+  const menuProps: MapMenuProps | null = data
+    ? {
+        cwd,
+        board: data,
+        readOnly,
+        unseen,
+        canStart: !(locked || board.isError),
+        planning,
+        onChanges: data.changes?.length ? openChanges : undefined,
+        onRediscover: () => setConfirmRebuild(true),
+        onScope: () => setScopeOpen(true),
+        onDelete: () => setDeleting(true),
+        recheck: recheck.length,
+        onRecheck: recheckAll,
+        // The window's ⋯ has 기억 already.
+        onMemory: menuInWindow ? undefined : onMemory,
+      }
+    : null;
+  const mapMenu = menuProps && !menuInWindow && <MapMenu {...menuProps} />;
+  // On the map's page the map's menu is the "지도" part of the window's ⋯, so the page has one ⋯. Before the first
+  // card the map may already exist (being drawn, or stopped early), and its menu is there too.
+  const registerMenu = useMapMenuStore((state) => state.register);
+  const windowMenu = menuInWindow && menuProps && (hasMap || workBusy || data?.exists) ? menuProps : null;
+  useEffect(() => {
+    registerMenu(cwd, windowMenu ? { items: <MapMenuItems {...windowMenu} />, dot: windowMenu.unseen > 0 } : null);
+  });
+  useEffect(() => () => registerMenu(cwd, null), [registerMenu, cwd]);
 
   return (
     <main ref={area} className="flex min-h-0 min-w-0 grow flex-col bg-canvas contain-inline-size" aria-label={t.title}>
       {/* Before the first card the map may already exist (being drawn, or stopped early): its menu (scope, delete)
           is here too, so a map is never out of reach. */}
-      {!hasMap && data && (workBusy || data.exists) && (
+      {!hasMap && data && (workBusy || data.exists) && mapMenu && (
         <div className="flex min-h-11 shrink-0 items-center gap-2 bg-canvas-sunken px-10 py-1.5">
           <span className="grow" />
           {mapMenu}
