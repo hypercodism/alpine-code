@@ -1437,6 +1437,9 @@ export function ProductMap({
                   cards: cardCount,
                   done: builtCount,
                   screens: Object.values(treeMap?.cards ?? {}).filter(hasScreenArea).length,
+                  tries: Object.values(treeMap?.cards ?? {})
+                    .filter((card) => card.howToTry?.trim())
+                    .map((card) => ({ cardId: card.id, card: card.title, text: card.howToTry!.trim() })),
                   open: Object.values(treeMap?.cards ?? {}).flatMap((card) =>
                     card.promises
                       .filter((promise) => promise.status !== 'passed')

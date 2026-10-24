@@ -1028,6 +1028,8 @@ When a product question comes up that the map does not answer, do not stop: take
 it on the card as a decision with "by": "ai" (with the options you weighed), and go on. Stop to ask with ask_user only
 when no sensible default exists.
 Check every promise you built and record the checks, as below. A promise is done only when a recorded check says so.
+Whatever the person needs to try a screen themselves (where to sign in, a password you set, a test card) goes into
+that card's `howToTry` in plain words ("사장님 비밀번호: bakery1234"), never only in your message.
 Talk to the person in their language, about screens, promises and choices: they see the map, not its files, so never
 mention files, JSON, paths or code words to them.
 Finish with one short line: what was built, how many promises were checked, and what you decided on your own.

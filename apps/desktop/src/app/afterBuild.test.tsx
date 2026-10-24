@@ -163,6 +163,29 @@ describe('a built screen opened from its card', () => {
   });
 });
 
+describe('what it takes to try it', () => {
+  const withTry = (b: FlowGetResult): FlowGetResult => ({
+    ...b,
+    document: {
+      ...b.document!,
+      nodes: b.document!.nodes!.map((node) =>
+        node.id === 'write' ? { ...node, howToTry: '글쓴이 비밀번호: blog1234' } : node,
+      ),
+    },
+  });
+
+  it('is on the completion card and beside the app for the screen on view, not only in the last message', async () => {
+    mount('built', {}, { board: withTry });
+    const tries = within(await done()).getByRole('region', { name: '직접 써 보려면' });
+    expect(within(tries).getByText('글쓴이 비밀번호: blog1234')).toBeTruthy();
+    expect(within(tries).getByText(/글 쓰기/)).toBeTruthy();
+    await openApp();
+    const strip = await screen.findByRole('complementary', { name: '지금 보는 화면' }, { timeout: 3000 });
+    const beside = within(strip).getByRole('region', { name: '직접 써 보려면' });
+    expect(within(beside).getByText('글쓴이 비밀번호: blog1234')).toBeTruthy();
+  });
+});
+
 describe('the app that fails to open (#7)', () => {
   it('hands the AI what went wrong, as words to the map, and shows its conversation', async () => {
     const failed = {

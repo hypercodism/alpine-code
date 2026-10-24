@@ -56,6 +56,8 @@ export interface PlanBuilt {
   done: number;
   screens: number;
   open: PlanOpenPromise[];
+  /** What the person needs to try each card that needs something (a sign-in, a password), in plain words. */
+  tries: { cardId: string; card: string; text: string }[];
 }
 
 /** What the person can say to the build's TF from the map, as on its card in the conversation. */
@@ -325,6 +327,19 @@ function Done({
           )}
         </p>
       </div>
+      {built.tries.length > 0 && (
+        <section aria-label={t.howToTry} className="flex flex-col gap-1.5 border-t border-line-subtle pt-3">
+          <p className="text-meta text-fg-muted">{t.howToTry}</p>
+          <ul className="flex flex-col gap-1">
+            {built.tries.map((one) => (
+              <li key={one.cardId} className="text-body text-fg">
+                <span className="text-fg-muted">{one.card} · </span>
+                <span className="whitespace-pre-wrap">{one.text}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {shown.length > 0 && (
         <ul aria-label={t.openPromises} className="flex flex-col gap-3 border-t border-line-subtle pt-3">
           {shown.map((open) => (

@@ -992,6 +992,8 @@ def test_building_a_plan_goes_on_without_asking_and_checks_the_promises(proj):
     assert prepared.prompt.index("set its card's phase to building") < prepared.prompt.index("Choose your own order")
     # They see the map, not its files.
     assert "never\nmention files, JSON, paths or code words" in prepared.prompt
+    # What it takes to try a screen is on its card, where the person looks, not buried in the last message.
+    assert "goes into\nthat card's `howToTry` in plain words" in prepared.prompt
 
 
 def test_planning_talks_about_screens_not_files(proj):

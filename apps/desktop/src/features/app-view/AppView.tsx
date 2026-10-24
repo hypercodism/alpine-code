@@ -32,6 +32,8 @@ export interface AppScreen {
   /** Its address inside the running app (`/reservations`); null when the AI has not written one. */
   path: string | null;
   promises: AppPromise[];
+  /** What the person needs to try it (a sign-in, a password), in plain words; empty when nothing is needed. */
+  howToTry: string;
   /** Its picture on the map is a capture of the running app. */
   real: boolean;
 }
@@ -372,6 +374,12 @@ function ScreenStrip({
               </li>
             ))}
           </ul>
+          {shown.screen.howToTry.trim() && (
+            <section aria-label={t.howToTry} className="mt-4 flex flex-col gap-1 rounded-lg bg-canvas-sunken px-3 py-2">
+              <p className="text-meta text-fg-muted">{t.howToTry}</p>
+              <p className="text-body whitespace-pre-wrap text-fg">{shown.screen.howToTry.trim()}</p>
+            </section>
+          )}
         </>
       ) : (
         <p className="text-meta text-fg-muted">{t.firstPageHint}</p>
