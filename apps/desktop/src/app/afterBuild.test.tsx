@@ -25,8 +25,8 @@ import type { FlowGetResult } from '@alpine/protocol';
 import { routeTree } from './routeTree.gen';
 
 /**
- * After a plan is built (audit theme 3): 앱 열기 shows the app at once, the map has its way to 올리기 and 되돌리기, and
- * the top bar says where the map stands.
+ * After a plan is built (audit theme 3): the app opens at once from a built screen, the completion card has its way to
+ * 올리기, and the top bar says where the map stands.
  */
 
 vi.mock('@/features/terminal/TerminalScreen', () => ({
@@ -84,6 +84,17 @@ function mount(
   return { request };
 }
 
+/** Opens the app from a built screen's card (앱에서 보기). */
+async function openApp() {
+  const map = await screen.findByRole('main', { name: '제품 지도' });
+  const shown = await within(map).findAllByRole('button', { name: /열기$/ });
+  fireEvent.click(shown.find((button) => button.closest('[data-card]'))!);
+  fireEvent.click(await screen.findByRole('button', { name: '앱에서 보기' }));
+}
+
+/** The completion card under the conversation. */
+const done = () => screen.findByRole('region', { name: '다 만들었어요' });
+
 beforeEach(() => {
   localStorage.clear();
   localStorage.setItem('alpine.rail.open', 'false');
@@ -109,10 +120,10 @@ afterEach(() => {
   localStorage.clear();
 });
 
-describe('앱 열기 (#7)', () => {
+describe('the app from a built screen (#7)', () => {
   it('starts the project the way it runs and shows it, with no command to type', async () => {
     const { request } = mount('built');
-    fireEvent.click(await screen.findByRole('button', { name: '앱 열기' }));
+    await openApp();
     const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
     expect(within(dock).getByRole('tab', { name: '앱 미리보기', selected: true })).toBeTruthy();
     expect(await within(dock).findByTitle('미리보기', {}, { timeout: 3000 })).toBeTruthy();
@@ -126,7 +137,7 @@ describe('앱 열기 (#7)', () => {
 
   it('hands it to the AI, not me, when nothing in the project says how it runs', async () => {
     const { request } = mount('built', { results: { 'devServers/open': { server: null } } });
-    fireEvent.click(await screen.findByRole('button', { name: '앱 열기' }));
+    await openApp();
     const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
     expect(await within(dock).findByText(/여는 방법을 아직 몰라요/)).toBeTruthy();
     // The command form stays folded: no one is asked to type a command.
@@ -142,7 +153,7 @@ describe('앱 열기 (#7)', () => {
   });
 });
 
-describe('앱 열기 that fails (#7)', () => {
+describe('the app that fails to open (#7)', () => {
   it('hands the AI what went wrong, as words to the map, and shows its conversation', async () => {
     const failed = {
       id: 'dev-1',
@@ -161,7 +172,7 @@ describe('앱 열기 that fails (#7)', () => {
         'devServers/logs': ({ offset }) => ({ text: offset ? '' : log, nextOffset: log.length, total: log.length }),
       },
     });
-    fireEvent.click(await screen.findByRole('button', { name: '앱 열기' }));
+    await openApp();
     const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
     expect(await within(dock).findByText('앱을 열지 못했어요. AI가 실행 기록을 보고 고칠 수 있어요.')).toBeTruthy();
     expect(within(dock).getByRole('button', { name: '다시 열기' })).toBeTruthy();
@@ -181,10 +192,9 @@ describe('앱 열기 that fails (#7)', () => {
 });
 
 describe('올리기 from the map (#13, #23)', () => {
-  it('offers 인터넷에 올리기 beside 앱 열기, which opens the top bar sheet', async () => {
+  it('offers 인터넷에 올리기 on the completion card, which opens the top bar sheet', async () => {
     mount('built');
-    const line = (await screen.findByRole('button', { name: '앱 열기' })).closest('section')!;
-    fireEvent.click(within(line).getByRole('button', { name: '인터넷에 올리기' }));
+    fireEvent.click(within(await done()).getByRole('button', { name: '인터넷에 올리기' }));
     // Signed out, the sheet asks for the account first.
     expect(await screen.findByText('인터넷에 올리려면 Alpine 계정이 필요해요. 무료예요.')).toBeTruthy();
     expect(screen.getByRole('button', { name: /^올리기/ })).toBeTruthy();
@@ -192,7 +202,7 @@ describe('올리기 from the map (#13, #23)', () => {
 
   it('promises nothing online when Alpine Cloud is off', async () => {
     mount('built', {}, { cloud: false });
-    await screen.findByRole('button', { name: '앱 열기' });
+    await done();
     expect(screen.queryByRole('button', { name: '인터넷에 올리기' })).toBeNull();
     expect(screen.queryByRole('button', { name: /^올리기/ })).toBeNull();
   });
@@ -219,7 +229,7 @@ describe('a plan stays quiet until it is built', () => {
         }),
       },
     );
-    await screen.findByRole('button', { name: '앱 열기' });
+    await done();
     expect(screen.queryByText('지도에 아직 담기지 않은 코드')).toBeNull();
   });
 

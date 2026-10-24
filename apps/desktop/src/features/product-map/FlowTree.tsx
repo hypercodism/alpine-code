@@ -130,7 +130,7 @@ export interface FlowTreeProps {
 }
 
 /** What the side panel shows: a node's details, a promise of a step, or a form for what a "+" adds. */
-type Focus =
+export type Focus =
   | { kind: 'person'; personId: string }
   | { kind: 'journey'; personId: string; journeyId: string }
   | { kind: 'step'; personId: string; journeyId: string; cardId: string }
@@ -383,9 +383,6 @@ export function FlowTree(props: FlowTreeProps) {
       setFocus((current) => (current && current.kind !== 'addPerson' ? { ...current, personId: moved.id } : current));
   }, [focus, person, map]);
 
-  const focusScreen =
-    focus && (focus.kind === 'step' || focus.kind === 'promise') ? map.cards[focus.cardId]?.screen : undefined;
-
   return (
     <div className="flex h-full min-h-0 w-full bg-canvas text-body text-fg">
       <TreeCanvas
@@ -464,58 +461,21 @@ export function FlowTree(props: FlowTreeProps) {
         </aside>
       )}
       {/* A card's details open over the map; the side keeps the product's summary. */}
-      <Dialog.Root
-        open={focus !== null}
-        onOpenChange={(open, details) => {
-          // Escape in a field I am writing cancels that field, not the whole card.
-          const active = globalThis.document.activeElement;
-          if (
-            !open &&
-            details.reason === 'escape-key' &&
-            active?.matches('input, textarea, [contenteditable="true"]')
-          ) {
-            details.cancel();
-            return;
-          }
-          if (!open) setFocus(null);
+      <CardDialog
+        map={map}
+        focus={focus}
+        person={person}
+        props={props}
+        onShow={show}
+        onFocus={(next) => {
+          setFocus(next);
+          if (next.kind === 'promise')
+            setOpenSteps((current) => new Set(current).add(stepId(next.journeyId, next.cardId)));
+          reveal(focusNodeId(next));
         }}
-      >
-        <Dialog.Popup
-          className={clsx('relative max-h-[85vh] gap-0 overflow-y-auto p-0', focusScreen && 'w-[min(760px,94vw)]!')}
-        >
-          <Dialog.Close
-            aria-label={t.close}
-            title={t.close}
-            className="absolute top-3 right-3 z-10 flex size-7 cursor-pointer items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-hover hover:text-fg"
-          >
-            <X size={14} aria-hidden />
-          </Dialog.Close>
-          {focusScreen && <ScreenView key={focusScreen.src} screen={focusScreen} look={props.look ?? WIREFRAME} />}
-          {props.waitNote && (
-            <p role="status" className="mx-5 mt-5 mr-12 rounded-lg bg-canvas-sunken px-3 py-2 text-meta text-attention">
-              {props.waitNote}
-            </p>
-          )}
-          <div>
-            <Panel
-              key={focusId ?? 'product'}
-              focus={focus}
-              map={map}
-              person={person}
-              props={props}
-              onShow={show}
-              onFocus={(next) => {
-                setFocus(next);
-                if (next.kind === 'promise')
-                  setOpenSteps((current) => new Set(current).add(stepId(next.journeyId, next.cardId)));
-                reveal(focusNodeId(next));
-              }}
-              onRemove={removePromise}
-              onDone={setFocus}
-            />
-          </div>
-        </Dialog.Popup>
-      </Dialog.Root>
+        onRemove={removePromise}
+        onDone={setFocus}
+      />
     </div>
   );
 }
@@ -1113,6 +1073,78 @@ function ExpandTools({
 }
 
 // ---------------------------------------------------------------- panel
+
+/**
+ * A card's details over the map, opened from any view of it: its screen large, then its promises, what was decided and
+ * the page's own parts. Escape in a field being written cancels that field, not the whole card.
+ */
+export function CardDialog({
+  map,
+  focus,
+  person,
+  props,
+  onShow,
+  onFocus,
+  onRemove,
+  onDone,
+}: {
+  map: TreeMap;
+  focus: Focus | null;
+  person: Person | undefined;
+  props: FlowTreeProps;
+  onShow: (target: PromiseTarget, personId: string) => void;
+  onFocus: (focus: Focus) => void;
+  onRemove: (target: PromiseTarget) => void;
+  onDone: (focus: Focus | null) => void;
+}) {
+  const t = useMessages(messages);
+  const focusScreen =
+    focus && (focus.kind === 'step' || focus.kind === 'promise') ? map.cards[focus.cardId]?.screen : undefined;
+  return (
+    <Dialog.Root
+      open={focus !== null}
+      onOpenChange={(open, details) => {
+        const active = globalThis.document.activeElement;
+        if (!open && details.reason === 'escape-key' && active?.matches('input, textarea, [contenteditable="true"]')) {
+          details.cancel();
+          return;
+        }
+        if (!open) onDone(null);
+      }}
+    >
+      <Dialog.Popup
+        className={clsx('relative max-h-[85vh] gap-0 overflow-y-auto p-0', focusScreen && 'w-[min(760px,94vw)]!')}
+      >
+        <Dialog.Close
+          aria-label={t.close}
+          title={t.close}
+          className="absolute top-3 right-3 z-10 flex size-7 cursor-pointer items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-hover hover:text-fg"
+        >
+          <X size={14} aria-hidden />
+        </Dialog.Close>
+        {focusScreen && <ScreenView key={focusScreen.src} screen={focusScreen} look={props.look ?? WIREFRAME} />}
+        {props.waitNote && (
+          <p role="status" className="mx-5 mt-5 mr-12 rounded-lg bg-canvas-sunken px-3 py-2 text-meta text-attention">
+            {props.waitNote}
+          </p>
+        )}
+        <div>
+          <Panel
+            key={focusNodeId(focus) ?? 'product'}
+            focus={focus}
+            map={map}
+            person={person}
+            props={props}
+            onShow={onShow}
+            onFocus={onFocus}
+            onRemove={onRemove}
+            onDone={onDone}
+          />
+        </div>
+      </Dialog.Popup>
+    </Dialog.Root>
+  );
+}
 
 function Panel({
   map,

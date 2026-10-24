@@ -82,6 +82,8 @@ export interface TreeCard {
   screen?: CardScreen;
   /** A planned step that exists only if an open question goes one way: drawn dashed until it is answered. */
   tentative?: boolean;
+  /** How far it is made: planned, being built now, or built (implemented; not the same as checked). */
+  phase?: 'planned' | 'building' | 'built' | null;
   /** For a built screen: its address inside the running app (`/reservations`), so the app view can open it. */
   path?: string | null;
   /** Product questions answered on this card, oldest first: by the person, or by the AI on its own. */
