@@ -56,8 +56,12 @@ function BoardRoute() {
   const cwd = project?.path ?? '';
   // Without one in the address, the map shows the conversation its input goes to: its own, or while a build is
   // unfinished, the build's (map-first 37). No project here (none chosen, or one removed), no map to ask about.
-  const { talkTo } = useMapTalk(cwd);
-  const session = asked ?? talkTo ?? undefined;
+  const { talkTo, buildSessionId, buildInfo, building } = useMapTalk(cwd);
+  // Once the build is over its conversation is not where the map talks: the map's own shows, with the build in it as
+  // one line that opens it (the address may still name the build, from when it started).
+  const pastBuild = !!asked && asked === buildSessionId && !building && !!talkTo;
+  const session = (pastBuild ? undefined : asked) ?? talkTo ?? undefined;
+  const [buildShownFor, setBuildShownFor] = useState<string | null>(null);
   const navigate = useNavigate();
   const attached = useSession(session ?? null);
   const resultTab = useWorkResultTab(session ?? null, chosen);
@@ -125,6 +129,11 @@ function BoardRoute() {
       </div>
     );
 
+  // A finished build of a plan, as one line in the map's conversation: how long it took, and its work when opened.
+  const buildDone = planned && !!buildSessionId && !building && !!buildInfo && buildInfo.status !== 'running';
+  const buildMinutes = buildInfo
+    ? Math.max(1, Math.round((Date.parse(buildInfo.updatedAt) - Date.parse(buildInfo.createdAt)) / 60000) || 1)
+    : 1;
   const conversation = attachedHere ? (
     <div className="flex min-h-0 grow flex-col">
       {/* Another conversation opened beside the map (a card's, one brought over): my words to the map do not go
@@ -140,7 +149,16 @@ function BoardRoute() {
           </LinkButton>
         </p>
       )}
-      {teamShown ? (
+      {buildDone && buildShownFor === buildSessionId ? (
+        <div className="flex min-h-0 grow flex-col">
+          <p className="border-b border-line px-4 py-2 text-meta">
+            <LinkButton className="min-h-5 px-0.5" onClick={() => setBuildShownFor(null)}>
+              {m.backToConversation}
+            </LinkButton>
+          </p>
+          <Session key={buildSessionId} sessionId={buildSessionId} compact readOnly inputOnMap />
+        </div>
+      ) : teamShown ? (
         <div className="flex min-h-0 grow flex-col overflow-y-auto">
           <p className="border-b border-line px-4 py-2 text-meta">
             <LinkButton className="min-h-5 px-0.5" onClick={() => setTeamOf(null)}>
@@ -152,23 +170,35 @@ function BoardRoute() {
       ) : (
         // The map has its own input; here the conversation only reads, unless it is one the map's input does not
         // reach and it waits for my answer.
-        <Session
-          key={session}
-          sessionId={session}
-          compact
-          readOnly
-          inputOnMap={!talkTo || session === talkTo}
-          questionsPinned={planned && session === talkTo}
-          onInspectProcesses={() => showDockTab('processes')}
-          onShowTaskForce={
-            team
-              ? () => {
-                  setTeamOf(session);
-                  showDockTab(SUMMARY_TAB);
-                }
-              : undefined
-          }
-        />
+        <>
+          {buildDone && session === talkTo && (
+            <button
+              type="button"
+              onClick={() => setBuildShownFor(buildSessionId)}
+              className="flex shrink-0 cursor-pointer items-center gap-1.5 border-b border-line px-4 py-2 text-left text-meta text-fg-muted hover:text-fg"
+            >
+              {m.buildTook(buildMinutes)}
+              <span aria-hidden="true">›</span>
+            </button>
+          )}
+          <Session
+            key={session}
+            sessionId={session}
+            compact
+            readOnly
+            inputOnMap={!talkTo || session === talkTo}
+            questionsPinned={planned && session === talkTo}
+            onInspectProcesses={() => showDockTab('processes')}
+            onShowTaskForce={
+              team
+                ? () => {
+                    setTeamOf(session);
+                    showDockTab(SUMMARY_TAB);
+                  }
+                : undefined
+            }
+          />
+        </>
       )}
     </div>
   ) : (

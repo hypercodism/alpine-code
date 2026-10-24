@@ -240,6 +240,28 @@ describe('바로 고치기 on a built plan', () => {
   });
 });
 
+describe('after the build', () => {
+  it("shows the map's own conversation, with the build in it as one line that opens it", async () => {
+    mount(
+      'built',
+      {},
+      {
+        session: 'build-1',
+        build: { createdAt: '2026-10-25T01:00:00Z', updatedAt: '2026-10-25T01:18:10Z' },
+      },
+    );
+    await done();
+    const dock = screen.getByRole('complementary', { name: '오른쪽 창' });
+    const line = await within(dock).findByRole('button', { name: /만들기 · 18분 걸렸어요/ });
+    expect(within(dock).queryByText('지금 지도 대화가 아닌 다른 대화를 보고 있어요')).toBeNull();
+    fireEvent.click(line);
+    const back = await within(dock).findByRole('button', { name: '← 대화로 돌아가기' });
+    expect(within(dock).queryByRole('button', { name: /만들기 · 18분/ })).toBeNull();
+    fireEvent.click(back);
+    expect(await within(dock).findByRole('button', { name: /만들기 · 18분 걸렸어요/ })).toBeTruthy();
+  });
+});
+
 describe('the app after the AI changed it', () => {
   it("loads the screen on view again when the map's work ends", async () => {
     mount('built');
