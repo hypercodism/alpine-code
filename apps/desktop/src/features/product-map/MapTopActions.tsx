@@ -8,8 +8,8 @@ import { planMessages } from './planMessages';
 
 /**
  * The right of the top bar over a map: while a plan is decided, what is left to decide and 이대로 만들기 (quiet until
- * nothing is left); while the AI works, how far the build is and 멈추기; nothing once built. It acts through the map on
- * screen, so it shows nothing when no map of this project is open.
+ * nothing is left); while the AI works, how far the build is (and what it does while no card is being built) and
+ * 멈추기; nothing once built. It acts through the map on screen, so it shows nothing when no map of this project is open.
  */
 export function MapTopActions({ cwd }: { cwd: string }) {
   const t = useMessages(planMessages);
@@ -18,9 +18,16 @@ export function MapTopActions({ cwd }: { cwd: string }) {
   if (map.working)
     return (
       <span className="flex shrink-0 items-center gap-3">
-        {map.phase === 'building' && map.cards > 0 && (
-          <span className="text-meta whitespace-nowrap text-fg-muted tabular-nums">
-            {t.progress(map.built, map.cards)}
+        {map.phase === 'building' && (map.activity || map.cards > 0) && (
+          <span className="flex min-w-0 items-center gap-1.5 text-meta whitespace-nowrap text-fg-muted tabular-nums">
+            {map.activity && (
+              <span className="max-w-64 truncate" title={map.activity}>
+                {map.activity}
+              </span>
+            )}
+            {map.activity && map.built > 0 && <span aria-hidden>·</span>}
+            {/* "화면 7개 중 0개" alone reads as stuck; with nothing built yet the line says what is being done. */}
+            {map.cards > 0 && (!map.activity || map.built > 0) && t.progress(map.built, map.cards)}
           </span>
         )}
         <Button onClick={map.stop}>

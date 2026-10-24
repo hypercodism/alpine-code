@@ -13,6 +13,8 @@ export interface MapActions {
   built: number;
   /** The map's AI works now: drawing, asking, building, or a request. */
   working: boolean;
+  /** What the build does now while no card is being built ("데이터와 구조를 만드는 중"); `null` otherwise. */
+  activity: string | null;
   /** Something is being started; another press would start it twice. */
   busy: boolean;
   /** Starts building the plan as it stands ("이대로 만들기"). */

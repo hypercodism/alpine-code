@@ -397,7 +397,8 @@ export function ProductMap({
     phase === 'building' && data
       ? (buildActivity(buildItems ?? [], data, {
           onCard: plan.activityOnCard,
-          editing: plan.activityEditing,
+          // A build's edits no card claims are what every screen stands on: the data and the structure.
+          editing: plan.activityStructure,
           running: plan.activityRunning,
           reading: plan.activityReading,
           thinking: plan.activityThinking,
@@ -563,6 +564,8 @@ export function ProductMap({
   const cardCount = document?.nodes?.length ?? 0;
   const builtCount = (document?.nodes ?? []).filter((node) => node.phase === 'built').length;
   const mapWorking = workBusy || talking || phase === 'building';
+  // While no card is being built the strip shows nothing at work, so the top bar says what the build does now.
+  const buildLine = phase === 'building' && !making ? (activity?.text ?? null) : null;
   useEffect(() => {
     registerActions(cwd, {
       phase,
@@ -570,11 +573,12 @@ export function ProductMap({
       cards: cardCount,
       built: builtCount,
       working: mapWorking,
+      activity: buildLine,
       busy,
       build: () => latest.current.build(),
       stop: () => latest.current.stop(),
     });
-  }, [registerActions, cwd, phase, left, cardCount, builtCount, mapWorking, busy]);
+  }, [registerActions, cwd, phase, left, cardCount, builtCount, mapWorking, buildLine, busy]);
   useEffect(() => () => registerActions(cwd, null), [registerActions, cwd]);
   // What a promise's own answers need: the map, whether it may be written, and how to ask the AI about it.
   const promiseProps = (node: FlowNode) => ({

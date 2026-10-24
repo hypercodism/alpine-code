@@ -30,14 +30,15 @@ interface Mount {
   mapItems?: Item[];
   map?: Partial<Parameters<typeof sessionInfo>[0]>;
   build?: Partial<Parameters<typeof sessionInfo>[0]>;
+  buildItems?: Item[];
 }
 
-function mount(board: FlowGetResult, { mapItems = [], map = {}, build = {} }: Mount = {}) {
+function mount(board: FlowGetResult, { mapItems = [], map = {}, build = {}, buildItems = [] }: Mount = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const sessions = [
     { info: sessionInfo({ id: 'map-1', cwd, purpose: 'map', title: '지도', ...map }), items: mapItems },
     ...(board.buildSession
-      ? [{ info: sessionInfo({ id: 'build-1', cwd, purpose: 'build', title: '만들기', ...build }), items: [] }]
+      ? [{ info: sessionInfo({ id: 'build-1', cwd, purpose: 'build', title: '만들기', ...build }), items: buildItems }]
       : []),
   ];
   const connection = scriptedConnection(mergeScripts(boardScript(board), sessionScript({ sessions })));
@@ -295,6 +296,31 @@ describe('the top bar over a map', () => {
       expect(request.mock.calls.find(([method]) => method === 'session/cancel')?.[1]).toEqual({ sessionId: 'build-1' }),
     );
     expect(within(top()).getByText('화면 6개 중 3개')).toBeTruthy();
+  });
+
+  it('says what the build does while no card is being built, instead of a count that looks stuck', async () => {
+    const board = blog('building');
+    const nodes = board.document!.nodes!.map((node) => ({ ...node, phase: 'planned' as const, sources: [] }));
+    const edit = (id: string, path: string) =>
+      ({
+        id,
+        kind: 'tool_call',
+        name: 'write',
+        args: { path },
+        status: 'done',
+        result: '',
+        images: 0,
+        commandResult: null,
+        fileChanges: null,
+      }) as Item;
+    const said = { id: 'u1', kind: 'user_message', text: '이대로 만들어 주세요.' } as Item;
+    mount(
+      { ...board, document: { ...board.document!, nodes } },
+      { build: { status: 'running' }, buildItems: [said, edit('e1', '/project/src/db/schema.ts')] },
+    );
+    expect(await within(top()).findByText('데이터와 구조를 만드는 중')).toBeTruthy();
+    expect(within(top()).queryByText(/화면 \d+개 중 0개/)).toBeNull();
+    expect(within(top()).getByRole('button', { name: '멈추기' })).toBeTruthy();
   });
 
   it('shows nothing once it is built', async () => {
