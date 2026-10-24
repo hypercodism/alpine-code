@@ -36,7 +36,10 @@ export interface PlanStop {
   team: boolean;
 }
 
-/** A promise the finished product does not keep yet (or nobody saw it keep), with the screen it is on. */
+/**
+ * A promise the finished product does not keep (`failed`), or that nobody saw it keep: never checked, or to be checked
+ * again since what it rests on changed. With the screen it is on.
+ */
 export interface PlanOpenPromise {
   cardId: string;
   card: string;
@@ -70,7 +73,7 @@ export const CONNECTION = new Set<RunStoppedItem['reason']>(['signed_out', 'cred
  * What a planned map says just above its input, from facts only: the question the AI waits on (on the card it
  * changes), that everything is decided (이대로 만들기 itself is in the top bar), what the AI does now while it builds
  * (with 멈추기, and a call to look when it waits for my OK), and once built, the completion card: what was checked,
- * each promise not checked yet with 바로 고치기, and 인터넷에 올리기. A question the AI answered while building can be
+ * each broken promise with 바로 고치기, the ones to check again with one 다시 확인, and 인터넷에 올리기. A question the AI answered while building can be
  * opened from its card and answered again here, one after another.
  */
 export function PlanBar({
@@ -99,6 +102,7 @@ export function PlanBar({
   onNextReview,
   onReviewPicks,
   onFix,
+  onRecheck,
   onOpenInApp,
   onPublish,
   onTeam,
@@ -148,6 +152,8 @@ export function PlanBar({
   onReviewPicks: () => void;
   /** Asks the AI to fix one promise the built product does not keep, as a request about its card. */
   onFix: (cardId: string, promiseId: string) => void;
+  /** Asks the AI to check these cards' promises (again). */
+  onRecheck: (cardIds: string[]) => void;
   /** Opens the running app at a screen; absent where the page cannot, or for a screen without an address. */
   onOpenInApp?: (cardId: string) => boolean | void;
   /** Puts the app online (Alpine Cloud); absent when there is nowhere to put it. */
@@ -281,7 +287,14 @@ export function PlanBar({
   }
   if (phase === 'built')
     return (
-      <Done built={built} onReviewPicks={onReviewPicks} onFix={onFix} onOpenInApp={onOpenInApp} onPublish={onPublish} />
+      <Done
+        built={built}
+        onReviewPicks={onReviewPicks}
+        onFix={onFix}
+        onRecheck={onRecheck}
+        onOpenInApp={onOpenInApp}
+        onPublish={onPublish}
+      />
     );
   return null;
 }
@@ -290,31 +303,42 @@ export function PlanBar({
 const OPEN_ROWS = 5;
 
 /**
- * The completion card: it is built, how many screens and how many promises were checked, each promise still open with
- * 바로 고치기, and 인터넷에 올리기 as its one button (none without Alpine Cloud). The app opens from the top bar.
+ * The completion card: it is built, how many screens and how many promises were checked, each broken promise with
+ * 바로 고치기, the promises still to be checked (never, or again since what they rest on changed) as one line with one
+ * 다시 확인, and 인터넷에 올리기 as its one button (none without Alpine Cloud). Its title says 다 만들었어요 alone only
+ * when nothing is broken or waits. The app opens from the top bar.
  */
 function Done({
   built,
   onReviewPicks,
   onFix,
+  onRecheck,
   onOpenInApp,
   onPublish,
 }: {
   built: PlanBuilt;
   onReviewPicks: () => void;
   onFix: (cardId: string, promiseId: string) => void;
+  onRecheck: (cardIds: string[]) => void;
   onOpenInApp?: (cardId: string) => boolean | void;
   onPublish?: (from: HTMLElement) => void;
 }) {
   const t = useMessages(messages);
-  const shown = built.open.slice(0, OPEN_ROWS);
+  const broken = built.open.filter((open) => open.failed);
+  const waiting = built.open.filter((open) => !open.failed);
+  const shown = broken.slice(0, OPEN_ROWS);
+  const title = broken.length
+    ? t.builtToFix(broken.length)
+    : waiting.length
+      ? t.builtToRecheck(waiting.length)
+      : t.builtTitle;
   return (
     <section
       aria-label={t.builtTitle}
       className="pointer-events-auto motion-step flex flex-col gap-3 rounded-xl border border-line bg-canvas-raised p-4 shadow-overlay"
     >
       <div className="flex flex-col">
-        <p className="text-reading font-medium text-fg">{t.builtTitle}</p>
+        <p className="text-reading font-medium text-fg">{title}</p>
         <p className="text-meta text-fg-muted">
           {t.builtCounts(built.screens, built.total, built.checked)}
           {built.aiPicks > 0 && (
@@ -345,11 +369,8 @@ function Done({
           {shown.map((open) => (
             <li key={`${open.cardId}/${open.promiseId}`} className="flex flex-col items-start gap-1.5">
               <p className="flex gap-2 text-body text-fg">
-                <span
-                  aria-hidden
-                  className={clsx('w-3 shrink-0 text-center', open.failed ? 'text-danger' : 'text-fg-faint')}
-                >
-                  {open.failed ? '✗' : '·'}
+                <span aria-hidden className="w-3 shrink-0 text-center text-danger">
+                  ✗
                 </span>
                 <span className="min-w-0">
                   {open.card} · {open.text}
@@ -366,10 +387,21 @@ function Done({
               </span>
             </li>
           ))}
-          {built.open.length > shown.length && (
-            <li className="ml-5 text-meta text-fg-muted">{t.moreOpen(built.open.length - shown.length)}</li>
+          {broken.length > shown.length && (
+            <li className="ml-5 text-meta text-fg-muted">{t.moreOpen(broken.length - shown.length)}</li>
           )}
         </ul>
+      )}
+      {waiting.length > 0 && (
+        <p className="flex items-center gap-3 border-t border-line-subtle pt-3 text-body text-fg">
+          <span className="flex min-w-0 grow gap-2">
+            <span aria-hidden className="w-3 shrink-0 text-center text-fg-faint">
+              ·
+            </span>
+            {t.toRecheck(waiting.length)}
+          </span>
+          <Button onClick={() => onRecheck([...new Set(waiting.map((open) => open.cardId))])}>{t.recheck}</Button>
+        </p>
       )}
       {onPublish && (
         <Button variant="primary" className="w-full" onClick={(event) => onPublish(event.currentTarget)}>

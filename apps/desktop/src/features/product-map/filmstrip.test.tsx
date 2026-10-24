@@ -244,8 +244,9 @@ describe('the completion card', () => {
     const { request, onPublish, onOpenInApp } = mount(builtWithAMiss());
     const done = await screen.findByRole('region', { name: '다 만들었어요' });
     expect(within(done).getByText(/화면 6개 · 약속 9개 중 8개 확인/)).toBeTruthy();
+    expect(within(done).getByText('다 만들었어요 · 고칠 약속 1개')).toBeTruthy();
     expect(within(done).queryByRole('button', { name: '앱 열기' })).toBeNull();
-    const open = within(done).getByRole('list', { name: '확인 못 한 약속' });
+    const open = within(done).getByRole('list', { name: '고칠 약속' });
     expect(within(open).getByText('댓글 달기 · 로그인한 사람만 댓글을 달 수 있어요')).toBeTruthy();
 
     fireEvent.click(within(open).getByRole('button', { name: '바로 고치기' }));
@@ -261,6 +262,46 @@ describe('the completion card', () => {
     expect(onOpenInApp).toHaveBeenCalledWith('comment');
     fireEvent.click(within(done).getByRole('button', { name: '인터넷에 올리기' }));
     expect(onPublish).toHaveBeenCalled();
+  });
+
+  it('says 다 만들었어요 alone only when nothing is broken or waits', async () => {
+    mount(blog('built'));
+    const done = await screen.findByRole('region', { name: '다 만들었어요' });
+    expect(within(done).getByText('다 만들었어요')).toBeTruthy();
+    expect(within(done).queryByRole('list', { name: '고칠 약속' })).toBeNull();
+    expect(within(done).queryByRole('button', { name: '다시 확인' })).toBeNull();
+  });
+
+  it('puts the promises to check again on one line with one 다시 확인, apart from the broken ones', async () => {
+    const board = builtWithAMiss();
+    // A fix changed files other cards rest on: their promises wait to be checked again, they are not broken.
+    board.states!.write!.promises!['p-markdown'] = { status: 'recheck' };
+    board.states!.write!.promises!['p-draft'] = { status: 'recheck' };
+    board.states!.publish!.promises!['p-publish'] = { status: 'unconfirmed' };
+    const { request } = mount(board);
+    const done = await screen.findByRole('region', { name: '다 만들었어요' });
+    expect(within(done).getByText('다 만들었어요 · 고칠 약속 1개')).toBeTruthy();
+    const broken = within(done).getByRole('list', { name: '고칠 약속' });
+    expect(within(broken).getAllByRole('listitem')).toHaveLength(1);
+    expect(within(done).getAllByRole('button', { name: '바로 고치기' })).toHaveLength(1);
+    expect(within(done).getByText('다시 확인할 약속 3개')).toBeTruthy();
+
+    fireEvent.click(within(done).getByRole('button', { name: '다시 확인' }));
+    await waitFor(() =>
+      expect(request.mock.calls.find(([method]) => method === 'flow/prepare')?.[1]).toMatchObject({
+        action: 'verify',
+        nodeIds: ['write', 'publish'],
+      }),
+    );
+  });
+
+  it('names what waits in its title when nothing is broken', async () => {
+    const board = blog('built');
+    board.states!.write!.promises!['p-draft'] = { status: 'recheck' };
+    mount(board);
+    const done = await screen.findByRole('region', { name: '다 만들었어요' });
+    expect(within(done).getByText('다 만들었어요 · 다시 확인할 약속 1개')).toBeTruthy();
+    expect(within(done).queryByRole('button', { name: '바로 고치기' })).toBeNull();
   });
 
   it('opens a built screen in the app from its card', async () => {
