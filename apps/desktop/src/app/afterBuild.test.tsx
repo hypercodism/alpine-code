@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useAppViewState } from '@/features/app-view/state';
 import { showDockTab, useDockOpen, useDockTab } from '@/features/dock/state';
+import { useMapActionStore } from '@/features/product-map/mapActions';
 import { blogBoard, blogConversation, type PlanMoment } from '@/features/product-map/planExample';
 import { boardScript } from '@/features/product-map/testBoard';
 import { LocaleProvider } from '@/shared/i18n';
@@ -160,6 +161,22 @@ describe('a built screen opened from its card', () => {
     expect(screen.getByRole('button', { name: '앱', pressed: true })).toBeTruthy();
     expect(await screen.findByText(/화면을 보면서 말하는 중/)).toBeTruthy();
     expect(request).toHaveBeenCalledWith('devServers/open', expect.objectContaining({ cwd }));
+  });
+});
+
+describe('the app after the AI changed it', () => {
+  it("loads the screen on view again when the map's work ends", async () => {
+    mount('built');
+    await openApp();
+    const before = await screen.findByTitle('alpine-code 앱', {}, { timeout: 3000 });
+    const actions = () => useMapActionStore.getState().maps[cwd]!;
+    // The map's AI works on the app, then its work ends.
+    act(() => useMapActionStore.getState().register(cwd, { ...actions(), working: true }));
+    expect(screen.getByTitle('alpine-code 앱')).toBe(before);
+    act(() => useMapActionStore.getState().register(cwd, { ...actions(), working: false }));
+    const after = screen.getByTitle('alpine-code 앱');
+    expect(after).not.toBe(before);
+    expect(after.getAttribute('src')).toBe(before.getAttribute('src'));
   });
 });
 

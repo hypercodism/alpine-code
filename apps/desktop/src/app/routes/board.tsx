@@ -16,6 +16,7 @@ import { messages as serverMessages } from '@/features/development-servers/messa
 import { messages as dockMessages } from '@/features/dock/messages';
 import { showDockTab, useDockTab } from '@/features/dock/state';
 import { askMapFor } from '@/features/product-map/askRequest';
+import { useMapActions } from '@/features/product-map/mapActions';
 import { useMapTalk } from '@/features/product-map/mapTalk';
 import { messages as mapMessages } from '@/features/product-map/messages';
 import { planPhase } from '@/features/product-map/planData';
@@ -99,6 +100,11 @@ function BoardRoute() {
   const teamShown = !!team && teamOf === session;
   // Opens the app at one screen: 앱에서 보기 on a map card, or a screen picked beside the app.
   const openInApp = (id: string) => showApp(cwd, id);
+  // Each time the map's work ends (a request, a fix, the build) the app shows the screen again, with what changed.
+  const mapWorking = useMapActions(cwd)?.working ?? false;
+  const [appReload, setAppReload] = useState({ working: false, count: 0 });
+  if (appReload.working !== mapWorking)
+    setAppReload({ working: mapWorking, count: appReload.count + (mapWorking ? 0 : 1) });
 
   // Until the projects are known nothing is drawn, so the bar is not drawn twice (once without its project).
   if (!projects.data && !projects.isError) return null;
@@ -243,6 +249,7 @@ function BoardRoute() {
                     showDockTab(SUMMARY_TAB);
                   }}
                   onShowTerminal={() => showDockTab('terminal')}
+                  reload={appReload.count}
                 />
               </div>
             )}

@@ -100,6 +100,7 @@ export function AppView({
   onAskFix,
   onAskSetup,
   onShowTerminal,
+  reload = 0,
 }: {
   cwd: string;
   /** The project's name, for the frame's address bar. */
@@ -114,6 +115,8 @@ export function AppView({
   onAskSetup: () => void;
   /** Opens the terminal beside it (where a phone app is started). */
   onShowTerminal: () => void;
+  /** Goes up each time the AI's work on the app ends: the frame loads the screen again, to show what changed. */
+  reload?: number;
 }) {
   const t = useMessages(messages);
   const server = useServer();
@@ -232,7 +235,7 @@ export function AppView({
           {size === 'phone' ? (
             <div className="app-phone-frame flex aspect-1/2 h-full max-h-186 shrink-0 border border-line bg-canvas-raised p-2.5 shadow-overlay">
               <iframe
-                key={app.serverId}
+                key={`${app.serverId}:${reload}`}
                 src={url}
                 title={t.frameTitle(name)}
                 sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
@@ -253,7 +256,7 @@ export function AppView({
                 </span>
               </div>
               <iframe
-                key={app.serverId}
+                key={`${app.serverId}:${reload}`}
                 src={url}
                 title={t.frameTitle(name)}
                 sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
