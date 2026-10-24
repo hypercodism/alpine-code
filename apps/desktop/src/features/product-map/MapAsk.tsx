@@ -1,5 +1,5 @@
-import { ArrowUp } from 'lucide-react';
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { ArrowUp, Square, X } from 'lucide-react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 
 import { useConnectPrompt, useNoModel } from '@/shared/components/connect';
 import { useMessages } from '@/shared/i18n';
@@ -18,6 +18,9 @@ export function MapAsk({
   disabled,
   placeholder,
   onSend,
+  about = null,
+  onClearAbout,
+  onStop,
   agent,
 }: {
   /** No map yet: the placeholder invites drawing one, and sending with no words draws it. */
@@ -27,12 +30,24 @@ export function MapAsk({
   placeholder?: string;
   /** Resolves true once the AI has the request; the words fly off as a bubble then. */
   onSend: (text: string, from: DOMRect | null) => Promise<boolean>;
+  /** The card the words are about, from its 부탁하기; they go as a request about it. */
+  about?: string | null;
+  onClearAbout?: () => void;
+  /** The AI is at work: with nothing written, the send button stops it. */
+  onStop?: () => void;
   /** Who does the map's work (an agent chip), under the words as in every input. */
   agent?: ReactNode;
 }) {
   const t = useMessages(messages);
   const [text, setText] = useState('');
   const form = useRef<HTMLFormElement>(null);
+  const box = useRef<HTMLTextAreaElement>(null);
+  // A card's 부탁하기 brings me here: the words are about it. Its card closes first, then the input takes the keys.
+  useEffect(() => {
+    if (!about) return;
+    const later = setTimeout(() => box.current?.focus(), 50);
+    return () => clearTimeout(later);
+  }, [about]);
   const canSend = !disabled && (empty || !!text.trim());
   const ask = useConnectPrompt((state) => state.ask);
   const unconnected = useNoModel();
@@ -52,7 +67,22 @@ export function MapAsk({
       }}
       className="pointer-events-auto flex w-full flex-col gap-1 rounded-2xl border border-line bg-canvas-raised p-2 pl-4 shadow-overlay"
     >
+      {about && (
+        <p className="-ml-2 flex items-center gap-1 self-start rounded-full bg-canvas-sunken py-0.5 pr-1 pl-2.5 text-meta text-fg-muted">
+          {t.askAbout(about)}
+          <button
+            type="button"
+            aria-label={t.askAboutClear}
+            title={t.askAboutClear}
+            onClick={onClearAbout}
+            className="flex size-5 cursor-pointer items-center justify-center rounded-full hover:bg-hover"
+          >
+            <X size={12} aria-hidden />
+          </button>
+        </p>
+      )}
       <textarea
+        ref={box}
         value={text}
         rows={1}
         aria-label={t.mapAskLabel}
@@ -67,16 +97,28 @@ export function MapAsk({
         className="max-h-32 min-h-8 resize-none bg-transparent py-1.5 text-reading outline-none"
       />
       <div className="flex items-center gap-2">
-        <span className="-ml-2 flex min-w-0 grow items-center gap-1">{agent}</span>
-        <button
-          type="submit"
-          disabled={!canSend}
-          aria-label={empty && !text.trim() ? t.discover : t.askSend}
-          title={empty && !text.trim() ? t.discover : t.askSend}
-          className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-interactive text-on-fill disabled:cursor-default disabled:opacity-40"
-        >
-          <ArrowUp size={16} aria-hidden />
-        </button>
+        <span className="-ml-2 flex min-w-0 grow flex-wrap items-center gap-1">{agent}</span>
+        {onStop && !text.trim() ? (
+          <button
+            type="button"
+            onClick={onStop}
+            aria-label={t.stopWork}
+            title={t.stopWork}
+            className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-fg text-canvas-raised"
+          >
+            <Square size={12} fill="currentColor" aria-hidden />
+          </button>
+        ) : (
+          <button
+            type="submit"
+            disabled={!canSend}
+            aria-label={empty && !text.trim() ? t.discover : t.askSend}
+            title={empty && !text.trim() ? t.discover : t.askSend}
+            className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-interactive text-on-fill disabled:cursor-default disabled:opacity-40"
+          >
+            <ArrowUp size={16} aria-hidden />
+          </button>
+        )}
       </div>
     </form>
   );

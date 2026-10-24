@@ -1,9 +1,10 @@
 import type { FlowNode, FlowPrepareParams, FlowPrepareResult } from '@alpine/protocol';
-import { Button, LinkButton, Popover, SlidingPanel } from '@alpine/ui/primitives';
+import { Button, Dialog, LinkButton, Popover, SlidingPanel } from '@alpine/ui/primitives';
 import clsx from 'clsx';
 import { Brain, ChevronRight, CircleX, RotateCcw, Search, Sparkles, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 import { AgentChip, ModeChip, type Mode } from '@/shared/components/composer';
 import { ImportLink } from '@/shared/components/import-link';
@@ -102,6 +103,8 @@ export function ProductMap({
   demo = false,
   dockOpen = false,
   hidden = false,
+  talkSlot,
+  onShowTalk,
 }: {
   cwd: string;
   sessionId?: string | null;
@@ -125,6 +128,14 @@ export function ProductMap({
   dockOpen?: boolean;
   /** The map is covered by the dock enlarged ("크게 보기"): its keys (`/`, Escape) must not act on it. */
   hidden?: boolean;
+  /**
+   * Where everything said to the map goes (map-first 43): the bottom of the conversation beside it, under the
+   * conversation. `null` while that place is not shown (the map then offers the way to it); absent where the map has
+   * no conversation beside it, and keeps its input on the canvas.
+   */
+  talkSlot?: HTMLElement | null;
+  /** Shows the conversation beside the map, where the input is. */
+  onShowTalk?: () => void;
 }) {
   const t = useMessages(messages);
   const tree = useMessages(flowTreeMessages);
@@ -331,6 +342,9 @@ export function ProductMap({
   // My words to the conversation the map talks to, as they are: answers to its questions and anything else about the
   // plan. A conversation at work takes them when its turn is over, so they wait until then and are never lost.
   const later = useLaterWords(cwd);
+  // The card a word in the input is about, from its 부탁하기 (the input is beside the map, not on the card).
+  const [aboutCard, setAboutCard] = useState<string | null>(null);
+  const docked = talkSlot !== undefined;
   const say = (text: string) => {
     const to = talkTo ?? sessionId;
     if (!to || !text) return false;
@@ -828,8 +842,45 @@ export function ProductMap({
       nextReview();
       return true;
     }
+    const about = aboutCard ? nodeOf(aboutCard) : null;
+    if (about && text) {
+      const taken = await askAbout(about, text);
+      if (taken) setAboutCard(null);
+      return taken;
+    }
     if (planned && phase !== 'built') return say(text);
     return askMap(text, from);
+  };
+  // Words about one card: while planning or building they go to that conversation (map-first 37); otherwise a change
+  // to the card, kept until the AI is free.
+  const askAbout = (node: FlowNode, request: string): Promise<boolean> =>
+    planned && phase !== 'built'
+      ? Promise.resolve(say(plan.cardRequest(node.title, request)))
+      : anyActive
+        ? Promise.resolve(later.add(null, request, node.id)).then(() => true)
+        : start('change', { node, request });
+  // Everything said to the map sits under the conversation beside it; on its own the map keeps it on the canvas.
+  const placeTalk = (content: ReactNode) => {
+    if (!docked)
+      return (
+        <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 mx-auto flex w-[min(640px,calc(100%-32px))] flex-col gap-2">
+          {content}
+        </div>
+      );
+    if (talkSlot)
+      return createPortal(
+        <div className="flex shrink-0 flex-col gap-2 border-t border-line bg-canvas p-3 [&_.shadow-overlay]:shadow-none">
+          {content}
+        </div>,
+        talkSlot,
+      );
+    return (
+      <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 flex justify-center">
+        <Button className="pointer-events-auto shadow-overlay" onClick={onShowTalk}>
+          {t.talkOpen}
+        </Button>
+      </div>
+    );
   };
   const waitsForWork = planned && phase !== 'built' ? workBusy : hasMap && anyActive;
 
@@ -1222,21 +1273,35 @@ export function ProductMap({
                           </LinkButton>
                         </p>
                       )}
-                      <CardAsk
-                        key={cardId}
-                        locked={locked}
-                        // Words are taken while the AI works: they go when it is free.
-                        askLocked={busy || readOnly}
-                        // While planning or building, a word about a card goes to that conversation (map-first 37).
-                        onAsk={(request) =>
-                          planned && phase !== 'built'
-                            ? Promise.resolve(say(plan.cardRequest(node.title, request)))
-                            : anyActive
-                              ? Promise.resolve(later.add(null, request, node.id)).then(() => true)
-                              : start('change', { node, request })
-                        }
-                        onRecheck={planning ? undefined : () => void start('verify', { node })}
-                      />
+                      {docked ? (
+                        <p className="flex flex-wrap gap-2">
+                          {/* The card closes: the input is beside the map, under the conversation. */}
+                          <Dialog.Close
+                            render={<Button />}
+                            disabled={readOnly}
+                            onClick={() => {
+                              setAboutCard(cardId);
+                              onShowTalk?.();
+                            }}
+                          >
+                            {t.askAboutCard}
+                          </Dialog.Close>
+                          {!planning && (
+                            <Button disabled={locked} onClick={() => void start('verify', { node })}>
+                              {t.askRecheck}
+                            </Button>
+                          )}
+                        </p>
+                      ) : (
+                        <CardAsk
+                          key={cardId}
+                          locked={locked}
+                          // Words are taken while the AI works: they go when it is free.
+                          askLocked={busy || readOnly}
+                          onAsk={(request) => askAbout(node, request)}
+                          onRecheck={planning ? undefined : () => void start('verify', { node })}
+                        />
+                      )}
                     </>
                   ),
                 };
@@ -1253,158 +1318,166 @@ export function ProductMap({
           )
         )}
         {flight && <AskFlight key={flight.at} {...flight} landed={landed} />}
-        <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 mx-auto flex w-[min(640px,calc(100%-32px))] flex-col gap-2">
-          {phase && (
-            <PlanBar
-              phase={phase}
-              thinking={talking && phase === 'asking'}
-              question={shownQuestion}
-              about={shownQuestion?.about ? (treeMap?.cards[shownQuestion.about]?.title ?? null) : null}
-              preview={previewing}
-              sample={
-                pending?.sample ||
-                Object.values(treeMap?.cards ?? {}).find((card) => card.screen?.kind === 'planned')?.screen?.src ||
-                ''
-              }
-              activity={activity}
-              waiting={workInfo?.status === 'waiting'}
-              left={data?.undecided?.length ?? 0}
-              review={pickReview}
-              built={{
-                checked: promisesAll.filter((p) => p.status === 'passed').length,
-                total: promisesAll.length,
-                aiPicks: aiPicked.length,
-                cards: data?.document?.nodes?.length ?? 0,
-                done: (data?.document?.nodes ?? []).filter((node) => node.phase === 'built').length,
-              }}
-              team={
-                buildTeam?.status === 'proposed' || buildTeam?.status === 'over'
-                  ? {
-                      status: buildTeam.status,
-                      title: buildTeam.title,
-                      agents: roomOf(buildTeam).planned,
-                      minutes: buildTeam.minutes,
-                      needed: buildTeam.needed,
-                    }
-                  : null
-              }
-              stop={{ reason: stopReason(buildItems ?? []), team: buildTeam?.status === 'interrupted' }}
-              onTeam={answerTeam}
-              onContinue={continueBuild}
-              onAnswer={(option) => {
-                const label = shownQuestion?.options[option]?.label;
-                if (label) say(label);
-              }}
-              onPreview={(option) => shownQuestion && setLookPreview({ question: shownQuestion.id, option })}
-              onDecideRest={() => say(plan.decideRestMessage)}
-              onAskOn={() => say(plan.askOnMessage)}
-              onDrawOn={() => say(plan.drawOnMessage)}
-              onBuild={() => void startBuild(t.buildRequest)}
-              onDecide={(option) => {
-                const label = pickReview?.question.options[option]?.label;
-                // The answer it already has needs nothing sent.
-                if (label && option !== pickReview?.picked) changeDecision(label);
-                nextReview();
-              }}
-              onCloseReview={() => setReviewing(null)}
-              onNextReview={nextReview}
-              onReviewPicks={() => reviewOrder[0] && setReviewing(reviewOrder[0])}
-              onOpenApp={() => onOpenApp?.()}
-              onPublish={onPublish}
-              onFixConnection={() => onFixConnection?.()}
-              onStop={stopWork}
-              onLook={showWork}
-            />
-          )}
-          {ownLine &&
-            workBusy &&
-            (workInfo?.status === 'waiting' ? (
-              <Bar title={t.workWaiting} hint={t.workWaitingHint}>
-                <Button variant="primary" onClick={showWork}>
-                  {t.workLook}
-                </Button>
-                <Button onClick={stopWork}>{t.stopDrawing}</Button>
-              </Bar>
-            ) : (
-              <Working key={workText} text={workText} stop={t.stopDrawing} onStop={stopWork} />
-            ))}
-          {!workBusy && others.length > 0 && (
-            <p className="pointer-events-auto flex flex-wrap items-center gap-x-2 self-center rounded-xl bg-canvas-raised px-3 py-1.5 text-meta text-fg-muted shadow-overlay">
-              <span>{t.otherWorking}</span>
-              <LinkButton
-                className="min-h-5 px-0.5"
-                onClick={() => {
-                  onSession(others[0]!.id);
-                  onShowConversation?.();
+        {placeTalk(
+          <>
+            {phase && (
+              <PlanBar
+                docked={docked}
+                phase={phase}
+                thinking={talking && phase === 'asking'}
+                question={shownQuestion}
+                about={shownQuestion?.about ? (treeMap?.cards[shownQuestion.about]?.title ?? null) : null}
+                preview={previewing}
+                sample={
+                  pending?.sample ||
+                  Object.values(treeMap?.cards ?? {}).find((card) => card.screen?.kind === 'planned')?.screen?.src ||
+                  ''
+                }
+                activity={activity}
+                waiting={workInfo?.status === 'waiting'}
+                left={data?.undecided?.length ?? 0}
+                review={pickReview}
+                built={{
+                  checked: promisesAll.filter((p) => p.status === 'passed').length,
+                  total: promisesAll.length,
+                  aiPicks: aiPicked.length,
+                  cards: data?.document?.nodes?.length ?? 0,
+                  done: (data?.document?.nodes ?? []).filter((node) => node.phase === 'built').length,
                 }}
+                team={
+                  buildTeam?.status === 'proposed' || buildTeam?.status === 'over'
+                    ? {
+                        status: buildTeam.status,
+                        title: buildTeam.title,
+                        agents: roomOf(buildTeam).planned,
+                        minutes: buildTeam.minutes,
+                        needed: buildTeam.needed,
+                      }
+                    : null
+                }
+                stop={{ reason: stopReason(buildItems ?? []), team: buildTeam?.status === 'interrupted' }}
+                onTeam={answerTeam}
+                onContinue={continueBuild}
+                onAnswer={(option) => {
+                  const label = shownQuestion?.options[option]?.label;
+                  if (label) say(label);
+                }}
+                onPreview={(option) => shownQuestion && setLookPreview({ question: shownQuestion.id, option })}
+                onDecideRest={() => say(plan.decideRestMessage)}
+                onAskOn={() => say(plan.askOnMessage)}
+                onDrawOn={() => say(plan.drawOnMessage)}
+                onBuild={() => void startBuild(t.buildRequest)}
+                onDecide={(option) => {
+                  const label = pickReview?.question.options[option]?.label;
+                  // The answer it already has needs nothing sent.
+                  if (label && option !== pickReview?.picked) changeDecision(label);
+                  nextReview();
+                }}
+                onCloseReview={() => setReviewing(null)}
+                onNextReview={nextReview}
+                onReviewPicks={() => reviewOrder[0] && setReviewing(reviewOrder[0])}
+                onOpenApp={() => onOpenApp?.()}
+                onPublish={onPublish}
+                onFixConnection={() => onFixConnection?.()}
+                onStop={stopWork}
+                onLook={showWork}
+              />
+            )}
+            {!docked &&
+              ownLine &&
+              workBusy &&
+              (workInfo?.status === 'waiting' ? (
+                <Bar title={t.workWaiting} hint={t.workWaitingHint}>
+                  <Button variant="primary" onClick={showWork}>
+                    {t.workLook}
+                  </Button>
+                  <Button onClick={stopWork}>{t.stopDrawing}</Button>
+                </Bar>
+              ) : (
+                <Working key={workText} text={workText} stop={t.stopDrawing} onStop={stopWork} />
+              ))}
+            {!workBusy && others.length > 0 && (
+              <p className="pointer-events-auto flex flex-wrap items-center gap-x-2 self-center rounded-xl bg-canvas-raised px-3 py-1.5 text-meta text-fg-muted shadow-overlay">
+                <span>{t.otherWorking}</span>
+                <LinkButton
+                  className="min-h-5 px-0.5"
+                  onClick={() => {
+                    onSession(others[0]!.id);
+                    onShowConversation?.();
+                  }}
+                >
+                  {t.otherWorkingShow}
+                </LinkButton>
+              </p>
+            )}
+            {!docked && showReply && reply && (
+              <section
+                aria-label={t.replyFrom}
+                className="pointer-events-auto motion-step flex items-start gap-3 rounded-xl border border-line bg-canvas-raised p-3 shadow-overlay"
               >
-                {t.otherWorkingShow}
-              </LinkButton>
-            </p>
-          )}
-          {showReply && reply && (
-            <section
-              aria-label={t.replyFrom}
-              className="pointer-events-auto motion-step flex items-start gap-3 rounded-xl border border-line bg-canvas-raised p-3 shadow-overlay"
-            >
-              <p className="line-clamp-3 min-w-0 grow text-body whitespace-pre-line text-fg">{replyText}</p>
-              <span className="flex shrink-0 items-center gap-2">
-                {/* Stopped on the model connection (sign-in, credits, a plan's limit): fixed there, not here. */}
-                {replyStop && CONNECTION.has(replyStop) && (
-                  <LinkButton className="min-h-5 px-0.5" onClick={() => onFixConnection?.()}>
-                    {plan.fixConnection}
-                  </LinkButton>
-                )}
-                <LinkButton className="min-h-5 px-0.5" onClick={showWork}>
-                  {t.showConversation}
-                </LinkButton>
-                <LinkButton className="min-h-5 px-0.5" onClick={closeReply}>
-                  {t.replyClose}
-                </LinkButton>
-              </span>
-            </section>
-          )}
-          {waitingWords.length > 0 && (
-            <section
-              aria-label={t.laterTitle}
-              className="pointer-events-auto motion-step flex flex-col gap-1.5 rounded-xl border border-line bg-canvas-raised p-3 shadow-overlay"
-            >
-              <p className="text-meta text-fg-muted">{t.laterTitle}</p>
-              <ul className="flex flex-col gap-1">
-                {waitingWords.map((word) => (
-                  <li key={word.id} className="flex items-baseline gap-2 text-body">
-                    <span className="min-w-0 grow truncate">{word.text}</span>
-                    {word.failed && (
-                      <>
-                        <span className="shrink-0 text-meta text-danger">{t.laterFailed}</span>
-                        <LinkButton className="min-h-5 px-0.5" onClick={() => later.fail(word.id, false)}>
-                          {t.laterRetry}
-                        </LinkButton>
-                      </>
-                    )}
-                    <LinkButton className="min-h-5 px-0.5" onClick={() => later.drop(word.id)}>
-                      {t.laterCancel}
+                <p className="line-clamp-3 min-w-0 grow text-body whitespace-pre-line text-fg">{replyText}</p>
+                <span className="flex shrink-0 items-center gap-2">
+                  {/* Stopped on the model connection (sign-in, credits, a plan's limit): fixed there, not here. */}
+                  {replyStop && CONNECTION.has(replyStop) && (
+                    <LinkButton className="min-h-5 px-0.5" onClick={() => onFixConnection?.()}>
+                      {plan.fixConnection}
                     </LinkButton>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-          {data && !readOnly && !board.isError && !checkingFolder && !(emptyFolder && !hasMap) && (
-            <MapAsk
-              empty={!hasMap && !planned}
-              disabled={busy || (!hasMap && !planned && anyActive && !approval)}
-              placeholder={approval ? t.answerInstead : waitsForWork ? t.busyAsk : undefined}
-              onSend={sendWords}
-              agent={
-                <>
-                  {agentChip}
-                  {modeChip}
-                </>
-              }
-            />
-          )}
-        </div>
+                  )}
+                  <LinkButton className="min-h-5 px-0.5" onClick={showWork}>
+                    {t.showConversation}
+                  </LinkButton>
+                  <LinkButton className="min-h-5 px-0.5" onClick={closeReply}>
+                    {t.replyClose}
+                  </LinkButton>
+                </span>
+              </section>
+            )}
+            {waitingWords.length > 0 && (
+              <section
+                aria-label={t.laterTitle}
+                className="pointer-events-auto motion-step flex flex-col gap-1.5 rounded-xl border border-line bg-canvas-raised p-3 shadow-overlay"
+              >
+                <p className="text-meta text-fg-muted">{t.laterTitle}</p>
+                <ul className="flex flex-col gap-1">
+                  {waitingWords.map((word) => (
+                    <li key={word.id} className="flex items-baseline gap-2 text-body">
+                      <span className="min-w-0 grow truncate">{word.text}</span>
+                      {word.failed && (
+                        <>
+                          <span className="shrink-0 text-meta text-danger">{t.laterFailed}</span>
+                          <LinkButton className="min-h-5 px-0.5" onClick={() => later.fail(word.id, false)}>
+                            {t.laterRetry}
+                          </LinkButton>
+                        </>
+                      )}
+                      <LinkButton className="min-h-5 px-0.5" onClick={() => later.drop(word.id)}>
+                        {t.laterCancel}
+                      </LinkButton>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+            {data && !readOnly && !board.isError && !checkingFolder && !(emptyFolder && !hasMap) && (
+              <MapAsk
+                empty={!hasMap && !planned}
+                disabled={busy || (!hasMap && !planned && anyActive && !approval)}
+                placeholder={approval ? t.answerInstead : waitsForWork ? t.busyAsk : undefined}
+                onSend={sendWords}
+                about={aboutCard ? (nodeOf(aboutCard)?.title ?? null) : null}
+                onClearAbout={() => setAboutCard(null)}
+                // Beside the conversation, the input stops what the AI does, as every chat does.
+                onStop={docked && (workBusy || talking) ? stopWork : undefined}
+                agent={
+                  <>
+                    {agentChip}
+                    {modeChip}
+                  </>
+                }
+              />
+            )}
+          </>,
+        )}
         <div
           data-overlay={overlay || undefined}
           className={overlay ? 'absolute inset-y-0 right-0 z-20 flex bg-canvas shadow-overlay' : 'contents'}

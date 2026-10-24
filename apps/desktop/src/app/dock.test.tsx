@@ -231,12 +231,20 @@ describe('right dock on the routes', () => {
   it('opens on the product map with the attached session, and the top bar shows the project and the count', async () => {
     mount(board('work'));
     expect(await screen.findByText('alpine-code', { selector: 'span' })).toBeTruthy();
-    fireEvent.click(await screen.findByRole('button', { name: '오른쪽 창 열기, 바뀐 파일 1개' }));
+    // Everything said to the map is typed under its conversation: with the dock closed, the map leads there.
+    fireEvent.click(await screen.findByRole('button', { name: 'AI와 대화하기' }));
     const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
     // The map's session sits in the dock: its conversation first, named 대화 on the map (#88), then what it changed.
     expect(within(dock).getByRole('tab', { name: '대화' }).getAttribute('aria-selected')).toBe('true');
-    // The map has its own input for it, so the conversation here has none: one place to type.
-    expect(within(dock).queryByRole('textbox')).toBeNull();
+    // One place to type (map-first 43): the map's input, under the conversation; the map itself has none.
+    expect(
+      within(dock)
+        .getAllByRole('textbox')
+        .map((box) => box.getAttribute('aria-label')),
+    ).toEqual(['지도에 부탁하기']);
+    expect(
+      within(screen.getByRole('main', { name: '제품 지도' })).queryByRole('textbox', { name: '지도에 부탁하기' }),
+    ).toBeNull();
     fireEvent.click(within(dock).getByRole('tab', { name: '바뀐 파일' }));
     expect(await within(dock).findByRole('button', { name: /Cart\.tsx/ })).toBeTruthy();
   });

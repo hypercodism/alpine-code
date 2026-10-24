@@ -13,9 +13,10 @@ let tab: string | null = null;
 function readOpen(): boolean {
   if (open === null) {
     try {
-      open = localStorage.getItem(STORAGE_KEY) === 'true';
+      // Open until I close it: the map's conversation and its input live there (map-first 43).
+      open = localStorage.getItem(STORAGE_KEY) !== 'false';
     } catch {
-      open = false;
+      open = true;
     }
   }
   return open;
@@ -31,7 +32,7 @@ function emit() {
 }
 
 /**
- * Whether the right dock is open: closed until I open it, then remembered across sessions and restarts. The state is
+ * Whether the right dock is open: open until I close it, then remembered across sessions and restarts. The state is
  * shared, so the top bar's button and the dock beside the page always agree.
  */
 export function useDockOpen(): [boolean, (value: boolean) => void] {

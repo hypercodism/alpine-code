@@ -37,6 +37,7 @@ export function Chat({
   activeIds,
   onShowTaskForce,
   inputOnMap = false,
+  questionsPinned = false,
 }: {
   sessionId: string;
   /** The project the session works in, whose memory the suggestions go to. */
@@ -47,6 +48,8 @@ export function Chat({
   onShowTaskForce?: () => void;
   /** The conversation is answered from the map's input, not one below it (it is shown beside the map). */
   inputOnMap?: boolean;
+  /** Its open question is answered in the bar under the conversation, so here it is one quiet line. */
+  questionsPinned?: boolean;
 }) {
   const answered = useMemo(() => answers(items), [items]);
   // A run that failed last can be asked again: what I last sent, sent again.
@@ -69,6 +72,7 @@ export function Chat({
             call={block.call}
             items={items}
             inputOnMap={inputOnMap}
+            pinned={questionsPinned}
           />
         ) : block.type === 'memory' ? (
           <MemoryCard key={`memory-${block.call.id}`} sessionId={sessionId} cwd={cwd} call={block.call} />

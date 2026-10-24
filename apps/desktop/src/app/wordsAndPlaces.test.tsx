@@ -83,8 +83,9 @@ const write = (text: string) => {
 
 beforeEach(() => {
   localStorage.clear();
+  // The map's input and bars sit under its conversation in the dock (map-first 43).
   const open = renderHook(() => useDockOpen());
-  act(() => open.result.current[1](false));
+  act(() => open.result.current[1](true));
   open.unmount();
   const selection = renderHook(() => useDockTab());
   act(() => selection.result.current[1](''));
@@ -188,7 +189,7 @@ describe('the conversation beside the map points at the map (#35)', () => {
     await connection.request('session/send', { sessionId: 'build-1', text: '이대로 만들어 주세요.' });
     const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
     const card = await within(dock).findByRole('region', { name: '승인 요청' });
-    expect(within(card).getByText('다르게 하려면 지도 아래 입력창에 적어 주세요')).toBeTruthy();
+    expect(within(card).getByText('다르게 하려면 아래 입력창에 적어 주세요')).toBeTruthy();
     expect(mapInput().getAttribute('placeholder')).toBe('건너뛰고 대신 할 일을 적어 주세요');
     write('그건 하지 말고 테스트만 돌려 줘');
     await waitFor(() =>
@@ -349,7 +350,6 @@ describe('the same words everywhere (#47, #54, #67, #74, #77, #80, #84, #89)', (
 
   it('names the dock’s places in plain words, the ones used most beside their icons', async () => {
     mount('/board' + q(app));
-    fireEvent.click(await screen.findByRole('button', { name: /오른쪽 창/ }));
     const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
     for (const name of ['대화', '앱 미리보기', '파일'])
       expect(within(dock).getByRole('tab', { name }).textContent).toBe(name);

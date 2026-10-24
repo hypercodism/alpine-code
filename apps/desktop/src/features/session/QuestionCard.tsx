@@ -21,17 +21,20 @@ export function QuestionCard({
   call,
   items,
   inputOnMap = false,
+  pinned = false,
 }: {
   sessionId: string;
   call: ToolCallItem;
   items: Item[];
   /** Shown beside the map: another answer is written in the map's input. */
   inputOnMap?: boolean;
+  /** Answered in the bar under the conversation (a plan's map): the question in one line, never twice. */
+  pinned?: boolean;
 }) {
   const t = useMessages(messages);
   const question = readQuestion(call);
   if (!question) return null;
-  if (answerTo(items, call, question)) return <p className="text-meta text-fg-muted">{question.text}</p>;
+  if (pinned || answerTo(items, call, question)) return <p className="text-meta text-fg-muted">{question.text}</p>;
 
   return (
     <section

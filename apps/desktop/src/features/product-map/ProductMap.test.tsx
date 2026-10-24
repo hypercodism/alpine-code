@@ -94,7 +94,13 @@ const folders: Script = {
   },
 };
 
-function mount(script: Script = {}, onSession = vi.fn(), onShowConversation = vi.fn(), onNewHere = vi.fn()) {
+function mount(
+  script: Script = {},
+  onSession = vi.fn(),
+  onShowConversation = vi.fn(),
+  onNewHere = vi.fn(),
+  talk: { talkSlot?: HTMLElement | null; onShowTalk?: () => void } = {},
+) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const base = mergeScripts(
     boardScript(),
@@ -114,7 +120,13 @@ function mount(script: Script = {}, onSession = vi.fn(), onShowConversation = vi
       <ServerProvider connection={connection}>
         <LocaleProvider locale="ko">
           <div style={{ height: 900 }}>
-            <ProductMap cwd={cwd} onSession={onSession} onShowConversation={onShowConversation} onNewHere={onNewHere} />
+            <ProductMap
+              cwd={cwd}
+              onSession={onSession}
+              onShowConversation={onShowConversation}
+              onNewHere={onNewHere}
+              {...talk}
+            />
           </div>
         </LocaleProvider>
       </ServerProvider>
@@ -1549,5 +1561,44 @@ describe('person-first view', () => {
       ).toBe(true),
     );
     expect(await screen.findByRole('heading', { name: '회원', hidden: true })).toBeTruthy();
+  });
+});
+
+describe('beside its conversation (map-first 43)', () => {
+  it("keeps no input on the canvas, and a card's 부탁하기 names the card in the input beside it", async () => {
+    const slot = document.createElement('div');
+    document.body.append(slot);
+    const onShowTalk = vi.fn();
+    const { request } = mount({}, vi.fn(), vi.fn(), vi.fn(), { talkSlot: slot, onShowTalk });
+    const panel = await openStep('장바구니');
+    expect(within(panel).queryByLabelText('AI에게 부탁하기')).toBeNull();
+    // The only input for the map is the one beside it.
+    expect(
+      screen.queryAllByRole('textbox', { name: '지도에 부탁하기', hidden: true }).filter((box) => !slot.contains(box)),
+    ).toEqual([]);
+    fireEvent.click(within(panel).getByRole('button', { name: '이 카드에 대해 부탁하기' }));
+    expect(onShowTalk).toHaveBeenCalled();
+    expect(within(slot).getByText('장바구니에 대해')).toBeTruthy();
+    fireEvent.change(within(slot).getByRole('textbox', { name: '지도에 부탁하기' }), {
+      target: { value: '선물 포장 단계를 추가해 줘' },
+    });
+    fireEvent.click(within(slot).getByRole('button', { name: '보내기' }));
+    await waitFor(() =>
+      expect(lastPrepare(request)).toMatchObject({
+        action: 'change',
+        nodeId: 'cart',
+        request: '선물 포장 단계를 추가해 줘',
+      }),
+    );
+    await waitFor(() => expect(within(slot).queryByText('장바구니에 대해')).toBeNull());
+    slot.remove();
+  });
+
+  it('leads to the conversation when it is not shown, instead of an input of its own', async () => {
+    const onShowTalk = vi.fn();
+    mount({}, vi.fn(), vi.fn(), vi.fn(), { talkSlot: null, onShowTalk });
+    fireEvent.click(await screen.findByRole('button', { name: 'AI와 대화하기' }));
+    expect(onShowTalk).toHaveBeenCalled();
+    expect(screen.queryByRole('textbox', { name: '지도에 부탁하기' })).toBeNull();
   });
 });

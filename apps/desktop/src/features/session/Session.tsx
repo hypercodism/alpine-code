@@ -55,6 +55,7 @@ export function Session({
   compact = false,
   readOnly = false,
   inputOnMap = false,
+  questionsPinned = false,
   onInspectProcesses,
   onShowTaskForce,
 }: {
@@ -62,6 +63,8 @@ export function Session({
   compact?: boolean;
   readOnly?: boolean;
   inputOnMap?: boolean;
+  /** The question it waits on is held under it, above the input (a plan's map): here it is one quiet line. */
+  questionsPinned?: boolean;
   onInspectProcesses?: () => void;
   /** Opens the dock on the session's TF. */
   onShowTaskForce?: () => void;
@@ -193,6 +196,7 @@ export function Session({
             activeIds={state.activeIds}
             onShowTaskForce={onShowTaskForce}
             inputOnMap={readOnly && inputOnMap}
+            questionsPinned={questionsPinned}
           />
           {running && <ProgressLine info={info} />}
           {commandsLeft > 0 && (

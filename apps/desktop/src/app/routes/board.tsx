@@ -17,7 +17,7 @@ import { Session } from '@/features/session/Session';
 import { useTaskForceTab } from '@/features/taskforce/useTaskForceTab';
 import { useWorkResultTab } from '@/features/work-result/useWorkResultTab';
 import { useMessages } from '@/shared/i18n';
-import { useCloudEnabled, useProjects, useSession, type Item } from '@/shared/server';
+import { useCloudEnabled, useProductMap, useProjects, useSession, type Item } from '@/shared/server';
 
 export const Route = createFileRoute('/board')({
   validateSearch: (search: Record<string, unknown>): { project?: string; session?: string } => ({
@@ -53,9 +53,13 @@ function BoardRoute() {
   // The conversation's AI 팀 (a TF), opened from its card in the conversation's place, with the way back.
   const team = useTaskForceTab(attachedHere ? session : null, renderRecord);
   const [teamOf, setTeamOf] = useState<string | null>(null);
+  // Where everything said to the map sits: under its conversation (map-first 43).
+  const [talkSlot, setTalkSlot] = useState<HTMLElement | null>(null);
+  // A plan holds its open question in the bar under the conversation, so the conversation shows it in one line.
+  const planned = !!useProductMap(project?.path ?? '').data?.planned;
   const teamShown = !!team && teamOf === session;
   // The map's conversation is in the dock's first tab, named 대화 here: one place for it on every page.
-  const summary = attachedHere ? (
+  const conversation = attachedHere ? (
     <div className="flex min-h-0 grow flex-col">
       {/* Another conversation opened beside the map (a card's, one brought over): my words to the map do not go
           there, so it says so and leads back. */}
@@ -88,6 +92,7 @@ function BoardRoute() {
           compact
           readOnly
           inputOnMap={!talkTo || session === talkTo}
+          questionsPinned={planned && session === talkTo}
           onInspectProcesses={() => showDockTab('processes')}
           onShowTaskForce={
             team
@@ -101,7 +106,13 @@ function BoardRoute() {
       )}
     </div>
   ) : (
-    <p className="px-5 text-body text-fg-muted">{t.mapSummaryEmpty}</p>
+    <p className="grow px-5 text-body text-fg-muted">{t.mapSummaryEmpty}</p>
+  );
+  const summary = (
+    <div className="flex min-h-0 grow flex-col">
+      {conversation}
+      <div ref={setTalkSlot} className="contents" />
+    </div>
   );
   if (!project)
     return projects.data && chosen ? (
@@ -130,6 +141,8 @@ function BoardRoute() {
         sessionId={session ?? null}
         dockOpen={dockOpen}
         hidden={expanded}
+        talkSlot={talkSlot}
+        onShowTalk={() => showDockTab(SUMMARY_TAB)}
         demo={!('__TAURI_INTERNALS__' in window)}
         onShowConversation={() => showDockTab(SUMMARY_TAB)}
         // The app opens itself: the preview starts the project's server and shows it (no command to type).

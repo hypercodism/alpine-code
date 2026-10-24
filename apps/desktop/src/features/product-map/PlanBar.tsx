@@ -49,6 +49,7 @@ export const CONNECTION = new Set<RunStoppedItem['reason']>(['signed_out', 'cred
  * answered while building can be opened from its card and answered again here, one after another.
  */
 export function PlanBar({
+  docked = false,
   phase,
   thinking,
   question,
@@ -80,6 +81,11 @@ export function PlanBar({
   onStop,
   onLook,
 }: {
+  /**
+   * Under the conversation beside the map (map-first 43): what the conversation itself shows (the OK it waits on,
+   * what the AI does now, with 멈추기 in the input) is not said again here.
+   */
+  docked?: boolean;
   phase: PlanPhase;
   /** The AI is changing the map after an answer. */
   thinking: boolean;
@@ -143,6 +149,7 @@ export function PlanBar({
         onNext={onNextReview}
       />
     );
+  if (docked && (phase === 'building' || phase === 'drawing' || thinking)) return null;
   if (waiting && (phase === 'building' || phase === 'drawing' || thinking))
     return (
       <Bar title={t.waitingTitle} hint={phase === 'building' ? t.waitingHint : t.waitingPlanHint}>
@@ -250,8 +257,8 @@ export function PlanBar({
   }
   if (phase === 'built')
     return (
-      <section className="pointer-events-auto motion-step flex items-center gap-3 rounded-xl border border-line bg-canvas-raised p-3 shadow-overlay">
-        <div className="flex min-w-0 grow flex-col">
+      <section className="pointer-events-auto motion-step flex flex-wrap items-center gap-3 rounded-xl border border-line bg-canvas-raised p-3 shadow-overlay">
+        <div className="flex min-w-0 grow basis-60 flex-col">
           <p className="text-reading text-fg">{t.builtTitle}</p>
           <p className="text-meta text-fg-muted">
             {built.checked === built.total ? t.checkedAll(built.total) : t.checkedSome(built.checked, built.total)}

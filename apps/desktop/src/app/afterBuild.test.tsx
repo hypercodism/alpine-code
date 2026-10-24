@@ -4,13 +4,14 @@ import { act, cleanup, fireEvent, render, renderHook, screen, within } from '@te
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useDockOpen, useDockTab } from '@/features/dock/state';
-import { blogBoard, type PlanMoment } from '@/features/product-map/planExample';
+import { blogBoard, blogConversation, type PlanMoment } from '@/features/product-map/planExample';
 import { boardScript } from '@/features/product-map/testBoard';
 import { LocaleProvider } from '@/shared/i18n';
 import {
   mergeScripts,
   scriptedConnection,
   type CloudScriptOptions,
+  type Item,
   type Script,
   ServerProvider,
   sessionInfo,
@@ -42,11 +43,13 @@ function mount(
     build = {},
     account = {},
     board = (b) => b,
+    mapItems = [],
   }: {
     cloud?: boolean;
     build?: Parameters<typeof sessionInfo>[0];
     account?: CloudScriptOptions;
     board?: (b: FlowGetResult) => FlowGetResult;
+    mapItems?: Item[];
   } = {},
 ) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
@@ -56,7 +59,7 @@ function mount(
       devServersScript({ upMs: 0 }),
       sessionScript({
         sessions: [
-          { info: sessionInfo({ id: 'map-1', cwd, purpose: 'map', title: '지도' }) },
+          { info: sessionInfo({ id: 'map-1', cwd, purpose: 'map', title: '지도' }), items: mapItems },
           { info: sessionInfo({ id: 'build-1', cwd, purpose: 'build', title: '만들기', ...build }) },
         ],
       }),
@@ -84,8 +87,9 @@ function mount(
 beforeEach(() => {
   localStorage.clear();
   localStorage.setItem('alpine.rail.open', 'false');
+  // The map's input and bars sit under its conversation in the dock (map-first 43).
   const open = renderHook(() => useDockOpen());
-  act(() => open.result.current[1](false));
+  act(() => open.result.current[1](true));
   open.unmount();
   const selection = renderHook(() => useDockTab());
   act(() => selection.result.current[1](''));
@@ -242,6 +246,23 @@ describe('a plan stays quiet until it is built', () => {
   });
 });
 
+describe('one place to talk (map-first 43)', () => {
+  it('asks its question once, under the conversation, and the map keeps none of it', async () => {
+    mount('asking', {}, { mapItems: blogConversation('asking') });
+    const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
+    // The bar under the conversation holds the answers; the conversation keeps the question in one line.
+    expect((await within(dock).findAllByRole('button', { name: /^누구나/ })).length).toBe(1);
+    expect(
+      within(dock)
+        .getAllByRole('textbox')
+        .map((box) => box.getAttribute('aria-label')),
+    ).toEqual(['지도에 부탁하기']);
+    const map = screen.getByRole('main', { name: '제품 지도' });
+    expect(within(map).queryByRole('button', { name: /^누구나/ })).toBeNull();
+    expect(within(map).queryByRole('textbox')).toBeNull();
+  });
+});
+
 describe('a plan stopped before its first card', () => {
   it('stays a plan: no code-reading screen, the bar offers to draw on', async () => {
     mount(
@@ -272,7 +293,6 @@ describe('the top bar on the map (#10)', () => {
 
   it("names the dock tab of the map's conversation 대화 (#88)", async () => {
     mount('built');
-    fireEvent.click(await screen.findByRole('button', { name: /^오른쪽 창 열기/ }));
     const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
     expect(within(dock).getByRole('tab', { name: '대화' })).toBeTruthy();
     expect(within(dock).queryByRole('tab', { name: '요약' })).toBeNull();
@@ -282,7 +302,6 @@ describe('the top bar on the map (#10)', () => {
 describe('되돌리기 from the data (#49)', () => {
   it('opens the restore points from the live data, and goes back to the data', async () => {
     mount('built', {}, { account: { signedIn: true, data: 'live' } });
-    fireEvent.click(await screen.findByRole('button', { name: /^오른쪽 창 열기/ }));
     const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
     fireEvent.click(await within(dock).findByRole('button', { name: '더보기' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: '데이터' }));
