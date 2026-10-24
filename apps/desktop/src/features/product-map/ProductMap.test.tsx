@@ -1137,7 +1137,9 @@ describe('map upkeep', () => {
         ran: true,
       }),
     );
-    expect(request.mock.calls.filter(([method]) => method === 'flow/prepare')).toHaveLength(1);
+    // Once: claiming the day moves the map on, and a start the server refuses for that reads the map again only once.
+    expect(request.mock.calls.filter(([method]) => method === 'flow/schedule')).toHaveLength(1);
+    expect(request.mock.calls.filter(([method]) => method === 'flow/prepare').length).toBeLessThanOrEqual(2);
   });
 
   it('starts no batch when the server refuses the daily claim, and does not try again', async () => {

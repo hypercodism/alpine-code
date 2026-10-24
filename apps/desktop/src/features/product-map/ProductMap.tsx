@@ -643,7 +643,7 @@ export function ProductMap({
       }
       const current = attempt.current;
       if (!current.prepared) {
-        current.prepared = await prepare.mutateAsync({
+        const asked = {
           cwd,
           revision: data.revision,
           action,
@@ -653,7 +653,16 @@ export function ProductMap({
           flowId: action === 'discover' ? null : (target?.flowId ?? null),
           ...(target?.nodeIds ? { nodeIds: target.nodeIds.slice(0, 500) } : {}),
           sessionId: current.session,
-        });
+        };
+        try {
+          current.prepared = await prepare.mutateAsync(asked);
+        } catch (error) {
+          // The map moved on since it was read (the AI, a check or a capture wrote to it): read it again and go on,
+          // rather than refusing a press that asked for nothing the change touches.
+          if (!(error instanceof ServerError && error.data?.reason === 'flow_conflict')) throw error;
+          const fresh = await server.request('flow/get', { cwd });
+          current.prepared = await prepare.mutateAsync({ ...asked, revision: fresh.revision });
+        }
       }
       await send.mutateAsync({ sessionId: current.session, text: current.prepared.prompt });
       // The drawing line belongs to drawing runs only; the same conversation also does other map work.
@@ -954,6 +963,47 @@ export function ProductMap({
     if (requested) takeRequest(requested);
   }, [requested]);
 
+  // Why work could not start. Beside the conversation it shows under it, where the press was, so it is seen with the
+  // app on view too (the map, and anything over it, is hidden then).
+  const errorBar = error && (
+    <div
+      role="alert"
+      className={clsx(
+        'flex flex-wrap items-center gap-3 bg-diff-removed text-body text-danger',
+        docked ? 'pointer-events-auto rounded-xl px-3 py-2' : 'border-b border-line px-5 py-3',
+      )}
+    >
+      <span className="min-w-0 grow break-words">
+        {error.text}
+        {error.detail && error.detail !== error.text && (
+          <details className="mt-1 text-meta text-fg-muted">
+            <summary className="cursor-pointer">{t.technicalInfo}</summary>
+            <span className="break-words">{error.detail}</span>
+          </details>
+        )}
+      </span>
+      {error.model && onFixConnection ? (
+        <Button variant="primary" onClick={onFixConnection}>
+          {plan.fixConnection}
+        </Button>
+      ) : (
+        retry && (
+          <Button disabled={busy || anyActive} onClick={() => void start(retry.action, retry.target)}>
+            {t.retry}
+          </Button>
+        )
+      )}
+      <button
+        type="button"
+        aria-label={t.closeError}
+        title={t.closeError}
+        onClick={() => setError(null)}
+        className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-fg-muted hover:bg-hover"
+      >
+        <X size={15} aria-hidden />
+      </button>
+    </div>
+  );
   const menuProps: MapMenuProps | null = data
     ? {
         cwd,
@@ -1207,42 +1257,7 @@ export function ProductMap({
           </Button>
         </div>
       )}
-      {error && (
-        <div
-          role="alert"
-          className="flex flex-wrap items-center gap-3 border-b border-line bg-diff-removed px-5 py-3 text-body text-danger"
-        >
-          <span className="min-w-0 grow break-words">
-            {error.text}
-            {error.detail && error.detail !== error.text && (
-              <details className="mt-1 text-meta text-fg-muted">
-                <summary className="cursor-pointer">{t.technicalInfo}</summary>
-                <span className="break-words">{error.detail}</span>
-              </details>
-            )}
-          </span>
-          {error.model && onFixConnection ? (
-            <Button variant="primary" onClick={onFixConnection}>
-              {plan.fixConnection}
-            </Button>
-          ) : (
-            retry && (
-              <Button disabled={busy || anyActive} onClick={() => void start(retry.action, retry.target)}>
-                {t.retry}
-              </Button>
-            )
-          )}
-          <button
-            type="button"
-            aria-label={t.closeError}
-            title={t.closeError}
-            onClick={() => setError(null)}
-            className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-fg-muted hover:bg-hover"
-          >
-            <X size={15} aria-hidden />
-          </button>
-        </div>
-      )}
+      {!docked && errorBar}
       {board.isError && data && (
         <p role="alert" className="border-b border-line bg-diff-removed px-5 py-2 text-meta text-danger">
           {t.loadFailed}
@@ -1413,6 +1428,7 @@ export function ProductMap({
         {flight && <AskFlight key={flight.at} {...flight} landed={landed} />}
         {placeTalk(
           <>
+            {docked && errorBar}
             {phase && (
               <PlanBar
                 docked={docked}

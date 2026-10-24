@@ -12,6 +12,7 @@ import { LocaleProvider } from '@/shared/i18n';
 import {
   mergeScripts,
   scriptedConnection,
+  ServerError,
   type CloudScriptOptions,
   type Item,
   type Script,
@@ -46,7 +47,9 @@ function mount(
     account = {},
     board = (b) => b,
     mapItems = [],
+    session,
   }: {
+    session?: string;
     cloud?: boolean;
     build?: Parameters<typeof sessionInfo>[0];
     account?: CloudScriptOptions;
@@ -72,7 +75,9 @@ function mount(
   const request = vi.spyOn(connection, 'request');
   const router = createRouter({
     routeTree,
-    history: createMemoryHistory({ initialEntries: [`/board?project=${encodeURIComponent(cwd)}`] }),
+    history: createMemoryHistory({
+      initialEntries: [`/board?project=${encodeURIComponent(cwd)}${session ? `&session=${session}` : ''}`],
+    }),
   });
   render(
     <QueryClientProvider client={client}>
@@ -161,6 +166,77 @@ describe('a built screen opened from its card', () => {
     expect(screen.getByRole('button', { name: '앱', pressed: true })).toBeTruthy();
     expect(await screen.findByText(/화면을 보면서 말하는 중/)).toBeTruthy();
     expect(request).toHaveBeenCalledWith('devServers/open', expect.objectContaining({ cwd }));
+  });
+});
+
+describe('바로 고치기 on a built plan', () => {
+  const broken = (b: FlowGetResult): FlowGetResult => {
+    const write = b.document!.nodes!.find((node) => node.id === 'write')!;
+    const promise = write.conditions![0]!.id;
+    return {
+      ...b,
+      states: {
+        ...b.states,
+        write: { ...b.states!.write!, promises: { ...b.states!.write!.promises, [promise]: { status: 'failed' } } },
+      },
+    };
+  };
+
+  /** The completion card's 바로 고치기, pressed with the app on view (its server running). */
+  async function pressFix() {
+    await openApp();
+    await screen.findByTitle('alpine-code 앱', {}, { timeout: 3000 });
+    fireEvent.click(await within(await done()).findByRole('button', { name: '바로 고치기' }));
+  }
+
+  it('starts the fix even when the map moved on since it was read, with the app on view', async () => {
+    const own = boardScript(broken(blogBoard('built'))).results!['flow/prepare'] as (
+      params: unknown,
+      context: unknown,
+    ) => unknown;
+    let refused = false;
+    const { request } = mount(
+      'built',
+      {
+        results: {
+          'flow/prepare': (params, context) => {
+            if (!refused) {
+              refused = true;
+              throw new ServerError(-32000, 'The map changed. Reload before trying again.', {
+                reason: 'flow_conflict',
+              });
+            }
+            return own(params, context) as never;
+          },
+        },
+      },
+      { board: broken, session: 'build-1' },
+    );
+    await pressFix();
+    await vi.waitFor(() =>
+      expect(request).toHaveBeenCalledWith('session/send', {
+        sessionId: 'map-1',
+        text: expect.stringContaining('마크다운으로 쓰면 바로 미리 보여요'),
+      }),
+    );
+    expect(request.mock.calls.filter(([method]) => method === 'flow/prepare')).toHaveLength(2);
+  });
+
+  it('says why beside the conversation when the fix cannot start, not behind the app', async () => {
+    mount(
+      'built',
+      {
+        results: {
+          'flow/prepare': () => {
+            throw new ServerError(-32000, 'No model.', { reason: 'invalid_config' });
+          },
+        },
+      },
+      { board: broken },
+    );
+    await pressFix();
+    const dock = screen.getByRole('complementary', { name: '오른쪽 창' });
+    expect(await within(dock).findByRole('alert')).toBeTruthy();
   });
 });
 
