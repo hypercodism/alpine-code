@@ -14,7 +14,7 @@ import {
 } from '@/shared/server';
 
 import { MapTopActions } from './MapTopActions';
-import { blogBoard, type PlanMoment } from './planExample';
+import { blogBoard, blogConversation, type PlanMoment } from './planExample';
 import { ProductMap } from './ProductMap';
 import { boardScript } from './testBoard';
 
@@ -30,14 +30,15 @@ interface Mount {
   mapItems?: Item[];
   map?: Partial<Parameters<typeof sessionInfo>[0]>;
   build?: Partial<Parameters<typeof sessionInfo>[0]>;
+  buildItems?: Item[];
 }
 
-function mount(board: FlowGetResult, { mapItems = [], map = {}, build = {} }: Mount = {}) {
+function mount(board: FlowGetResult, { mapItems = [], map = {}, build = {}, buildItems = [] }: Mount = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const sessions = [
     { info: sessionInfo({ id: 'map-1', cwd, purpose: 'map', title: '지도', ...map }), items: mapItems },
     ...(board.buildSession
-      ? [{ info: sessionInfo({ id: 'build-1', cwd, purpose: 'build', title: '만들기', ...build }), items: [] }]
+      ? [{ info: sessionInfo({ id: 'build-1', cwd, purpose: 'build', title: '만들기', ...build }), items: buildItems }]
       : []),
   ];
   const connection = scriptedConnection(mergeScripts(boardScript(board), sessionScript({ sessions })));
@@ -143,6 +144,10 @@ describe('the filmstrip', () => {
     expect(within(writing).getByText('/write')).toBeTruthy();
     // Built screens are real.
     expect(within(writing).getAllByText('실제 화면')).toHaveLength(3);
+    // The words beside a window go under it when the map is too narrow for both, never past its edge.
+    const row = writing.querySelector('[data-card]')!;
+    expect(row.className).toContain('flex-wrap');
+    expect(row.querySelector('[data-caption]')!.className).toMatch(/\bflex-1\b.*\bmin-w-60\b|\bmin-w-60\b.*\bflex-1\b/);
   });
 
   it('shows three screens of a long phone journey and a tile for the rest, which opens the row', async () => {
@@ -297,9 +302,92 @@ describe('the top bar over a map', () => {
     expect(within(top()).getByText('화면 6개 중 3개')).toBeTruthy();
   });
 
+  it('says what the build does while no card is being built, instead of a count that looks stuck', async () => {
+    const board = blog('building');
+    const nodes = board.document!.nodes!.map((node) => ({ ...node, phase: 'planned' as const, sources: [] }));
+    const edit = (id: string, path: string) =>
+      ({
+        id,
+        kind: 'tool_call',
+        name: 'write',
+        args: { path },
+        status: 'done',
+        result: '',
+        images: 0,
+        commandResult: null,
+        fileChanges: null,
+      }) as Item;
+    const said = { id: 'u1', kind: 'user_message', text: '이대로 만들어 주세요.' } as Item;
+    mount(
+      { ...board, document: { ...board.document!, nodes } },
+      { build: { status: 'running' }, buildItems: [said, edit('e1', '/project/src/db/schema.ts')] },
+    );
+    expect(await within(top()).findByText('데이터와 구조를 만드는 중')).toBeTruthy();
+    expect(within(top()).queryByText(/화면 \d+개 중 0개/)).toBeNull();
+    expect(within(top()).getByRole('button', { name: '멈추기' })).toBeTruthy();
+  });
+
   it('shows nothing once it is built', async () => {
     mount(blog('built'));
     await screen.findByRole('region', { name: '다 만들었어요' });
     expect(within(top()).queryByRole('button')).toBeNull();
+  });
+});
+
+describe('a question beside the conversation', () => {
+  it('lays each option out on its own line, the full width, with why under its label', async () => {
+    mount(blog('asking'), { mapItems: blogConversation('asking') });
+    const option = await screen.findByRole('button', { name: /로그인한 사람만/ });
+    expect(option.className).toContain('w-full');
+    expect(option.className).toContain('flex-col');
+    expect(option.parentElement!.className).toContain('flex-col');
+    expect(within(option).getByText('광고 글을 막아요').parentElement).toBe(option);
+  });
+});
+
+describe('the look question', () => {
+  const look = (accent: string) => ({
+    page: '#ffffff',
+    surface: '#f5f5f5',
+    ink: '#191f28',
+    muted: '#6b7684',
+    line: '#e5e8eb',
+    accent,
+    on_accent: '#ffffff',
+    display: 'Pretendard',
+    body: 'Pretendard',
+    radius: '12px',
+  });
+  const asked = {
+    id: 'ask-look',
+    kind: 'tool_call',
+    name: 'ask_user',
+    args: {
+      question: '어떤 느낌으로 만들까요?',
+      options: [
+        { label: 'Medium 참고', detail: '조용히 읽혀요', look: look('#171717') },
+        { label: '토스 참고', detail: '밝고 친절해요', look: look('#3182f6') },
+        { label: '당근 참고', detail: '따뜻해요', look: look('#ff6f0f') },
+      ],
+    },
+    status: 'done',
+    result: '',
+    images: 0,
+    commandResult: null,
+    fileChanges: null,
+  } as Item;
+  const said = { id: 'u1', kind: 'user_message', text: '개발 블로그 만들어 줘' } as Item;
+
+  it('says which look every screen wears, and pointing at another tries it until the pointer leaves', async () => {
+    mount(blog('asking'), { mapItems: [said, asked] });
+    expect(await screen.findByText('Medium 참고로 미리 보는 중')).toBeTruthy();
+    const toss = screen.getByRole('button', { name: /토스 참고/ });
+    fireEvent.mouseEnter(toss);
+    expect(screen.getByText('토스 참고로 미리 보는 중')).toBeTruthy();
+    fireEvent.mouseLeave(toss);
+    expect(screen.getByText('Medium 참고로 미리 보는 중')).toBeTruthy();
+    // Pressing still tries it, and 이 느낌으로 answers.
+    fireEvent.click(screen.getByRole('button', { name: /당근 참고/ }));
+    expect(screen.getByText('당근 참고로 미리 보는 중')).toBeTruthy();
   });
 });

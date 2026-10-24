@@ -16,6 +16,7 @@ is the last JSON object in the reply that parses.
 from __future__ import annotations
 
 import json
+import re
 import threading
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -61,16 +62,40 @@ _SETUPS = {
         "command-line tools, bots, data work, libraries, or a stack the other setups do not cover.",
     ),
     "web-lite": (
-        "Web app Lite / 웹앱 Lite",
+        "Web app / 웹앱",
         "A web app with sign-in and saved data, ready to run. Fits most apps: bookings, notes, lists, dashboards, "
         "small shops, tools for a team. Comfortable up to thousands of visitors a day.",
     ),
     "web-pro": (
-        "Web app Pro / 웹앱 Pro",
+        "Realtime web app / 실시간 웹앱",
         "A web app for heavier needs: live updates (chat, editing together, live dashboards), lots of photos or "
         "videos, records that keep piling up, many people saving at the same time, or AI search.",
     ),
     "mobile": ("Mobile app / 모바일 앱", "An app people install on their phone."),
+}
+
+#: Names the setups had before, and their ids, as a reason might still say them, with the name the screen shows:
+#: ``(said, Korean, English)``. Longer names come first, so "웹앱 Pro" is not read as "웹앱" and a stray " Pro".
+_OLD_NAMES = (
+    ("웹앱 Lite", "웹앱", "Web app"),
+    ("웹앱 Pro", "실시간 웹앱", "Realtime web app"),
+    ("Web app Lite", "웹앱", "Web app"),
+    ("Web app Pro", "실시간 웹앱", "Realtime web app"),
+    ("web-lite", "웹앱", "web app"),
+    ("web-pro", "실시간 웹앱", "realtime web app"),
+)
+
+#: Korean particles after a word that ends in a vowel, and the same particle after one that does not.
+_AFTER_VOWEL = {
+    "라서": "이라서",
+    "예요": "이에요",
+    "면": "이면",
+    "로": "으로",
+    "가": "이",
+    "는": "은",
+    "를": "을",
+    "와": "과",
+    "야": "이야",
 }
 
 #: Longest message sent to the model, in characters; a pasted log or spec past this is cut.
@@ -166,7 +191,7 @@ def _parse(answer: str, templates: Sequence[str]) -> Judgement:
     if not isinstance(template, str) or template.strip().lower() not in offered:
         return WorkOnProject()
     reason = found.get("reason")
-    reason = " ".join(reason.split()) if isinstance(reason, str) else ""
+    reason = _shown_names(reason) if isinstance(reason, str) else ""
     if not reason:
         return WorkOnProject()
     name = found.get("name")
@@ -186,7 +211,26 @@ def _parse_new(answer: str, templates: Sequence[str]) -> NewApp:
     if chosen is None or (isinstance(kind, str) and kind.strip().lower() == "change"):
         # The template a new project starts from when the model gave none: the one that fits most ideas, else the first.
         return NewApp(offered.get("web-lite", templates[0]), "", name)
-    return NewApp(chosen, " ".join(reason.split()) if isinstance(reason, str) else "", name)
+    return NewApp(chosen, _shown_names(reason) if isinstance(reason, str) else "", name)
+
+
+def _shown_names(reason: str) -> str:
+    """``reason`` on one line, with every setup named as the screen shows it: a model that still says an id or a name
+    the setups had before ("웹앱 Lite") is put in the screen's words, in the reason's own language."""
+    reason = " ".join(reason.split())
+    korean = any("\uac00" <= ch <= "\ud7a3" for ch in reason)
+    for said, ko, en in _OLD_NAMES:
+        reason = reason.replace(f"`{said}`", said)
+        if not korean:
+            reason = reason.replace(said, en)
+            continue
+        # The old names end in a vowel ("라이트", "프로") and the shown ones in "앱", so the particle after changes too.
+        reason = re.sub(
+            re.escape(said) + "(" + "|".join(_AFTER_VOWEL) + ")?",
+            lambda found, shown=ko: shown + _AFTER_VOWEL.get(found.group(1) or "", found.group(1) or ""),
+            reason,
+        )
+    return reason
 
 
 def _last_object(answer: str) -> dict[str, Any] | None:

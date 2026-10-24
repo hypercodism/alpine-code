@@ -32,6 +32,8 @@ export interface AppScreen {
   /** Its address inside the running app (`/reservations`); null when the AI has not written one. */
   path: string | null;
   promises: AppPromise[];
+  /** What the person needs to try it (a sign-in, a password), in plain words; empty when nothing is needed. */
+  howToTry: string;
   /** Its picture on the map is a capture of the running app. */
   real: boolean;
 }
@@ -98,6 +100,7 @@ export function AppView({
   onAskFix,
   onAskSetup,
   onShowTerminal,
+  reload = 0,
 }: {
   cwd: string;
   /** The project's name, for the frame's address bar. */
@@ -112,6 +115,8 @@ export function AppView({
   onAskSetup: () => void;
   /** Opens the terminal beside it (where a phone app is started). */
   onShowTerminal: () => void;
+  /** Goes up each time the AI's work on the app ends: the frame loads the screen again, to show what changed. */
+  reload?: number;
 }) {
   const t = useMessages(messages);
   const server = useServer();
@@ -230,7 +235,7 @@ export function AppView({
           {size === 'phone' ? (
             <div className="app-phone-frame flex aspect-1/2 h-full max-h-186 shrink-0 border border-line bg-canvas-raised p-2.5 shadow-overlay">
               <iframe
-                key={app.serverId}
+                key={`${app.serverId}:${reload}`}
                 src={url}
                 title={t.frameTitle(name)}
                 sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
@@ -251,7 +256,7 @@ export function AppView({
                 </span>
               </div>
               <iframe
-                key={app.serverId}
+                key={`${app.serverId}:${reload}`}
                 src={url}
                 title={t.frameTitle(name)}
                 sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
@@ -372,6 +377,12 @@ function ScreenStrip({
               </li>
             ))}
           </ul>
+          {shown.screen.howToTry.trim() && (
+            <section aria-label={t.howToTry} className="mt-4 flex flex-col gap-1 rounded-lg bg-canvas-sunken px-3 py-2">
+              <p className="text-meta text-fg-muted">{t.howToTry}</p>
+              <p className="text-body whitespace-pre-wrap text-fg">{shown.screen.howToTry.trim()}</p>
+            </section>
+          )}
         </>
       ) : (
         <p className="text-meta text-fg-muted">{t.firstPageHint}</p>

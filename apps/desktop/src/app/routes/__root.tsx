@@ -11,6 +11,7 @@ import { DroppedSkillsDialog } from '../DroppedSkills';
 import { EngineStopped } from '../EngineStopped';
 import { TopBar } from '../TopBar';
 import { useAppMenu } from '../useAppMenu';
+import { useFirstPress } from '../useFirstPress';
 import { useFolderOpening } from '../useFolderOpening';
 import { useMapNotifications } from '../useMapNotifications';
 import { useNewSessionShortcut } from '../useNewSessionShortcut';
@@ -51,6 +52,7 @@ export const Route = createRootRoute({
 function Root() {
   const [dropped, closeDropped, openFolder] = useFolderOpening();
   useMapNotifications();
+  useFirstPress();
   const [railOpen, toggleRail] = useRailOpen();
   const page = useRouterState({ select: (state) => state.location.pathname + (state.location.search.project ?? '') });
   const onNewSession = useRouterState({ select: (state) => state.location.pathname === '/' });

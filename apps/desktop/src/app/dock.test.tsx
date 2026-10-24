@@ -205,14 +205,14 @@ describe('right dock on the routes', () => {
     expect(within(dock).getByRole('region', { name: 'Cart.tsx 바뀐 내용' })).toBeTruthy();
     expect(within(dock).getByRole('tab', { name: '바뀐 파일', selected: true })).toBeTruthy();
     fireEvent.click(within(dock).getByRole('tab', { name: '터미널' }));
-    expect(await within(dock).findByRole('textbox', { name: '터미널 입력: 셸 1' })).toBeTruthy();
+    expect(await within(dock).findByRole('textbox', { name: '터미널 입력: 터미널 1' })).toBeTruthy();
     expect(launches).toBe(1);
     fireEvent.click(within(dock).getByRole('button', { name: '터미널 메뉴' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: '앱 미리보기 열기…' }));
     expect(await within(dock).findByRole('tab', { name: '앱 미리보기', selected: true })).toBeTruthy();
     expect(await within(dock).findByRole('button', { name: '서버 실행' })).toBeTruthy();
     fireEvent.click(within(dock).getByRole('tab', { name: '터미널' }));
-    expect(await within(dock).findByRole('textbox', { name: '터미널 입력: 셸 1' })).toBeTruthy();
+    expect(await within(dock).findByRole('textbox', { name: '터미널 입력: 터미널 1' })).toBeTruthy();
     expect(launches).toBe(1);
   });
 
@@ -321,7 +321,7 @@ describe('right dock on the routes', () => {
       board(),
       flowScript(() => STUDIO_MAP),
     );
-    fireEvent.click(await screen.findByRole('button', { name: '지도 메뉴' }));
+    fireEvent.click(await screen.findByRole('button', { name: '더 보기' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: /^지도 기록/ }));
     const panel = await screen.findByRole('complementary', { name: '지도 기록' });
     expect(panel.closest('[data-overlay]') !== null).toBe(overlaid);

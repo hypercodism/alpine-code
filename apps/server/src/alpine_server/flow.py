@@ -1017,17 +1017,21 @@ generated files) in map.json `exclude` so they do not count as changes the map m
 _NO_CHECKS = "Do not record checks: checking promises is a separate step the user starts from the map.\n"
 
 _BUILD = """\
-Build the whole planned product now; the person approved the map and need not watch. The map is the contract: its
-promises are what done means. Choose your own order: with every journey in hand, design the data and structure for
-all of them first. While you work on a card set its phase to building, and to built once it works; list in its
-`sources` the files that make it (open each in this session). On each screen card write `path`: the address inside
-the running app that shows that screen (`/reservations`), a path only, so the app can open it. A screen you can run:
-capture it into the card's `preview` (a real screenshot, project-relative, never under .alpine-code/) once it looks
-right.
+Build the whole planned product now. The map is the contract: its promises are what done means. The person watches
+the map while you build, so let it move with your work, one card at a time, never all at the end: before you start a
+screen's code, set its card's phase to building and list in its `sources` the files you will write for it (each one
+written or opened in this session); the moment it works, set it built, write its `path` (the address inside the
+running app that shows that screen, such as `/reservations`, a path only, so the app can open it) and capture its
+`preview` (a real screenshot, project-relative, never under .alpine-code/). Then the next card. Choose your own order:
+with every journey in hand, design the data and structure for all of them first.
 When a product question comes up that the map does not answer, do not stop: take the pick you would recommend, record
 it on the card as a decision with "by": "ai" (with the options you weighed), and go on. Stop to ask with ask_user only
 when no sensible default exists.
 Check every promise you built and record the checks, as below. A promise is done only when a recorded check says so.
+Whatever the person needs to try a screen themselves (where to sign in, a password you set, a test card) goes into
+that card's `howToTry` in plain words ("사장님 비밀번호: bakery1234"), never only in your message.
+Talk to the person in their language, about screens, promises and choices: they see the map, not its files, so never
+mention files, JSON, paths or code words to them. That holds for every message, the short ones while you work too.
 Finish with one short line: what was built, how many promises were checked, and what you decided on your own.
 """
 
@@ -1040,6 +1044,8 @@ below says. Draw the first map now, then ask what is left with ask_user, one que
 phase planned, kind screen for screens, conditions for the promises you assume, no sources and no checks. Give each
 flow a `device` (phone or computer) and draw a computer journey's screens at desktop width. Do not write product
 code, install anything or start servers until the person says to build.
+Talk to the person in their language, about screens, promises and choices: they see the map, not its files, so never
+mention files, JSON, paths or code words to them (not "map.json", not "look.json", not "the JSON is valid").
 """
 
 

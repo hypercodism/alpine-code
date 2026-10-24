@@ -72,7 +72,8 @@ function mount(path: string, { sessions = [], importable = [], plan, extra = {} 
 const calls = (request: { mock: { calls: unknown[][] } }, method: string) =>
   request.mock.calls.filter(([name]) => name === method).map(([, params]) => params as Record<string, unknown>);
 const mapMenu = async () => {
-  fireEvent.click(await screen.findByRole('button', { name: '지도 메뉴' }));
+  // The map's menu is the "지도" part of the window's ⋯: the map's page has one ⋯.
+  fireEvent.click(await screen.findByRole('button', { name: '더 보기' }));
   return screen.findByRole('menu');
 };
 const mapInput = () => screen.getByRole('textbox', { name: '지도에 부탁하기' });
@@ -322,6 +323,22 @@ describe('a deleted map starts over from the code (#72)', () => {
     await waitFor(() =>
       expect(calls(request, 'flow/prepare')).toContainEqual(expect.objectContaining({ action: 'discover' })),
     );
+  });
+});
+
+describe("the map's page has one ⋯", () => {
+  it("puts the map's own items in the window's ⋯, under 지도", async () => {
+    mount('/board' + q(app), {
+      plan: 'built',
+      sessions: [{ info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '지도' }) }],
+    });
+    const menu = await mapMenu();
+    expect(within(menu).getByText('지도')).toBeTruthy();
+    expect(within(menu).getByRole('menuitem', { name: /^설정/ })).toBeTruthy();
+    expect(within(menu).getByRole('menuitem', { name: '지도 삭제' })).toBeTruthy();
+    expect(within(menu).getAllByRole('menuitem', { name: '기억' })).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: '지도 메뉴' })).toBeNull();
+    expect(screen.getAllByRole('button', { name: '더 보기' })).toHaveLength(1);
   });
 });
 

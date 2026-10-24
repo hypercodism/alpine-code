@@ -24,7 +24,7 @@ def new(**fields):
         {
             "kind": "new",
             "template": "web-lite",
-            "reason": "로그인과 예약 저장이면 Lite로 충분해요.",
+            "reason": "로그인과 예약 저장이면 웹앱으로 충분해요.",
             "name": "craft-booking",
         }
         | fields
@@ -58,7 +58,9 @@ def test_a_change_is_work_on_the_project(monkeypatch):
 
 
 def test_a_new_app_carries_the_template_the_reason_and_the_name(monkeypatch):
-    assert judged(monkeypatch, new()) == NewApp("web-lite", "로그인과 예약 저장이면 Lite로 충분해요.", "craft-booking")
+    assert judged(monkeypatch, new()) == NewApp(
+        "web-lite", "로그인과 예약 저장이면 웹앱으로 충분해요.", "craft-booking"
+    )
 
 
 def test_each_offered_template_can_be_chosen(monkeypatch):
@@ -115,7 +117,7 @@ def test_json_with_text_around_it_is_read(monkeypatch):
 def test_the_last_json_object_is_the_answer_not_an_example_from_the_thinking(monkeypatch):
     thinking = 'Options: {"kind": "change"} or {"kind": "new", ...}. Braces {like this} are not JSON.\n'
     assert judged(monkeypatch, thinking + new()) == NewApp(
-        "web-lite", "로그인과 예약 저장이면 Lite로 충분해요.", "craft-booking"
+        "web-lite", "로그인과 예약 저장이면 웹앱으로 충분해요.", "craft-booking"
     )
     assert (
         judged(monkeypatch, thinking + new() + '\nOn second thought:\n```json\n{"kind": "change"}\n```')
@@ -241,7 +243,7 @@ def test_an_empty_project_and_an_unreadable_readme_are_fine(monkeypatch, tmp_pat
 
 # ------------------------------------------------------------ a new project, chosen on the screen
 
-REASON = "로그인과 예약 저장이면 Lite로 충분해요."
+REASON = "로그인과 예약 저장이면 웹앱으로 충분해요."
 
 
 def judged_new(monkeypatch, reply, **kwargs):
@@ -431,3 +433,33 @@ def test_nothing_is_written_to_stdout(monkeypatch, capfd, tmp_path):
     ask(monkeypatch, [new()])
     captured = capfd.readouterr()
     assert captured.out == ""
+
+
+# ------------------------------------------------------------ the setups in the screen's words
+
+
+def test_the_prompts_name_the_setups_as_the_screen_shows_them(monkeypatch):
+    for new_project in (False, True):
+        _, model = ask(
+            monkeypatch, [new()], templates=["blank", "web-lite", "web-pro", "mobile"], new_project=new_project
+        )
+        system = model.requests[0].system
+        for shown in ("빈 프로젝트", "웹앱", "실시간 웹앱", "모바일 앱", "Empty project", "Realtime web app"):
+            assert shown in system
+        assert "Lite" not in system and "웹앱 Pro" not in system
+
+
+@pytest.mark.parametrize(
+    ("said", "shown"),
+    [
+        ("회원 명단을 저장하니까 웹앱 Lite면 충분해요.", "회원 명단을 저장하니까 웹앱이면 충분해요."),
+        ("채팅이 있으니까 웹앱 Pro가 맞아요.", "채팅이 있으니까 실시간 웹앱이 맞아요."),
+        ("예약을 저장하니까 `web-lite`로 시작하면 돼요.", "예약을 저장하니까 웹앱으로 시작하면 돼요."),
+        ("Bookings need sign-in, so Web app Lite is enough.", "Bookings need sign-in, so Web app is enough."),
+        ("Live chat needs web-pro.", "Live chat needs realtime web app."),
+        ("사진 이름을 바꾸는 도구라서 빈 프로젝트로 시작해요.", "사진 이름을 바꾸는 도구라서 빈 프로젝트로 시작해요."),
+    ],
+)
+def test_a_reason_that_names_a_setup_otherwise_is_put_in_the_screens_words(monkeypatch, said, shown):
+    assert judged(monkeypatch, new(reason=said)).reason == shown
+    assert judged_new(monkeypatch, new(reason=said)).reason == shown

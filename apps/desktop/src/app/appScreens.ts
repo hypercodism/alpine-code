@@ -41,6 +41,7 @@ export function appPeople(board: FlowGetResult, product: string, unnamed: string
               title: card!.title,
               path: card!.path ?? null,
               real: card!.screen?.kind === 'shot',
+              howToTry: card!.howToTry ?? '',
               promises: card!.promises.map((promise) => ({
                 id: promise.id,
                 text: promise.then,

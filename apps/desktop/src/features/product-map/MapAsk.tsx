@@ -1,4 +1,4 @@
-import { ArrowUp, Square, X } from 'lucide-react';
+import { ArrowUp, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 
 import { useConnectPrompt, useNoModel } from '@/shared/components/connect';
@@ -20,7 +20,6 @@ export function MapAsk({
   onSend,
   about = null,
   onClearAbout,
-  onStop,
   agent,
 }: {
   /** No map yet: the placeholder invites drawing one, and sending with no words draws it. */
@@ -33,8 +32,6 @@ export function MapAsk({
   /** The card the words are about, from its 부탁하기; they go as a request about it. */
   about?: string | null;
   onClearAbout?: () => void;
-  /** The AI is at work: with nothing written, the send button stops it. */
-  onStop?: () => void;
   /** Who does the map's work (an agent chip), under the words as in every input. */
   agent?: ReactNode;
 }) {
@@ -98,27 +95,15 @@ export function MapAsk({
       />
       <div className="flex items-center gap-2">
         <span className="-ml-2 flex min-w-0 grow flex-wrap items-center gap-1">{agent}</span>
-        {onStop && !text.trim() ? (
-          <button
-            type="button"
-            onClick={onStop}
-            aria-label={t.stopWork}
-            title={t.stopWork}
-            className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-fg text-canvas-raised"
-          >
-            <Square size={12} fill="currentColor" aria-hidden />
-          </button>
-        ) : (
-          <button
-            type="submit"
-            disabled={!canSend}
-            aria-label={empty && !text.trim() ? t.discover : t.askSend}
-            title={empty && !text.trim() ? t.discover : t.askSend}
-            className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-interactive text-on-fill disabled:cursor-default disabled:opacity-40"
-          >
-            <ArrowUp size={16} aria-hidden />
-          </button>
-        )}
+        <button
+          type="submit"
+          disabled={!canSend}
+          aria-label={empty && !text.trim() ? t.discover : t.askSend}
+          title={empty && !text.trim() ? t.discover : t.askSend}
+          className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-interactive text-on-fill disabled:cursor-default disabled:opacity-40"
+        >
+          <ArrowUp size={16} aria-hidden />
+        </button>
       </div>
     </form>
   );

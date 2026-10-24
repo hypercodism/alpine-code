@@ -5,12 +5,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useAppViewState } from '@/features/app-view/state';
 import { showDockTab, useDockOpen, useDockTab } from '@/features/dock/state';
+import { useMapActionStore } from '@/features/product-map/mapActions';
+import { usePublishRequest } from '@/features/publish/publishRequest';
 import { blogBoard, blogConversation, type PlanMoment } from '@/features/product-map/planExample';
 import { boardScript } from '@/features/product-map/testBoard';
 import { LocaleProvider } from '@/shared/i18n';
 import {
   mergeScripts,
   scriptedConnection,
+  ServerError,
   type CloudScriptOptions,
   type Item,
   type Script,
@@ -45,7 +48,9 @@ function mount(
     account = {},
     board = (b) => b,
     mapItems = [],
+    session,
   }: {
+    session?: string;
     cloud?: boolean;
     build?: Parameters<typeof sessionInfo>[0];
     account?: CloudScriptOptions;
@@ -71,7 +76,9 @@ function mount(
   const request = vi.spyOn(connection, 'request');
   const router = createRouter({
     routeTree,
-    history: createMemoryHistory({ initialEntries: [`/board?project=${encodeURIComponent(cwd)}`] }),
+    history: createMemoryHistory({
+      initialEntries: [`/board?project=${encodeURIComponent(cwd)}${session ? `&session=${session}` : ''}`],
+    }),
   });
   render(
     <QueryClientProvider client={client}>
@@ -163,6 +170,138 @@ describe('a built screen opened from its card', () => {
   });
 });
 
+describe('바로 고치기 on a built plan', () => {
+  const broken = (b: FlowGetResult): FlowGetResult => {
+    const write = b.document!.nodes!.find((node) => node.id === 'write')!;
+    const promise = write.conditions![0]!.id;
+    return {
+      ...b,
+      states: {
+        ...b.states,
+        write: { ...b.states!.write!, promises: { ...b.states!.write!.promises, [promise]: { status: 'failed' } } },
+      },
+    };
+  };
+
+  /** The completion card's 바로 고치기, pressed with the app on view (its server running). */
+  async function pressFix() {
+    await openApp();
+    await screen.findByTitle('alpine-code 앱', {}, { timeout: 3000 });
+    fireEvent.click(await within(await done()).findByRole('button', { name: '바로 고치기' }));
+  }
+
+  it('starts the fix even when the map moved on since it was read, with the app on view', async () => {
+    const own = boardScript(broken(blogBoard('built'))).results!['flow/prepare'] as (
+      params: unknown,
+      context: unknown,
+    ) => unknown;
+    let refused = false;
+    const { request } = mount(
+      'built',
+      {
+        results: {
+          'flow/prepare': (params, context) => {
+            if (!refused) {
+              refused = true;
+              throw new ServerError(-32000, 'The map changed. Reload before trying again.', {
+                reason: 'flow_conflict',
+              });
+            }
+            return own(params, context) as never;
+          },
+        },
+      },
+      { board: broken, session: 'build-1' },
+    );
+    await pressFix();
+    await vi.waitFor(() =>
+      expect(request).toHaveBeenCalledWith('session/send', {
+        sessionId: 'map-1',
+        text: expect.stringContaining('마크다운으로 쓰면 바로 미리 보여요'),
+      }),
+    );
+    expect(request.mock.calls.filter(([method]) => method === 'flow/prepare')).toHaveLength(2);
+  });
+
+  it('says why beside the conversation when the fix cannot start, not behind the app', async () => {
+    mount(
+      'built',
+      {
+        results: {
+          'flow/prepare': () => {
+            throw new ServerError(-32000, 'No model.', { reason: 'invalid_config' });
+          },
+        },
+      },
+      { board: broken },
+    );
+    await pressFix();
+    const dock = screen.getByRole('complementary', { name: '오른쪽 창' });
+    expect(await within(dock).findByRole('alert')).toBeTruthy();
+  });
+});
+
+describe('after the build', () => {
+  it("shows the map's own conversation, with the build in it as one line that opens it", async () => {
+    mount(
+      'built',
+      {},
+      {
+        session: 'build-1',
+        build: { createdAt: '2026-10-25T01:00:00Z', updatedAt: '2026-10-25T01:18:10Z' },
+      },
+    );
+    await done();
+    const dock = screen.getByRole('complementary', { name: '오른쪽 창' });
+    const line = await within(dock).findByRole('button', { name: /만들기 · 18분 걸렸어요/ });
+    expect(within(dock).queryByText('지금 지도 대화가 아닌 다른 대화를 보고 있어요')).toBeNull();
+    fireEvent.click(line);
+    const back = await within(dock).findByRole('button', { name: '← 대화로 돌아가기' });
+    expect(within(dock).queryByRole('button', { name: /만들기 · 18분/ })).toBeNull();
+    fireEvent.click(back);
+    expect(await within(dock).findByRole('button', { name: /만들기 · 18분 걸렸어요/ })).toBeTruthy();
+  });
+});
+
+describe('the app after the AI changed it', () => {
+  it("loads the screen on view again when the map's work ends", async () => {
+    mount('built');
+    await openApp();
+    const before = await screen.findByTitle('alpine-code 앱', {}, { timeout: 3000 });
+    const actions = () => useMapActionStore.getState().maps[cwd]!;
+    // The map's AI works on the app, then its work ends.
+    act(() => useMapActionStore.getState().register(cwd, { ...actions(), working: true }));
+    expect(screen.getByTitle('alpine-code 앱')).toBe(before);
+    act(() => useMapActionStore.getState().register(cwd, { ...actions(), working: false }));
+    const after = screen.getByTitle('alpine-code 앱');
+    expect(after).not.toBe(before);
+    expect(after.getAttribute('src')).toBe(before.getAttribute('src'));
+  });
+});
+
+describe('what it takes to try it', () => {
+  const withTry = (b: FlowGetResult): FlowGetResult => ({
+    ...b,
+    document: {
+      ...b.document!,
+      nodes: b.document!.nodes!.map((node) =>
+        node.id === 'write' ? { ...node, howToTry: '글쓴이 비밀번호: blog1234' } : node,
+      ),
+    },
+  });
+
+  it('is on the completion card and beside the app for the screen on view, not only in the last message', async () => {
+    mount('built', {}, { board: withTry });
+    const tries = within(await done()).getByRole('region', { name: '직접 써 보려면' });
+    expect(within(tries).getByText('글쓴이 비밀번호: blog1234')).toBeTruthy();
+    expect(within(tries).getByText(/글 쓰기/)).toBeTruthy();
+    await openApp();
+    const strip = await screen.findByRole('complementary', { name: '지금 보는 화면' }, { timeout: 3000 });
+    const beside = within(strip).getByRole('region', { name: '직접 써 보려면' });
+    expect(within(beside).getByText('글쓴이 비밀번호: blog1234')).toBeTruthy();
+  });
+});
+
 describe('the app that fails to open (#7)', () => {
   it('hands the AI what went wrong, as words to the map, and shows its conversation', async () => {
     const failed = {
@@ -208,9 +347,12 @@ describe('the app that fails to open (#7)', () => {
 describe('올리기 from the map (#13, #23)', () => {
   it('offers 인터넷에 올리기 on the completion card, which opens the top bar sheet', async () => {
     mount('built');
-    fireEvent.click(within(await done()).getByRole('button', { name: '인터넷에 올리기' }));
+    const press = within(await done()).getByRole('button', { name: '인터넷에 올리기' });
+    fireEvent.click(press);
     // Signed out, the sheet asks for the account first.
     expect(await screen.findByText('인터넷에 올리려면 Alpine 계정이 필요해요. 무료예요.')).toBeTruthy();
+    // It opens over the button pressed, not under the top bar's hidden trigger.
+    expect(usePublishRequest.getState().from).toBe(press);
     // The completion card holds 인터넷에 올리기, so the top bar has no button of its own for a plan.
     expect(screen.queryByRole('button', { name: /^올리기/ })).toBeNull();
   });

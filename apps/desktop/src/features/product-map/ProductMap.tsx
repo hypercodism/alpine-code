@@ -50,14 +50,14 @@ import { toTreeMap } from './flowTreeData';
 import { hasScreenArea } from './flowTreeModel';
 import { flowTreeMessages } from './flowTreeMessages';
 import { JourneyMap } from './JourneyMap';
-import { useMapActionStore } from './mapActions';
+import { useMapActionStore, useMapMenuStore } from './mapActions';
 import { Bar, CONNECTION, PlanBar, Working, type PlanReview, type PlanTeamAnswer } from './PlanBar';
 import { buildActivity, lastReply, pendingQuestion, planPhase, stopReason, TEAM_WORKING } from './planData';
-import { mapLookCss } from './planLook';
+import { mapLookCss, type PickedLook, wornLook } from './planLook';
 import { planMessages } from './planMessages';
 import { useMapRequest } from './askRequest';
 import { AskFlight, MapAsk } from './MapAsk';
-import { DeleteMap, MapMenu, ScopeEditor } from './MapSettings';
+import { DeleteMap, MapMenu, MapMenuItems, ScopeEditor } from './MapSettings';
 import { Unmapped } from './Unmapped';
 import { messages } from './messages';
 import { type LaterWord, useLaterWords, useMapTalk } from './mapTalk';
@@ -111,6 +111,7 @@ export function ProductMap({
   talkSlot,
   onShowTalk,
   onOpenInApp,
+  menuInWindow = false,
 }: {
   cwd: string;
   sessionId?: string | null;
@@ -120,7 +121,7 @@ export function ProductMap({
   /** Runs and shows the project's app (its development server, in the dock). */
   onOpenApp?: () => void;
   /** Puts the app online, offered beside 앱 열기 once it is built; absent without Alpine Cloud or a web app. */
-  onPublish?: () => void;
+  onPublish?: (from?: HTMLElement) => void;
   /** Opens 새 프로젝트 for this folder, which is empty (map-first 41). */
   onNewHere?: (folder: string) => void;
   /** Opens 새 프로젝트, the one place something new starts. */
@@ -144,6 +145,11 @@ export function ProductMap({
   onShowTalk?: () => void;
   /** Opens the running app at a built screen's address (its card's `path`). */
   onOpenInApp?: (cardId: string) => void;
+  /**
+   * The window has a ⋯ of its own (the map's page): the map's menu is its "지도" part instead of a second ⋯ on the
+   * map (useMapMenuStore).
+   */
+  menuInWindow?: boolean;
 }) {
   const t = useMessages(messages);
   const tree = useMessages(flowTreeMessages);
@@ -391,13 +397,21 @@ export function ProductMap({
   const shownQuestion = phase === 'stopped' ? buildQuestion : question;
   const [lookPreview, setLookPreview] = useState<{ question: string; option: number } | null>(null);
   const previewing = shownQuestion && lookPreview?.question === shownQuestion.id ? lookPreview.option : 0;
-  // Looking at a look option restyles every screen on the map at once; until then the map wears its own look.
-  const look = shownQuestion?.options[previewing]?.look ?? (data?.look ? mapLookCss(data.look) : undefined);
+  // The pointer on a look option tries it while it stays there; off them, the one pressed is tried again.
+  const [lookHover, setLookHover] = useState<{ question: string; option: number } | null>(null);
+  const tried = (shownQuestion && lookHover?.question === shownQuestion.id ? lookHover.option : null) ?? previewing;
+  const [pickedLook, setPickedLook] = useState<PickedLook | null>(null);
+  const mapLook = data?.look ? mapLookCss(data.look) : undefined;
+  const tryingLook = shownQuestion?.options[tried]?.look ? shownQuestion.options[tried] : null;
+  // Looking at a look option restyles every screen on the map at once; a look picked is worn until the AI writes the
+  // map's own look after the answer; else the map wears its own look.
+  const look = wornLook(tryingLook?.look, pickedLook, mapLook);
   const activity =
     phase === 'building' && data
       ? (buildActivity(buildItems ?? [], data, {
           onCard: plan.activityOnCard,
-          editing: plan.activityEditing,
+          // A build's edits no card claims are what every screen stands on: the data and the structure.
+          editing: plan.activityStructure,
           running: plan.activityRunning,
           reading: plan.activityReading,
           thinking: plan.activityThinking,
@@ -563,6 +577,8 @@ export function ProductMap({
   const cardCount = document?.nodes?.length ?? 0;
   const builtCount = (document?.nodes ?? []).filter((node) => node.phase === 'built').length;
   const mapWorking = workBusy || talking || phase === 'building';
+  // While no card is being built the strip shows nothing at work, so the top bar says what the build does now.
+  const buildLine = phase === 'building' && !making ? (activity?.text ?? null) : null;
   useEffect(() => {
     registerActions(cwd, {
       phase,
@@ -570,11 +586,12 @@ export function ProductMap({
       cards: cardCount,
       built: builtCount,
       working: mapWorking,
+      activity: buildLine,
       busy,
       build: () => latest.current.build(),
       stop: () => latest.current.stop(),
     });
-  }, [registerActions, cwd, phase, left, cardCount, builtCount, mapWorking, busy]);
+  }, [registerActions, cwd, phase, left, cardCount, builtCount, mapWorking, buildLine, busy]);
   useEffect(() => () => registerActions(cwd, null), [registerActions, cwd]);
   // What a promise's own answers need: the map, whether it may be written, and how to ask the AI about it.
   const promiseProps = (node: FlowNode) => ({
@@ -626,7 +643,7 @@ export function ProductMap({
       }
       const current = attempt.current;
       if (!current.prepared) {
-        current.prepared = await prepare.mutateAsync({
+        const asked = {
           cwd,
           revision: data.revision,
           action,
@@ -636,7 +653,16 @@ export function ProductMap({
           flowId: action === 'discover' ? null : (target?.flowId ?? null),
           ...(target?.nodeIds ? { nodeIds: target.nodeIds.slice(0, 500) } : {}),
           sessionId: current.session,
-        });
+        };
+        try {
+          current.prepared = await prepare.mutateAsync(asked);
+        } catch (error) {
+          // The map moved on since it was read (the AI, a check or a capture wrote to it): read it again and go on,
+          // rather than refusing a press that asked for nothing the change touches.
+          if (!(error instanceof ServerError && error.data?.reason === 'flow_conflict')) throw error;
+          const fresh = await server.request('flow/get', { cwd });
+          current.prepared = await prepare.mutateAsync({ ...asked, revision: fresh.revision });
+        }
       }
       await send.mutateAsync({ sessionId: current.session, text: current.prepared.prompt });
       // The drawing line belongs to drawing runs only; the same conversation also does other map work.
@@ -937,8 +963,49 @@ export function ProductMap({
     if (requested) takeRequest(requested);
   }, [requested]);
 
-  const mapMenu = data && (
-    <MapMenu
+  // Why work could not start. Beside the conversation it shows under it, where the press was, so it is seen with the
+  // app on view too (the map, and anything over it, is hidden then).
+  const errorBar = error && (
+    <div
+      role="alert"
+      className={clsx(
+        'flex flex-wrap items-center gap-3 bg-diff-removed text-body text-danger',
+        docked ? 'pointer-events-auto rounded-xl px-3 py-2' : 'border-b border-line px-5 py-3',
+      )}
+    >
+      <span className="min-w-0 grow break-words">
+        {error.text}
+        {error.detail && error.detail !== error.text && (
+          <details className="mt-1 text-meta text-fg-muted">
+            <summary className="cursor-pointer">{t.technicalInfo}</summary>
+            <span className="break-words">{error.detail}</span>
+          </details>
+        )}
+      </span>
+      {error.model && onFixConnection ? (
+        <Button variant="primary" onClick={onFixConnection}>
+          {plan.fixConnection}
+        </Button>
+      ) : (
+        retry && (
+          <Button disabled={busy || anyActive} onClick={() => void start(retry.action, retry.target)}>
+            {t.retry}
+          </Button>
+        )
+      )}
+      <button
+        type="button"
+        aria-label={t.closeError}
+        title={t.closeError}
+        onClick={() => setError(null)}
+        className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-fg-muted hover:bg-hover"
+      >
+        <X size={15} aria-hidden />
+      </button>
+    </div>
+  );
+  const menuItems = data && (
+    <MapMenuItems
       cwd={cwd}
       board={data}
       readOnly={readOnly}
@@ -951,15 +1018,25 @@ export function ProductMap({
       onDelete={() => setDeleting(true)}
       recheck={recheck.length}
       onRecheck={recheckAll}
-      onMemory={onMemory}
+      // The window's ⋯ has 기억 already.
+      onMemory={menuInWindow ? undefined : onMemory}
     />
   );
+  const mapMenu = menuItems && !menuInWindow && <MapMenu unseen={unseen}>{menuItems}</MapMenu>;
+  // On the map's page the map's menu is the "지도" part of the window's ⋯, so the page has one ⋯. Before the first
+  // card the map may already exist (being drawn, or stopped early), and its menu is there too.
+  const registerMenu = useMapMenuStore((state) => state.register);
+  const windowMenu = menuInWindow && (hasMap || workBusy || !!data?.exists) ? menuItems : null;
+  useEffect(() => {
+    registerMenu(cwd, windowMenu ? { items: windowMenu, dot: unseen > 0 } : null);
+  });
+  useEffect(() => () => registerMenu(cwd, null), [registerMenu, cwd]);
 
   return (
     <main ref={area} className="flex min-h-0 min-w-0 grow flex-col bg-canvas contain-inline-size" aria-label={t.title}>
       {/* Before the first card the map may already exist (being drawn, or stopped early): its menu (scope, delete)
           is here too, so a map is never out of reach. */}
-      {!hasMap && data && (workBusy || data.exists) && (
+      {!hasMap && data && (workBusy || data.exists) && mapMenu && (
         <div className="flex min-h-11 shrink-0 items-center gap-2 bg-canvas-sunken px-10 py-1.5">
           <span className="grow" />
           {mapMenu}
@@ -969,6 +1046,13 @@ export function ProductMap({
           only when something does, and the map's menu. */}
       {hasMap && data && (
         <div className="flex min-h-11 shrink-0 flex-wrap items-center gap-2 bg-canvas-sunken px-10 py-1.5">
+          {/* Every screen wears the look being tried: the map says whose. */}
+          {tryingLook && (
+            <p role="status" className="flex items-center gap-1.5 text-meta text-fg-muted">
+              <span aria-hidden="true" className="size-1.5 rounded-full bg-interactive" />
+              {plan.previewingLook(tryingLook.label)}
+            </p>
+          )}
           {!planning && (
             <label className="relative flex w-52 min-w-36 items-center">
               <span className="sr-only">{t.searchLabel}</span>
@@ -1173,42 +1257,7 @@ export function ProductMap({
           </Button>
         </div>
       )}
-      {error && (
-        <div
-          role="alert"
-          className="flex flex-wrap items-center gap-3 border-b border-line bg-diff-removed px-5 py-3 text-body text-danger"
-        >
-          <span className="min-w-0 grow break-words">
-            {error.text}
-            {error.detail && error.detail !== error.text && (
-              <details className="mt-1 text-meta text-fg-muted">
-                <summary className="cursor-pointer">{t.technicalInfo}</summary>
-                <span className="break-words">{error.detail}</span>
-              </details>
-            )}
-          </span>
-          {error.model && onFixConnection ? (
-            <Button variant="primary" onClick={onFixConnection}>
-              {plan.fixConnection}
-            </Button>
-          ) : (
-            retry && (
-              <Button disabled={busy || anyActive} onClick={() => void start(retry.action, retry.target)}>
-                {t.retry}
-              </Button>
-            )
-          )}
-          <button
-            type="button"
-            aria-label={t.closeError}
-            title={t.closeError}
-            onClick={() => setError(null)}
-            className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-fg-muted hover:bg-hover"
-          >
-            <X size={15} aria-hidden />
-          </button>
-        </div>
-      )}
+      {!docked && errorBar}
       {board.isError && data && (
         <p role="alert" className="border-b border-line bg-diff-removed px-5 py-2 text-meta text-danger">
           {t.loadFailed}
@@ -1379,6 +1428,7 @@ export function ProductMap({
         {flight && <AskFlight key={flight.at} {...flight} landed={landed} />}
         {placeTalk(
           <>
+            {docked && errorBar}
             {phase && (
               <PlanBar
                 docked={docked}
@@ -1403,6 +1453,9 @@ export function ProductMap({
                   cards: cardCount,
                   done: builtCount,
                   screens: Object.values(treeMap?.cards ?? {}).filter(hasScreenArea).length,
+                  tries: Object.values(treeMap?.cards ?? {})
+                    .filter((card) => card.howToTry?.trim())
+                    .map((card) => ({ cardId: card.id, card: card.title, text: card.howToTry!.trim() })),
                   open: Object.values(treeMap?.cards ?? {}).flatMap((card) =>
                     card.promises
                       .filter((promise) => promise.status !== 'passed')
@@ -1431,10 +1484,15 @@ export function ProductMap({
                 onTeam={answerTeam}
                 onContinue={continueBuild}
                 onAnswer={(option) => {
-                  const label = shownQuestion?.options[option]?.label;
-                  if (label) say(label);
+                  const picked = shownQuestion?.options[option];
+                  if (!picked) return;
+                  if (picked.look) setPickedLook({ css: picked.look, before: mapLook ?? '' });
+                  say(picked.label);
                 }}
                 onPreview={(option) => shownQuestion && setLookPreview({ question: shownQuestion.id, option })}
+                onHoverLook={(option) =>
+                  setLookHover(option === null || !shownQuestion ? null : { question: shownQuestion.id, option })
+                }
                 onDecideRest={() => say(plan.decideRestMessage)}
                 onAskOn={() => say(plan.askOnMessage)}
                 onDrawOn={() => say(plan.drawOnMessage)}
@@ -1538,12 +1596,14 @@ export function ProductMap({
               <MapAsk
                 empty={!hasMap && !planned}
                 disabled={busy || (!hasMap && !planned && anyActive && !approval)}
-                placeholder={approval ? t.answerInstead : waitsForWork ? t.busyAsk : undefined}
+                // Beside the conversation the input only sends: 멈추기 is the top bar's, and words written while the
+                // AI works wait for its turn.
+                placeholder={
+                  approval ? t.answerInstead : waitsForWork || (docked && (workBusy || talking)) ? t.busyAsk : undefined
+                }
                 onSend={sendWords}
                 about={aboutCard ? (nodeOf(aboutCard)?.title ?? null) : null}
                 onClearAbout={() => setAboutCard(null)}
-                // Beside the conversation, the input stops what the AI does, as every chat does.
-                onStop={docked && (workBusy || talking) ? stopWork : undefined}
                 agent={
                   <>
                     {agentChip}

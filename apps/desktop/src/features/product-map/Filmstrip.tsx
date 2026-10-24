@@ -617,8 +617,9 @@ function ComputerStep({
   return (
     <div
       data-card={card.id}
+      // Where the window beside it is too narrow for the words, they go under the frame rather than past the edge.
       className={clsx(
-        'flex items-start gap-7 pl-7.5 transition-opacity',
+        'flex flex-wrap items-start gap-x-7 gap-y-3 pl-7.5 transition-opacity',
         look.dim && 'opacity-35',
         look.making && 'py-5',
       )}
@@ -762,7 +763,13 @@ function Caption({ card, step, strip, wide }: { card: TreeCard; step: FilmStep; 
     <span className={clsx('min-w-0 truncate font-medium', wide ? 'text-title' : 'text-body')}>{card.title}</span>
   );
   return (
-    <div className={clsx(wide ? 'w-70 shrink-0 pt-1' : 'px-1 pt-3', strip.making === card.id && !wide && 'pt-7')}>
+    <div
+      data-caption
+      className={clsx(
+        wide ? 'max-w-150 min-w-60 flex-1 basis-70 pt-1' : 'px-1 pt-3',
+        strip.making === card.id && !wide && 'pt-7',
+      )}
+    >
       {wide ? (
         <>
           <p className="flex">{name}</p>

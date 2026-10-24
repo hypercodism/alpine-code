@@ -1,5 +1,7 @@
 import { defineMessages } from '@/shared/i18n';
 
+import { towards } from './filmstripModel';
+
 export const planMessages = defineMessages({
   ko: {
     left: (n: number) => `정할 것 ${n}개`,
@@ -9,8 +11,10 @@ export const planMessages = defineMessages({
     recommended: '추천',
     otherwise: '다르게 하고 싶으면 아래에 적어 주세요',
     decideRest: '나머지는 알아서 정해 줘',
-    lookHint: '누르면 지도의 화면이 바로 그 느낌으로 바뀌어요',
+    lookHint: '올리거나 누르면 지도의 화면이 바로 그 느낌으로 바뀌어요',
+    previewingLook: (look: string) => `${towards(look)} 미리 보는 중`,
     lookPick: '이 느낌으로',
+    howToTry: '직접 써 보려면',
     ready: '다 정했어요',
     readyHint: '위의 이대로 만들기를 누르면 만들기 시작해요. 만든 뒤에도 고칠 수 있어요',
     build: '이대로 만들기',
@@ -48,6 +52,7 @@ export const planMessages = defineMessages({
     unplacedRole: '아직 여정에 넣지 않은 화면',
     activityOnCard: (title: string) => `${title} 만드는 중`,
     activityEditing: '파일을 고치는 중',
+    activityStructure: '데이터와 구조를 만드는 중',
     activityRunning: '명령을 실행하는 중',
     activityReading: '코드를 살펴보는 중',
     activityThinking: '생각하는 중',
@@ -96,8 +101,10 @@ export const planMessages = defineMessages({
     recommended: 'Suggested',
     otherwise: 'Want something else? Say so below',
     decideRest: 'Decide the rest for me',
-    lookHint: 'Picking one restyles the map’s screens right away',
+    lookHint: 'Pointing at or picking one restyles the map’s screens right away',
+    previewingLook: (look: string) => `Previewing ${look}`,
     lookPick: 'Go with this',
+    howToTry: 'To try it yourself',
     ready: 'Everything is decided',
     readyHint: 'Press Build it at the top to start. You can still change it afterwards',
     build: 'Build it',
@@ -135,6 +142,7 @@ export const planMessages = defineMessages({
     unplacedRole: 'Screens not on a journey yet',
     activityOnCard: (title: string) => `Building ${title}`,
     activityEditing: 'Changing files',
+    activityStructure: 'Building the data and structure',
     activityRunning: 'Running a command',
     activityReading: 'Reading the code',
     activityThinking: 'Thinking',

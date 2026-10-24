@@ -1137,7 +1137,9 @@ describe('map upkeep', () => {
         ran: true,
       }),
     );
-    expect(request.mock.calls.filter(([method]) => method === 'flow/prepare')).toHaveLength(1);
+    // Once: claiming the day moves the map on, and a start the server refuses for that reads the map again only once.
+    expect(request.mock.calls.filter(([method]) => method === 'flow/schedule')).toHaveLength(1);
+    expect(request.mock.calls.filter(([method]) => method === 'flow/prepare').length).toBeLessThanOrEqual(2);
   });
 
   it('starts no batch when the server refuses the daily claim, and does not try again', async () => {
@@ -1595,6 +1597,29 @@ describe('beside its conversation (map-first 43)', () => {
       }),
     );
     await waitFor(() => expect(within(slot).queryByText('장바구니에 대해')).toBeNull());
+    slot.remove();
+  });
+
+  it('keeps the input a send button while the AI works: 멈추기 is in the top bar, words wait for its turn', async () => {
+    const slot = document.createElement('div');
+    document.body.append(slot);
+    mount(
+      {
+        results: {
+          'session/list': {
+            sessions: [sessionInfo({ id: 'map-1', cwd, purpose: 'map', title: '지도', status: 'running' })],
+          },
+        },
+      },
+      vi.fn(),
+      vi.fn(),
+      vi.fn(),
+      { talkSlot: slot, onShowTalk: vi.fn() },
+    );
+    const box = await within(slot).findByRole('textbox', { name: '지도에 부탁하기' });
+    await waitFor(() => expect(box.getAttribute('placeholder')).toBe('지금 일이 끝나면 전해요'));
+    expect(within(slot).queryByRole('button', { name: '멈추기' })).toBeNull();
+    expect(within(slot).getByRole('button', { name: '보내기' })).toBeTruthy();
     slot.remove();
   });
 

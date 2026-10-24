@@ -22,7 +22,7 @@ core_judge = importlib.import_module("alpine_core.judge")
 NEW = {
     "kind": "new",
     "template": "web-lite",
-    "reason": "로그인과 예약 저장이면 Lite로 충분해요.",
+    "reason": "로그인과 예약 저장이면 웹앱으로 충분해요.",
     "name": "craft-booking",
 }
 

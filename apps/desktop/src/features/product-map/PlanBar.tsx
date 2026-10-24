@@ -56,6 +56,8 @@ export interface PlanBuilt {
   done: number;
   screens: number;
   open: PlanOpenPromise[];
+  /** What the person needs to try each card that needs something (a sign-in, a password), in plain words. */
+  tries: { cardId: string; card: string; text: string }[];
 }
 
 /** What the person can say to the build's TF from the map, as on its card in the conversation. */
@@ -88,6 +90,7 @@ export function PlanBar({
   stop,
   onAnswer,
   onPreview,
+  onHoverLook,
   onDecideRest,
   onAskOn,
   onDrawOn,
@@ -132,6 +135,8 @@ export function PlanBar({
   stop: PlanStop;
   onAnswer: (option: number) => void;
   onPreview: (option: number) => void;
+  /** The pointer is on a look option (`null`: off them): the map wears it while it stays there. */
+  onHoverLook?: (option: number | null) => void;
   onDecideRest: () => void;
   /** Asks the AI to go on asking what is left. */
   onAskOn: () => void;
@@ -146,7 +151,7 @@ export function PlanBar({
   /** Opens the running app at a screen; absent where the page cannot, or for a screen without an address. */
   onOpenInApp?: (cardId: string) => boolean | void;
   /** Puts the app online (Alpine Cloud); absent when there is nowhere to put it. */
-  onPublish?: () => void;
+  onPublish?: (from: HTMLElement) => void;
   onTeam: (answer: PlanTeamAnswer) => void;
   /** Continues a build that stopped with cards left. */
   onContinue: () => void;
@@ -196,6 +201,7 @@ export function PlanBar({
         sample={sample}
         onAnswer={onAnswer}
         onPreview={onPreview}
+        onHoverLook={onHoverLook}
         onDecideRest={onDecideRest}
       />
     );
@@ -298,7 +304,7 @@ function Done({
   onReviewPicks: () => void;
   onFix: (cardId: string, promiseId: string) => void;
   onOpenInApp?: (cardId: string) => boolean | void;
-  onPublish?: () => void;
+  onPublish?: (from: HTMLElement) => void;
 }) {
   const t = useMessages(messages);
   const shown = built.open.slice(0, OPEN_ROWS);
@@ -321,6 +327,19 @@ function Done({
           )}
         </p>
       </div>
+      {built.tries.length > 0 && (
+        <section aria-label={t.howToTry} className="flex flex-col gap-1.5 border-t border-line-subtle pt-3">
+          <p className="text-meta text-fg-muted">{t.howToTry}</p>
+          <ul className="flex flex-col gap-1">
+            {built.tries.map((one) => (
+              <li key={one.cardId} className="text-body text-fg">
+                <span className="text-fg-muted">{one.card} · </span>
+                <span className="whitespace-pre-wrap">{one.text}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {shown.length > 0 && (
         <ul aria-label={t.openPromises} className="flex flex-col gap-3 border-t border-line-subtle pt-3">
           {shown.map((open) => (
@@ -353,7 +372,7 @@ function Done({
         </ul>
       )}
       {onPublish && (
-        <Button variant="primary" className="w-full" onClick={onPublish}>
+        <Button variant="primary" className="w-full" onClick={(event) => onPublish(event.currentTarget)}>
           {t.publish}
         </Button>
       )}
@@ -389,6 +408,7 @@ function Question({
   position,
   onAnswer,
   onPreview,
+  onHoverLook,
   onDecideRest,
   onClose,
   onNext,
@@ -403,6 +423,7 @@ function Question({
   position?: { index: number; total: number } | null;
   onAnswer: (option: number) => void;
   onPreview: (option: number) => void;
+  onHoverLook?: (option: number | null) => void;
   onDecideRest?: () => void;
   onClose?: () => void;
   onNext?: () => void;
@@ -433,6 +454,8 @@ function Question({
               type="button"
               aria-pressed={i === preview}
               onClick={() => onPreview(i)}
+              onMouseEnter={() => onHoverLook?.(i)}
+              onMouseLeave={() => onHoverLook?.(null)}
               className={clsx(
                 'flex cursor-pointer flex-col gap-1.5 rounded-lg p-1.5 text-left',
                 i === preview ? 'bg-selected' : 'hover:bg-hover',
@@ -456,7 +479,9 @@ function Question({
           ))}
         </div>
       ) : (
-        <div className="flex flex-wrap gap-1.5">
+        // One option per line, the full width: its label (and the pick's mark), then why under it, so both read
+        // well beside the conversation.
+        <div className="flex flex-col gap-1.5">
           {question.options.map((option, i) => {
             const tag = picked === undefined ? option.recommended && t.recommended : picked === i && t.aiWentWith;
             return (
@@ -465,16 +490,17 @@ function Question({
                 type="button"
                 onClick={() => onAnswer(i)}
                 className={clsx(
-                  'flex min-h-8 cursor-pointer items-baseline gap-1.5 rounded-lg border px-3 py-1.5 text-left text-body',
+                  'flex min-h-8 w-full cursor-pointer flex-col gap-0.5 rounded-lg border px-3 py-1.5 text-left text-body',
                   marked(i)
                     ? 'border-interactive bg-selected text-interactive hover:bg-hover'
                     : 'border-line bg-canvas-raised text-fg hover:bg-hover',
                 )}
               >
-                {option.label}
-                {(tag || option.detail) && (
-                  <span className="text-meta text-fg-muted">{[tag, option.detail].filter(Boolean).join(' · ')}</span>
-                )}
+                <span className="flex items-baseline gap-1.5">
+                  <span className="min-w-0">{option.label}</span>
+                  {tag && <span className="shrink-0 text-meta">{tag}</span>}
+                </span>
+                {option.detail && <span className="text-meta text-fg-muted">{option.detail}</span>}
               </button>
             );
           })}

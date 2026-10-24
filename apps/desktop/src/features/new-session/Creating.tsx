@@ -101,11 +101,22 @@ export function Creating({
               )}
             >
               <Mark state={done ? 'done' : working ? 'working' : 'waiting'} />
-              <span className={clsx('grow text-body transition-colors', done || working ? 'text-fg' : 'text-fg-muted')}>
+              <span
+                className={clsx(
+                  'shrink-0 grow text-body whitespace-nowrap transition-colors',
+                  done || working ? 'text-fg' : 'text-fg-muted',
+                )}
+              >
                 {labels[step]}
               </span>
+              {/* A long folder keeps its end (the project's own name) in view and the label on one line. */}
               {done && details[step] && (
-                <span className="motion-step font-mono text-meta text-fg-muted">{details[step]}</span>
+                <span
+                  title={step === 'folder' && project ? project.path : details[step]}
+                  className="motion-step min-w-0 truncate font-mono text-meta text-fg-muted [direction:rtl]"
+                >
+                  <bdi dir="ltr">{details[step]}</bdi>
+                </span>
               )}
             </li>
           );

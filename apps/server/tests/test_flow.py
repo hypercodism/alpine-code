@@ -984,8 +984,24 @@ def test_building_a_plan_goes_on_without_asking_and_checks_the_promises(proj):
     prepared = prepare(proj, action="build", request="이대로 만들어 주세요.", nodeId=None, flowId=None)
     assert "Choose your own order" in prepared.prompt and '"by": "ai"' in prepared.prompt
     assert "new unique `id`" in prepared.prompt  # building records checks
-    assert "write `path`" in prepared.prompt  # so the app view can open each built screen
+    assert "write its `path`" in prepared.prompt  # so the app view can open each built screen
     assert "<skill_content" not in prepared.prompt  # the skill came with the plan, in the same conversation
+    # The person watches the map: each card moves as its screen is built, not all at the end.
+    assert "The person watches\nthe map while you build" in prepared.prompt and "need not watch" not in prepared.prompt
+    assert "one card at a time, never all at the end" in prepared.prompt
+    assert prepared.prompt.index("set its card's phase to building") < prepared.prompt.index("Choose your own order")
+    # They see the map, not its files.
+    assert "never\nmention files, JSON, paths or code words" in prepared.prompt
+    assert "every message, the short ones while you work too" in prepared.prompt
+    # What it takes to try a screen is on its card, where the person looks, not buried in the last message.
+    assert "goes into\nthat card's `howToTry` in plain words" in prepared.prompt
+
+
+def test_planning_talks_about_screens_not_files(proj):
+    prepared = prepare(proj, action="plan", request="블로그", nodeId=None, flowId=None)
+    assert "in their language" in prepared.prompt
+    assert prepared.prompt.count("never\nmention files, JSON, paths or code words") == 1  # the request
+    assert "never mention\nfiles, JSON, paths or code words" in prepared.prompt  # and the skill
 
 
 def test_the_map_is_written_without_asking_only_while_its_product_is_planned(proj):

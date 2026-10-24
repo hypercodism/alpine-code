@@ -2,7 +2,7 @@ import type { FlowGetResult } from '@alpine/protocol';
 import { Button, Menu } from '@alpine/ui/primitives';
 import { Check, ChevronRight, Ellipsis, Folder } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import { useMessages } from '@/shared/i18n';
 import { ServerError, useDeleteMap, useServer, useSetSchedule, useSetScope } from '@/shared/server';
@@ -172,22 +172,8 @@ function FolderRow({
   );
 }
 
-/** Everything used now and then, behind one "⋯"; a dot on it says the history has something new. */
-export function MapMenu({
-  cwd,
-  board,
-  readOnly,
-  unseen,
-  canStart,
-  planning = false,
-  onChanges,
-  onRediscover,
-  onScope,
-  onDelete,
-  recheck,
-  onRecheck,
-  onMemory,
-}: {
+/** What the map's menu offers (history, finding more, the daily check, the scope, deleting). */
+export interface MapMenuProps {
   cwd: string;
   board: FlowGetResult;
   readOnly: boolean;
@@ -205,10 +191,11 @@ export function MapMenu({
   onRecheck: () => void;
   /** Opens what the AI keeps in mind about this project. */
   onMemory?: () => void;
-}) {
+}
+
+/** Everything used now and then (MapMenuItems), behind one "⋯"; a dot on it says the history has something new. */
+export function MapMenu({ unseen, children }: { unseen: number; children: ReactNode }) {
   const t = useMessages(messages);
-  const schedule = useSetSchedule();
-  const daily = board.schedule ?? { enabled: false, limit: 20, lastRun: null };
   return (
     <Menu.Root>
       <Menu.Trigger
@@ -218,43 +205,70 @@ export function MapMenu({
         <Ellipsis size={18} aria-hidden />
         {unseen > 0 && <span aria-hidden className="absolute top-1 right-1 size-1.5 rounded-full bg-interactive" />}
       </Menu.Trigger>
-      <Menu.Popup align="end">
-        {onChanges && <Menu.Item onClick={onChanges}>{t.menuChanges(unseen)}</Menu.Item>}
-        {onMemory && <Menu.Item onClick={onMemory}>{t.menuMemory}</Menu.Item>}
-        {!planning && (
-          <>
-            <Menu.Item disabled={!canStart} onClick={onRediscover}>
-              {t.rediscover}
-            </Menu.Item>
-            {recheck > 0 && (
-              <Menu.Item disabled={!canStart} onClick={onRecheck}>
-                {t.recheckAll(recheck)}
-              </Menu.Item>
-            )}
-            <Menu.Separator />
-            <Menu.Item
-              role="menuitemcheckbox"
-              aria-checked={daily.enabled ?? false}
-              disabled={readOnly || schedule.isPending}
-              closeOnClick={false}
-              onClick={() => schedule.mutate({ cwd, enabled: !daily.enabled, limit: daily.limit ?? 20 })}
-            >
-              <span className="grow">{t.menuDaily}</span>
-              <Check size={14} aria-hidden className={daily.enabled ? 'text-interactive' : 'invisible'} />
-            </Menu.Item>
-            <Menu.Item onClick={onScope}>{t.menuScope}</Menu.Item>
-          </>
-        )}
-        {!readOnly && (
-          <>
-            {(!planning || onChanges || onMemory) && <Menu.Separator />}
-            <Menu.Item onClick={onDelete} className="text-danger">
-              {t.deleteMap}
-            </Menu.Item>
-          </>
-        )}
-      </Menu.Popup>
+      <Menu.Popup align="end">{children}</Menu.Popup>
     </Menu.Root>
+  );
+}
+
+/**
+ * The map's menu items, for a menu of its own (MapMenu) or for the window's ⋯, where they are its "지도" part, so the
+ * map's page has one ⋯.
+ */
+export function MapMenuItems({
+  cwd,
+  board,
+  readOnly,
+  unseen,
+  canStart,
+  planning = false,
+  onChanges,
+  onRediscover,
+  onScope,
+  onDelete,
+  recheck,
+  onRecheck,
+  onMemory,
+}: MapMenuProps) {
+  const t = useMessages(messages);
+  const schedule = useSetSchedule();
+  const daily = board.schedule ?? { enabled: false, limit: 20, lastRun: null };
+  return (
+    <>
+      {onChanges && <Menu.Item onClick={onChanges}>{t.menuChanges(unseen)}</Menu.Item>}
+      {onMemory && <Menu.Item onClick={onMemory}>{t.menuMemory}</Menu.Item>}
+      {!planning && (
+        <>
+          <Menu.Item disabled={!canStart} onClick={onRediscover}>
+            {t.rediscover}
+          </Menu.Item>
+          {recheck > 0 && (
+            <Menu.Item disabled={!canStart} onClick={onRecheck}>
+              {t.recheckAll(recheck)}
+            </Menu.Item>
+          )}
+          <Menu.Separator />
+          <Menu.Item
+            role="menuitemcheckbox"
+            aria-checked={daily.enabled ?? false}
+            disabled={readOnly || schedule.isPending}
+            closeOnClick={false}
+            onClick={() => schedule.mutate({ cwd, enabled: !daily.enabled, limit: daily.limit ?? 20 })}
+          >
+            <span className="grow">{t.menuDaily}</span>
+            <Check size={14} aria-hidden className={daily.enabled ? 'text-interactive' : 'invisible'} />
+          </Menu.Item>
+          <Menu.Item onClick={onScope}>{t.menuScope}</Menu.Item>
+        </>
+      )}
+      {!readOnly && (
+        <>
+          {(!planning || onChanges || onMemory) && <Menu.Separator />}
+          <Menu.Item onClick={onDelete} className="text-danger">
+            {t.deleteMap}
+          </Menu.Item>
+        </>
+      )}
+    </>
   );
 }
 
