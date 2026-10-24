@@ -1459,14 +1459,18 @@ export function ProductMap({
                   open: Object.values(treeMap?.cards ?? {}).flatMap((card) =>
                     card.promises
                       .filter((promise) => promise.status !== 'passed')
-                      .map((promise) => ({
-                        cardId: card.id,
-                        card: card.title,
-                        promiseId: promise.id,
-                        text: promise.then,
-                        note: promise.status === 'failed' ? promise.note : '',
-                        failed: promise.status === 'failed',
-                      })),
+                      .map((promise) => {
+                        // Broken stays broken while the AI works on its card (shown there as being checked).
+                        const failed = data?.states?.[card.id]?.promises?.[promise.id]?.status === 'failed';
+                        return {
+                          cardId: card.id,
+                          card: card.title,
+                          promiseId: promise.id,
+                          text: promise.then,
+                          note: failed ? promise.note : '',
+                          failed,
+                        };
+                      }),
                   ),
                 }}
                 team={
@@ -1510,6 +1514,7 @@ export function ProductMap({
                   const broken = node?.conditions?.find((condition) => condition.id === promiseId)?.expectation;
                   if (node && broken) void askAbout(node, tree.fixRequest(node.title, broken));
                 }}
+                onRecheck={(ids) => void start('verify', { nodeIds: ids, request: t.recheckAllRequest })}
                 onOpenInApp={canOpenInApp ? openInApp : undefined}
                 onPublish={onPublish}
                 onFixConnection={() => onFixConnection?.()}

@@ -994,18 +994,52 @@ def test_building_a_plan_goes_on_without_asking_and_checks_the_promises(proj):
     assert "The person watches\nthe map while you build" in prepared.prompt and "need not watch" not in prepared.prompt
     assert "one card at a time, never all at the end" in prepared.prompt
     assert prepared.prompt.index("set its card's phase to building") < prepared.prompt.index("Choose your own order")
-    # They see the map, not its files.
-    assert "never\nmention files, JSON, paths or code words" in prepared.prompt
-    assert "every message, the short ones while you work too" in prepared.prompt
     # What it takes to try a screen is on its card, where the person looks, not buried in the last message.
     assert "goes into\nthat card's `howToTry` in plain words" in prepared.prompt
 
 
+TALK = 'so never mention files, JSON, paths or code words to them (not "map.json"'
+
+
+@pytest.mark.parametrize(
+    "action", ["plan", "build", "request", "discover", "extend", "change", "verify", "sync", "reshape"]
+)
+def test_every_map_task_talks_about_screens_not_files_once(proj, action):
+    """The person sees the map and the app, not their files: every task says so once, short messages included."""
+    if action in ("plan", "build"):
+        prepare(proj, action="plan", request="블로그", nodeId=None, flowId=None)
+    else:
+        write_map(proj)
+    request = "" if action in ("sync", "verify") else "버튼을 크게 해 줘"
+    where = {"nodeId": None, "flowId": None} if action in ("plan", "build") else {}
+    prompt = " ".join(prepare(proj, action=action, request=request, **where).prompt.split())
+    assert prompt.count(TALK) == 1
+    assert "in their language (the one their request is written in)" in prompt
+    assert "every message, the short ones while you work too, and the last one" in prompt
+    assert 'not "dev server"' in prompt
+
+
 def test_planning_talks_about_screens_not_files(proj):
     prepared = prepare(proj, action="plan", request="블로그", nodeId=None, flowId=None)
-    assert "in their language" in prepared.prompt
-    assert prepared.prompt.count("never\nmention files, JSON, paths or code words") == 1  # the request
-    assert "never mention\nfiles, JSON, paths or code words" in prepared.prompt  # and the skill
+    assert "never mention\nfiles, JSON, paths or code words" in prepared.prompt  # the skill says it too
+
+
+@pytest.mark.parametrize("action", ["request", "extend", "change", "verify"])
+def test_a_change_leaves_the_promises_it_touched_checked(proj, action):
+    write_map(proj)
+    prompt = " ".join(prepare(proj, action=action, request="고쳐 줘").prompt.split())
+    assert "Before you end, check again every promise of each card that lists a file you changed" in prompt
+    assert "not only the promises you set out to fix" in prompt and "a blocked check that says why" in prompt
+
+
+@pytest.mark.parametrize("action", ["plan", "build", "discover", "sync", "reshape"])
+def test_only_a_change_is_told_to_recheck_what_it_touched(proj, action):
+    if action in ("plan", "build"):
+        prepare(proj, action="plan", request="블로그", nodeId=None, flowId=None)
+    else:
+        write_map(proj)
+    where = {"nodeId": None, "flowId": None} if action in ("plan", "build") else {}
+    assert "Before you end, check again" not in prepare(proj, action=action, request="고쳐 줘", **where).prompt
 
 
 def test_the_map_is_written_without_asking_only_while_its_product_is_planned(proj):
