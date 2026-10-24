@@ -1140,6 +1140,12 @@ export function ProductMap({
           <div className="flex min-w-0 grow items-center justify-center">
             <span aria-hidden className="h-16 w-44 animate-pulse rounded-xl border border-dashed border-line" />
           </div>
+        ) : !hasMap && planned ? (
+          // A plan stopped before its first card: still a plan, waiting for the AI to draw on (the bar below says so),
+          // not a project whose code is yet to be read.
+          <div className="flex min-w-0 grow items-center justify-center">
+            <span aria-hidden className="h-16 w-44 rounded-xl border border-dashed border-line" />
+          </div>
         ) : !hasMap && checkingFolder ? (
           <p className="p-8 text-body text-fg-muted">{t.checkingFolder}</p>
         ) : !hasMap && emptyFolder ? (
@@ -1386,7 +1392,7 @@ export function ProductMap({
           )}
           {data && !readOnly && !board.isError && !checkingFolder && !(emptyFolder && !hasMap) && (
             <MapAsk
-              empty={!hasMap}
+              empty={!hasMap && !planned}
               disabled={busy || (!hasMap && !planned && anyActive && !approval)}
               placeholder={approval ? t.answerInstead : waitsForWork ? t.busyAsk : undefined}
               onSend={sendWords}

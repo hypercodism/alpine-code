@@ -242,6 +242,22 @@ describe('a plan stays quiet until it is built', () => {
   });
 });
 
+describe('a plan stopped before its first card', () => {
+  it('stays a plan: no code-reading screen, the bar offers to draw on', async () => {
+    mount(
+      'asking',
+      {},
+      {
+        board: (b) => ({ ...b, document: { nodes: [], flows: [], edges: [] }, screens: {}, undecided: [] }),
+      },
+    );
+    expect(await screen.findByText('지도를 그리다 멈췄어요')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '이어서 그려 줘' })).toBeTruthy();
+    expect(screen.queryByText('이 프로젝트를 지도로 펼쳐볼게요')).toBeNull();
+    expect(screen.queryByPlaceholderText('어떤 지도를 그릴까요? 비워 두고 보내면 바로 그려요')).toBeNull();
+  });
+});
+
 describe('the top bar on the map (#10)', () => {
   it.each([
     ['asking', {}, '기획 중'],
