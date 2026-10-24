@@ -20,6 +20,7 @@ export function PublishButton({
   sessionId,
   defaultOpen = false,
   onEvidence,
+  sheetOnly = false,
 }: {
   cwd: string;
   name: string;
@@ -27,6 +28,11 @@ export function PublishButton({
   sessionId?: string | null;
   defaultOpen?: boolean;
   onEvidence?: () => void;
+  /**
+   * No button, only the sheet, opened by `openPublish` (the map's completion card has 인터넷에 올리기, so the top bar
+   * does not repeat it). The sheet still drops from where the button would be.
+   */
+  sheetOnly?: boolean;
 }) {
   const t = useMessages(messages);
   const status = usePublishStatus(cwd);
@@ -45,19 +51,23 @@ export function PublishButton({
   const waiting = found.publishable && ((found.changes ?? 0) > 0 || !found.lastPublishedAt);
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
-      <Popover.Trigger
-        aria-label={waiting ? `${t.publish} · ${t.unpublished}` : t.publish}
-        className="relative inline-flex min-h-7 cursor-pointer items-center gap-1.5 rounded-lg border border-line bg-canvas-raised px-2.5 text-body font-medium text-fg hover:bg-hover data-popup-open:bg-hover"
-      >
-        <Upload size={14} strokeWidth={1.75} aria-hidden="true" className="text-fg-muted" />
-        {t.publish}
-        {waiting && (
-          <span
-            aria-hidden="true"
-            className="absolute -top-0.5 -right-0.5 size-2 rounded-full border-2 border-canvas-sunken bg-interactive"
-          />
-        )}
-      </Popover.Trigger>
+      {sheetOnly ? (
+        <Popover.Trigger aria-hidden="true" tabIndex={-1} className="pointer-events-none size-px self-end opacity-0" />
+      ) : (
+        <Popover.Trigger
+          aria-label={waiting ? `${t.publish} · ${t.unpublished}` : t.publish}
+          className="relative inline-flex min-h-7 cursor-pointer items-center gap-1.5 rounded-lg border border-line bg-canvas-raised px-2.5 text-body font-medium text-fg hover:bg-hover data-popup-open:bg-hover"
+        >
+          <Upload size={14} strokeWidth={1.75} aria-hidden="true" className="text-fg-muted" />
+          {t.publish}
+          {waiting && (
+            <span
+              aria-hidden="true"
+              className="absolute -top-0.5 -right-0.5 size-2 rounded-full border-2 border-canvas-sunken bg-interactive"
+            />
+          )}
+        </Popover.Trigger>
+      )}
       <Popover.Popup align="end">
         <PublishPanel
           cwd={cwd}
