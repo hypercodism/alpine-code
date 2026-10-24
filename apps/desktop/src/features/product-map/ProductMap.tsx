@@ -1339,14 +1339,6 @@ export function ProductMap({
                               {t.askRecheck}
                             </Button>
                           )}
-                          {canOpenInApp && node.kind === 'screen' && node.phase === 'built' && (
-                            <Dialog.Close
-                              render={<LinkButton className="self-center" />}
-                              onClick={() => openInApp(cardId)}
-                            >
-                              {film.openInApp}
-                            </Dialog.Close>
-                          )}
                         </p>
                       ) : (
                         <CardAsk
@@ -1357,6 +1349,13 @@ export function ProductMap({
                           onAsk={(request) => askAbout(node, request)}
                           onRecheck={planning ? undefined : () => void start('verify', { node })}
                         />
+                      )}
+                      {canOpenInApp && node.kind === 'screen' && node.phase === 'built' && (
+                        <p>
+                          <Dialog.Close render={<LinkButton />} onClick={() => openInApp(cardId)}>
+                            {film.openInApp}
+                          </Dialog.Close>
+                        </p>
                       )}
                     </>
                   ),
