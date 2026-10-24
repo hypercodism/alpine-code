@@ -2,7 +2,7 @@ import type { FlowGetResult } from '@alpine/protocol';
 import { Button, Menu } from '@alpine/ui/primitives';
 import { Check, ChevronRight, Ellipsis, Folder } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import { useMessages } from '@/shared/i18n';
 import { ServerError, useDeleteMap, useServer, useSetSchedule, useSetScope } from '@/shared/server';
@@ -193,8 +193,8 @@ export interface MapMenuProps {
   onMemory?: () => void;
 }
 
-/** Everything used now and then, behind one "⋯"; a dot on it says the history has something new. */
-export function MapMenu(props: MapMenuProps) {
+/** Everything used now and then (MapMenuItems), behind one "⋯"; a dot on it says the history has something new. */
+export function MapMenu({ unseen, children }: { unseen: number; children: ReactNode }) {
   const t = useMessages(messages);
   return (
     <Menu.Root>
@@ -203,13 +203,9 @@ export function MapMenu(props: MapMenuProps) {
         className="relative flex size-8 cursor-pointer items-center justify-center rounded-lg text-fg-muted hover:bg-hover data-popup-open:bg-hover"
       >
         <Ellipsis size={18} aria-hidden />
-        {props.unseen > 0 && (
-          <span aria-hidden className="absolute top-1 right-1 size-1.5 rounded-full bg-interactive" />
-        )}
+        {unseen > 0 && <span aria-hidden className="absolute top-1 right-1 size-1.5 rounded-full bg-interactive" />}
       </Menu.Trigger>
-      <Menu.Popup align="end">
-        <MapMenuItems {...props} />
-      </Menu.Popup>
+      <Menu.Popup align="end">{children}</Menu.Popup>
     </Menu.Root>
   );
 }

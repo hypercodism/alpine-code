@@ -57,7 +57,7 @@ import { mapLookCss, type PickedLook, wornLook } from './planLook';
 import { planMessages } from './planMessages';
 import { useMapRequest } from './askRequest';
 import { AskFlight, MapAsk } from './MapAsk';
-import { DeleteMap, MapMenu, MapMenuItems, type MapMenuProps, ScopeEditor } from './MapSettings';
+import { DeleteMap, MapMenu, MapMenuItems, ScopeEditor } from './MapSettings';
 import { Unmapped } from './Unmapped';
 import { messages } from './messages';
 import { type LaterWord, useLaterWords, useMapTalk } from './mapTalk';
@@ -1004,31 +1004,31 @@ export function ProductMap({
       </button>
     </div>
   );
-  const menuProps: MapMenuProps | null = data
-    ? {
-        cwd,
-        board: data,
-        readOnly,
-        unseen,
-        canStart: !(locked || board.isError),
-        planning,
-        onChanges: data.changes?.length ? openChanges : undefined,
-        onRediscover: () => setConfirmRebuild(true),
-        onScope: () => setScopeOpen(true),
-        onDelete: () => setDeleting(true),
-        recheck: recheck.length,
-        onRecheck: recheckAll,
-        // The window's ⋯ has 기억 already.
-        onMemory: menuInWindow ? undefined : onMemory,
-      }
-    : null;
-  const mapMenu = menuProps && !menuInWindow && <MapMenu {...menuProps} />;
+  const menuItems = data && (
+    <MapMenuItems
+      cwd={cwd}
+      board={data}
+      readOnly={readOnly}
+      unseen={unseen}
+      canStart={!(locked || board.isError)}
+      planning={planning}
+      onChanges={data.changes?.length ? openChanges : undefined}
+      onRediscover={() => setConfirmRebuild(true)}
+      onScope={() => setScopeOpen(true)}
+      onDelete={() => setDeleting(true)}
+      recheck={recheck.length}
+      onRecheck={recheckAll}
+      // The window's ⋯ has 기억 already.
+      onMemory={menuInWindow ? undefined : onMemory}
+    />
+  );
+  const mapMenu = menuItems && !menuInWindow && <MapMenu unseen={unseen}>{menuItems}</MapMenu>;
   // On the map's page the map's menu is the "지도" part of the window's ⋯, so the page has one ⋯. Before the first
   // card the map may already exist (being drawn, or stopped early), and its menu is there too.
   const registerMenu = useMapMenuStore((state) => state.register);
-  const windowMenu = menuInWindow && menuProps && (hasMap || workBusy || data?.exists) ? menuProps : null;
+  const windowMenu = menuInWindow && (hasMap || workBusy || !!data?.exists) ? menuItems : null;
   useEffect(() => {
-    registerMenu(cwd, windowMenu ? { items: <MapMenuItems {...windowMenu} />, dot: windowMenu.unseen > 0 } : null);
+    registerMenu(cwd, windowMenu ? { items: windowMenu, dot: unseen > 0 } : null);
   });
   useEffect(() => () => registerMenu(cwd, null), [registerMenu, cwd]);
 

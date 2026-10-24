@@ -5,6 +5,9 @@ import { useFirstPress } from './useFirstPress';
 
 afterEach(cleanup);
 
+/** The class xterm gives its own element (not one of the app's styles). */
+const XTERM = 'xterm';
+
 function Window({ onBack }: { onBack: () => void }) {
   useFirstPress();
   return (
@@ -13,7 +16,7 @@ function Window({ onBack }: { onBack: () => void }) {
         ← 대화
       </button>
       <iframe title="앱" />
-      <div className="xterm">
+      <div className={XTERM}>
         <textarea aria-label="터미널" />
       </div>
     </div>
