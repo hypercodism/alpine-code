@@ -88,6 +88,13 @@ function mount(path: string, script: Script, sessions: { info: SessionInfo; item
 const rail = () => screen.findByRole('navigation', { name: '주 메뉴' });
 const projectRow = async (name: string) =>
   (await within(await rail()).findByRole('button', { name: new RegExp(`^${name} 열기`) })).parentElement!;
+/** A project's row in the project menu (the map has no rail): opens the menu if it is closed. */
+const menuRow = async (name: string) => {
+  if (!screen.queryByRole('list', { name: '최근 프로젝트' }))
+    fireEvent.click(await screen.findByRole('button', { name: /다른 프로젝트로/ }));
+  const list = await screen.findByRole('list', { name: '최근 프로젝트' });
+  return (await within(list).findByRole('button', { name: new RegExp(`^${name}(?! 메뉴)`) })).parentElement!;
+};
 
 beforeEach(() => {
   localStorage.clear();
@@ -337,12 +344,12 @@ describe('a question the AI asked on a map (#63, #73, #8, #25, #39)', () => {
     },
   });
 
-  it('tells me it has a question, the rail counts it, and coming back opens that map', async () => {
+  it('tells me it has a question, the project menu marks it, and coming back opens that map', async () => {
     vi.spyOn(document, 'hasFocus').mockReturnValue(false);
     const { router, push } = mount('/board' + q(docs), {}, [
       { info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', status: 'running' }) },
     ]);
-    await projectRow('alpine-code');
+    await menuRow('alpine-code');
     push(asked(50));
     push(status(51, 'idle'));
     await waitFor(() =>
@@ -351,8 +358,9 @@ describe('a question the AI asked on a map (#63, #73, #8, #25, #39)', () => {
         'AI가 물어볼 게 있어요. 열어서 답해 주면 이어서 해요.',
       ),
     );
-    expect(await within(await projectRow('alpine-code')).findByText('질문 대기')).toBeTruthy();
-    expect(within(await rail()).getByRole('button', { name: /내 확인 필요/ }).textContent).toContain('1');
+    expect(await within(await menuRow('alpine-code')).findByText('질문 대기')).toBeTruthy();
+    // The name in the top bar has the orange dot: another project waits for me.
+    expect(screen.getByRole('button', { name: 'docs-site · 다른 프로젝트로 · 다른 프로젝트가 기다려요' })).toBeTruthy();
     act(() => void window.dispatchEvent(new Event('focus')));
     await waitFor(() => expect(router.state.location.search).toEqual({ project: app }));
   });
@@ -362,7 +370,7 @@ describe('a question the AI asked on a map (#63, #73, #8, #25, #39)', () => {
     const { push } = mount('/board' + q(docs), {}, [
       { info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', status: 'running' }) },
     ]);
-    await projectRow('alpine-code');
+    await menuRow('alpine-code');
     push(status(50, 'waiting'));
     await waitFor(() =>
       expect(platform.notify).toHaveBeenCalledWith('alpine-code', 'AI가 허락을 기다려요. 열어서 확인해 주세요.'),
@@ -406,7 +414,7 @@ describe('a question the AI asked on a map (#63, #73, #8, #25, #39)', () => {
     const { push } = mount('/board' + q(app), {}, [
       { info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', status: 'running' }) },
     ]);
-    await projectRow('alpine-code');
+    await menuRow('alpine-code');
     push(status(50, 'waiting'));
     push(asked(51));
     push(status(52, 'idle'));

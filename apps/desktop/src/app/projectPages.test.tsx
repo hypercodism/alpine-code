@@ -40,6 +40,7 @@ function mount(path: string, projects = PROJECTS) {
       </ServerProvider>
     </QueryClientProvider>,
   );
+  return router;
 }
 
 beforeEach(() => {
@@ -70,10 +71,13 @@ describe('project pages', () => {
   });
 
   it('opens the memory from the project menu', async () => {
-    mount('/board' + q(cwd));
+    const router = mount('/board' + q(cwd));
+    await screen.findByRole('main', { name: '제품 지도' });
+    fireEvent.click(await screen.findByRole('button', { name: /^alpine-code · 다른 프로젝트로/ }));
     fireEvent.click(await screen.findByRole('button', { name: 'alpine-code 메뉴' }));
-    const memory = await screen.findByRole('menuitem', { name: '기억 열기' });
-    expect(memory.getAttribute('href')).toBe('/memory' + q(cwd));
+    fireEvent.click(await screen.findByRole('menuitem', { name: '기억 열기' }));
+    expect(await screen.findByRole('link', { name: 'alpine-code' })).toBeTruthy();
+    expect(router.state.location.pathname).toBe('/memory');
   });
 
   it('shows the memory without a dock button', async () => {

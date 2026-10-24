@@ -46,6 +46,11 @@ function RadioItem({ className, ...props }: WithClass<typeof BaseMenu.RadioItem>
   return <BaseMenu.RadioItem className={clsx(row, 'data-checked:bg-selected', className)} {...props} />;
 }
 
+/** An item that opens a further menu beside it (on hover, a click or the right arrow). */
+function SubmenuTrigger({ className, ...props }: WithClass<typeof BaseMenu.SubmenuTrigger>) {
+  return <BaseMenu.SubmenuTrigger className={clsx(row, 'data-popup-open:bg-hover', className)} {...props} />;
+}
+
 function Separator({ className, ...props }: WithClass<typeof BaseMenu.Separator>) {
   return <BaseMenu.Separator className={clsx('my-1 border-t border-line-subtle', className)} {...props} />;
 }
@@ -59,6 +64,8 @@ export const Menu = {
   RadioGroup: BaseMenu.RadioGroup,
   RadioItem,
   Separator,
+  SubmenuRoot: BaseMenu.SubmenuRoot,
+  SubmenuTrigger,
 };
 
 /** A menu that opens where the pointer right-clicks. */

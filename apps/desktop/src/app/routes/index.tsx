@@ -2,6 +2,7 @@ import type { CloneInfo } from '@alpine/protocol';
 import { createFileRoute, Navigate, useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 
+import { StartTopBar } from '@/app/ShellTopBar';
 import { NewProject } from '@/features/new-session/NewProject';
 import { Receiving } from '@/features/new-session/Receiving';
 import { CloneDialog } from '@/shared/components/project-add';
@@ -22,6 +23,17 @@ export const Route = createFileRoute('/')({
 });
 
 function NewProjectRoute() {
+  return (
+    <div className="flex min-w-0 grow flex-col">
+      <StartTopBar />
+      <div className="mx-2 mb-2 flex min-h-0 grow overflow-hidden rounded-xl border border-line bg-canvas">
+        <NewProjectPage />
+      </div>
+    </div>
+  );
+}
+
+function NewProjectPage() {
   const { agent, folder, project } = Route.useSearch();
   const navigate = useNavigate();
   const projects = useProjects();

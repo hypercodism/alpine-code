@@ -56,6 +56,13 @@ function mount(path: string, sessions: SessionInfo[], importable: ExternalSessio
 const rail = () => screen.findByRole('navigation', { name: '주 메뉴' });
 const projectRow = async (name: string) =>
   (await within(await rail()).findByRole('button', { name: new RegExp(`^${name} 열기`) })).parentElement!;
+/** A project's row in the project menu, where the rail's work went on the map: opens the menu if it is closed. */
+const menuRow = async (name: string) => {
+  if (!screen.queryByRole('list', { name: '최근 프로젝트' }))
+    fireEvent.click(await screen.findByRole('button', { name: /다른 프로젝트로/ }));
+  const list = await screen.findByRole('list', { name: '최근 프로젝트' });
+  return (await within(list).findByRole('button', { name: new RegExp(`^${name}(?! 메뉴)`) })).parentElement!;
+};
 
 beforeEach(() => {
   localStorage.clear();
@@ -89,7 +96,7 @@ afterEach(() => {
 
 describe('the rail knows the map (#25, #39, #66, #90)', () => {
   it('shows one word for a waiting map and a running build, and counts them in the filters', async () => {
-    mount('/board' + q(docs), [
+    mount('/session/readme', [
       sessionInfo({ id: 'readme', cwd: docs, title: 'README 다시 쓰기' }),
       sessionInfo({ id: 'plan', cwd: app, purpose: 'map', status: 'waiting' }),
       sessionInfo({ id: 'build', cwd: '/Users/me/infra-terraform', purpose: 'build', status: 'running' }),
@@ -104,14 +111,28 @@ describe('the rail knows the map (#25, #39, #66, #90)', () => {
     expect(within(filters).getByRole('button', { name: '새 결과 0' })).toBeTruthy();
   });
 
+  it('says the same words in the project menu on the map, with the orange dot for the one that waits', async () => {
+    mount('/board' + q(docs), [
+      sessionInfo({ id: 'readme', cwd: docs, title: 'README 다시 쓰기' }),
+      sessionInfo({ id: 'plan', cwd: app, purpose: 'map', status: 'waiting' }),
+      sessionInfo({ id: 'build', cwd: '/Users/me/infra-terraform', purpose: 'build', status: 'running' }),
+    ]);
+    expect(
+      await screen.findByRole('button', { name: 'docs-site · 다른 프로젝트로 · 다른 프로젝트가 기다려요' }),
+    ).toBeTruthy();
+    expect(within(await menuRow('alpine-code')).getByText('확인을 기다려요')).toBeTruthy();
+    expect(within(await menuRow('infra-terraform')).getByText('만드는 중')).toBeTruthy();
+    expect(within(await menuRow('docs-site')).queryByText(/확인을 기다려요|만드는 중|질문 대기/)).toBeNull();
+  });
+
   it('has nothing to unfold for a project whose conversations are all on its map', async () => {
-    mount('/board' + q(app), [sessionInfo({ id: 'plan', cwd: app, purpose: 'map' })]);
+    mount('/settings', [sessionInfo({ id: 'plan', cwd: app, purpose: 'map' })]);
     await projectRow('alpine-code');
     expect(within(await rail()).queryByRole('button', { name: /alpine-code (펼치기|접기)/ })).toBeNull();
   });
 
   it('keeps a build as a record that opens on the map, beside it', async () => {
-    const { router } = mount('/board' + q(app), [
+    const { router } = mount('/settings', [
       sessionInfo({ id: 'plan', cwd: app, purpose: 'map' }),
       sessionInfo({ id: 'build-1', cwd: app, purpose: 'build', title: 'Build the planned product' }),
     ]);
@@ -123,7 +144,7 @@ describe('the rail knows the map (#25, #39, #66, #90)', () => {
 
   it('will not archive or delete a project while its build runs', async () => {
     mount('/board' + q(app), [sessionInfo({ id: 'build', cwd: app, purpose: 'build', status: 'running' })]);
-    fireEvent.click(await screen.findByRole('button', { name: 'alpine-code 메뉴' }));
+    fireEvent.click(within(await menuRow('alpine-code')).getByRole('button', { name: 'alpine-code 메뉴' }));
     const archive = await screen.findByRole('menuitem', { name: '보관' });
     const remove = screen.getByRole('menuitem', { name: '삭제…' });
     expect(archive.getAttribute('aria-disabled')).toBe('true');
@@ -134,7 +155,7 @@ describe('the rail knows the map (#25, #39, #66, #90)', () => {
 describe('deleting (#22, #43, #68, #62, #56)', () => {
   it('says what really goes, and leaves the deleted project for another map', async () => {
     const { router } = mount('/board' + q(app), [sessionInfo({ id: 'readme', cwd: docs })]);
-    fireEvent.click(await screen.findByRole('button', { name: 'alpine-code 메뉴' }));
+    fireEvent.click(within(await menuRow('alpine-code')).getByRole('button', { name: 'alpine-code 메뉴' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: '삭제…' }));
     const dialog = await screen.findByRole('alertdialog');
     expect(within(dialog).getByText(/나만 보는 기억/)).toBeTruthy();
@@ -183,7 +204,7 @@ describe("a map's conversations open on the map (#24, #41, #64)", () => {
 describe('going back after opening a project (#19)', () => {
   it('goes back to the map before it instead of bouncing to the opened one', async () => {
     const { router } = mount('/board' + q(docs), []);
-    await projectRow('docs-site');
+    await screen.findByRole('main', { name: '제품 지도' });
     void router.navigate({ to: '/', search: { project: app } });
     await waitFor(() => expect(router.state.location.href).toBe('/board' + q(app)));
     router.history.back();
@@ -235,7 +256,7 @@ describe('Ctrl+Tab and search with a map (#24, #41)', () => {
 
   it("goes round the conversations of their own, past the map's, from the map too", async () => {
     const { router } = mount('/board' + q(app), sessions);
-    await projectRow('alpine-code');
+    await screen.findByRole('main', { name: '제품 지도' });
     ctrlTab();
     await waitFor(() => expect(router.state.location.pathname).toBe('/session/cart'));
     ctrlTab();
@@ -246,7 +267,7 @@ describe('Ctrl+Tab and search with a map (#24, #41)', () => {
 
   it("names the map's conversations as the rail does, and opens them on the map", async () => {
     const { router } = mount('/board' + q(docs), sessions);
-    await projectRow('docs-site');
+    await screen.findByRole('main', { name: '제품 지도' });
     fireEvent.keyDown(window, { key: 'k', metaKey: true });
     const list = await screen.findByRole('listbox', { name: '프로젝트와 대화 찾기' });
     expect(within(list).getByRole('option', { name: /^지도 대화/ })).toBeTruthy();
@@ -268,13 +289,13 @@ describe('a map whose project is gone (#62, #56)', () => {
     mount('/board' + q(gone), []);
     expect(await screen.findByText('old-shop 프로젝트가 목록에 없어요')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '다시 열기' }));
-    expect(await within(await rail()).findByRole('button', { name: /^old-shop 열기/ })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'old-shop · 다른 프로젝트로' })).toBeTruthy();
     await waitFor(() => expect(screen.queryByText('old-shop 프로젝트가 목록에 없어요')).toBeNull());
   });
 
   it('offers to restore an archived one, or to start something new', async () => {
     const { router } = mount('/board' + q(docs), []);
-    fireEvent.click(await screen.findByRole('button', { name: 'docs-site 메뉴' }));
+    fireEvent.click(within(await menuRow('docs-site')).getByRole('button', { name: 'docs-site 메뉴' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: '보관' }));
     // Archiving the open project moves on; an old link leads back to it.
     await waitFor(() => expect(router.state.location.search.project).not.toBe(docs));
@@ -290,7 +311,8 @@ describe('restarting to update (#18)', () => {
   it('asks first while the AI works, and waits when I say later', async () => {
     update.ready = '0.2.0';
     mount('/board' + q(app), [sessionInfo({ id: 'build', cwd: app, purpose: 'build', status: 'running' })]);
-    await within(await projectRow('alpine-code')).findByText('만드는 중');
+    await within(await menuRow('alpine-code')).findByText('만드는 중');
+    fireEvent.keyDown(screen.getByRole('list', { name: '최근 프로젝트' }), { key: 'Escape' });
     fireEvent.click(await screen.findByRole('button', { name: '다시 시작해서 업데이트' }));
     const dialog = await screen.findByRole('alertdialog');
     expect(within(dialog).getByText(/하던 작업이 멈춰요/)).toBeTruthy();
@@ -308,6 +330,7 @@ describe('restarting to update (#18)', () => {
       throw new Error('install failed');
     });
     mount('/board' + q(app), []);
+    await screen.findByRole('main', { name: '제품 지도' });
     fireEvent.click(await screen.findByRole('button', { name: '다시 시작해서 업데이트' }));
     expect(update.restart).toHaveBeenCalledOnce();
     expect((await screen.findByRole('alert')).textContent).toMatch(/업데이트하지 못했어요/);

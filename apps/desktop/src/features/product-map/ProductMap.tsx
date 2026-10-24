@@ -6,6 +6,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
+import { lookingAt } from '@/features/app-view/state';
+
 import { AgentChip, ModeChip, type Mode } from '@/shared/components/composer';
 import { ImportLink } from '@/shared/components/import-link';
 import { latestTaskForce, roomOf } from '@/shared/components/taskforce';
@@ -880,7 +882,9 @@ export function ProductMap({
       nextReview();
       return true;
     }
-    const about = aboutCard ? nodeOf(aboutCard) : null;
+    // A card's 부탁하기 names its card; looking at a screen in the app view names that screen (flow-spec 5.3).
+    const looking = lookingAt(cwd);
+    const about = aboutCard ? nodeOf(aboutCard) : looking ? nodeOf(looking) : null;
     if (about && text) {
       const taken = await askAbout(about, text);
       if (taken) setAboutCard(null);

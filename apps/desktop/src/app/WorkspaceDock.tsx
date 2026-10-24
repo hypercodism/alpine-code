@@ -56,12 +56,9 @@ export function WorkspaceDock({
   children: ReactNode;
 }) {
   const t = useMessages(messages);
-  const client = useQueryClient();
   const navigate = useNavigate();
   const [dockOpen] = useDockOpen();
-  // The 데이터 place is Alpine Cloud's: without it the place is not there and the sources are not even asked for.
-  const cloud = useCloudEnabled();
-  const hasData = useDataSources(cwd, dockOpen && cloud).data?.sources.some((source) => source.available) ?? false;
+  const [terminal, changed, source, ...rare] = useProjectTools({ cwd, sessionId, changes, enabled: dockOpen });
   return (
     <FileNavigationProvider
       key={cwd}
@@ -86,21 +83,8 @@ export function WorkspaceDock({
             bare: true,
             content: summary,
           },
-          {
-            id: 'terminal',
-            label: t.terminal,
-            icon: SquareTerminal,
-            bare: true,
-            content: (
-              <Terminal
-                key={cwd}
-                cwd={cwd}
-                sessionId={sessionId}
-                onOpenDevelopmentServer={() => showDockTab('servers')}
-              />
-            ),
-          },
-          { ...changes, icon: Diff },
+          terminal!,
+          changed!,
           {
             id: 'servers',
             label: t.preview,
@@ -109,43 +93,70 @@ export function WorkspaceDock({
             bare: true,
             content: <DevelopmentServers key={cwd} cwd={cwd} sessionId={sessionId} onAskFix={onAskFix} />,
           },
-          { id: 'source', label: t.source, icon: Folder, named: true, content: <FileViewer /> },
-          ...(hasData
-            ? [
-                {
-                  id: 'data',
-                  label: t.data,
-                  icon: Database,
-                  more: true,
-                  bare: true,
-                  content: <DataPlace key={cwd} cwd={cwd} />,
-                },
-              ]
-            : []),
-          {
-            id: 'processes',
-            label: t.processes,
-            icon: ListChecks,
-            more: true,
-            bare: true,
-            content: (
-              <ProcessControl
-                key={`${cwd}:${sessionId ?? ''}`}
-                cwd={cwd}
-                sessionId={sessionId}
-                onInspectProcess={(processId) => {
-                  client.setQueryData(['terminal-selection', cwd], processId);
-                  showDockTab('terminal');
-                }}
-              />
-            ),
-          },
+          { ...source!, named: true },
+          ...rare.map((tool) => ({ ...tool, more: true })),
         ]}
       >
         {children}
       </DockLayout>
     </FileNavigationProvider>
   );
+}
+
+/**
+ * A project's developer tools, in the dock's order: 터미널, 바뀐 파일 (the work result), 파일, then the rarer 데이터 (only
+ * with Alpine Cloud and a data source) and AI가 실행한 명령. The session page shows them as dock tabs; the map opens
+ * them one at a time in the conversation's place. `enabled` asks for the data sources only while they can be shown.
+ */
+export function useProjectTools({
+  cwd,
+  sessionId,
+  changes,
+  enabled = true,
+}: {
+  cwd: string;
+  sessionId?: string;
+  changes: DockTab;
+  enabled?: boolean;
+}): DockTab[] {
+  const t = useMessages(messages);
+  const client = useQueryClient();
+  // The 데이터 place is Alpine Cloud's: without it the place is not there and the sources are not even asked for.
+  const cloud = useCloudEnabled();
+  const hasData = useDataSources(cwd, enabled && cloud).data?.sources.some((source) => source.available) ?? false;
+  return [
+    {
+      id: 'terminal',
+      label: t.terminal,
+      icon: SquareTerminal,
+      bare: true,
+      content: (
+        <Terminal key={cwd} cwd={cwd} sessionId={sessionId} onOpenDevelopmentServer={() => showDockTab('servers')} />
+      ),
+    },
+    { ...changes, icon: Diff },
+    { id: 'source', label: t.source, icon: Folder, content: <FileViewer /> },
+    ...(hasData
+      ? [{ id: 'data', label: t.data, icon: Database, bare: true, content: <DataPlace key={cwd} cwd={cwd} /> }]
+      : []),
+    {
+      id: 'processes',
+      label: t.processes,
+      icon: ListChecks,
+      bare: true,
+      content: (
+        <ProcessControl
+          key={`${cwd}:${sessionId ?? ''}`}
+          cwd={cwd}
+          sessionId={sessionId}
+          onInspectProcess={(processId) => {
+            client.setQueryData(['terminal-selection', cwd], processId);
+            showDockTab('terminal');
+          }}
+        />
+      ),
+    },
+  ];
 }
 
 /**
