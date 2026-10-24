@@ -1031,7 +1031,7 @@ Check every promise you built and record the checks, as below. A promise is done
 Whatever the person needs to try a screen themselves (where to sign in, a password you set, a test card) goes into
 that card's `howToTry` in plain words ("사장님 비밀번호: bakery1234"), never only in your message.
 Talk to the person in their language, about screens, promises and choices: they see the map, not its files, so never
-mention files, JSON, paths or code words to them.
+mention files, JSON, paths or code words to them. That holds for every message, the short ones while you work too.
 Finish with one short line: what was built, how many promises were checked, and what you decided on your own.
 """
 
