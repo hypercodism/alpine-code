@@ -285,18 +285,16 @@ describe('새 프로젝트, as the audit walked it', () => {
     expect(await screen.findByRole('heading', { name: '무엇을 만들어 볼까요?' })).toBeTruthy();
   });
 
-  it('#59: 새 프로젝트 is in no project: the top bar names none and the rail marks none', async () => {
+  it('#59: 새 프로젝트 is in no project: the top bar names none and the menu marks none', async () => {
     useNavigation.setState({ lastProject: PROJECTS[0]!.path });
     const { router } = mount({ path: `/board?project=${encodeURIComponent(PROJECTS[0]!.path)}` });
-    const rail = await screen.findByRole('navigation');
-    await waitFor(() => expect(rail.querySelector('[aria-current="location"]')).not.toBeNull());
+    expect(await screen.findByRole('button', { name: `${PROJECTS[0]!.name} · 다른 프로젝트로` })).toBeTruthy();
     await go(router, '/');
     await screen.findByRole('heading', { name: '무엇을 만들어 볼까요?' });
-    expect(rail.querySelector('[aria-current="location"]')).toBeNull();
-    // With the rail hidden, the top bar does not name the last project either.
-    fireEvent.click(screen.getByRole('button', { name: '사이드바 닫기' }));
-    const bar = screen.getByRole('button', { name: '사이드바 열기' }).parentElement!;
-    expect(bar.textContent).not.toContain(PROJECTS[0]!.name);
+    const name = screen.getByRole('button', { name: '새 프로젝트 · 다른 프로젝트로' });
+    fireEvent.click(name);
+    const list = await screen.findByRole('list', { name: '최근 프로젝트' });
+    expect(list.querySelector('[aria-current]')).toBeNull();
   });
 
   it('#61: when the project was made but the AI did not start, 다시 시작 plans the same idea on its map', async () => {

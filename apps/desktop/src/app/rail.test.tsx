@@ -114,7 +114,9 @@ describe('independent project browsing', () => {
     const { router } = mount('/session/readme');
     fireEvent.click(await screen.findByRole('button', { name: 'alpine-code 열기' }));
     await waitFor(() => expect(router.state.location.href).toBe('/board' + q(app)));
-    fireEvent.click(screen.getByRole('button', { name: 'docs-site 열기' }));
+    // On the map the rail's place is the project menu, under the project's name.
+    fireEvent.click(await screen.findByRole('button', { name: /^alpine-code · 다른 프로젝트로/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /^docs-site(?! 메뉴)/ }));
     await waitFor(() => expect(router.state.location.href).toBe('/board' + q(docs)));
   });
 
@@ -125,7 +127,7 @@ describe('independent project browsing', () => {
   });
 
   it('starts nothing in a project from the rail: a project is its map, and 새 프로젝트 is the one new thing', async () => {
-    const { router } = mount('/board' + q(app));
+    const { router } = mount('/session/cart');
     expect(screen.queryByRole('link', { name: /에서 새 세션/ })).toBeNull();
     const top = within(await rail()).getByRole('link', { name: /새 프로젝트\s*⌘N/ });
     expect(top.getAttribute('href')).toBe('/');
@@ -152,9 +154,11 @@ describe('independent project browsing', () => {
 
   it('keeps project pages when changing project, and ⌘N opens 새 프로젝트 from anywhere', async () => {
     const { router } = mount('/board' + q(app));
-    fireEvent.click(await screen.findByRole('button', { name: 'docs-site 열기' }));
+    fireEvent.click(await screen.findByRole('button', { name: /^alpine-code · 다른 프로젝트로/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /^docs-site(?! 메뉴)/ }));
     await waitFor(() => expect(router.state.location.href).toBe('/board' + q(docs)));
-    fireEvent.click(within(await rail()).getByRole('link', { name: '설정' }));
+    fireEvent.click(await screen.findByRole('button', { name: '더 보기' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /설정/ }));
     await waitFor(() => expect(router.state.location.pathname).toBe('/settings'));
     fireEvent.keyDown(window, { key: 'n', metaKey: true });
     await waitFor(() => expect(router.state.location.href).toBe('/'));
@@ -230,7 +234,8 @@ describe('independent project browsing', () => {
   });
 
   it('renames, pins, archives and undoes an archive without losing history', async () => {
-    const { connection } = mount('/session/cart');
+    const { connection } = mount('/session/readme');
+    fireEvent.click(await toggle('alpine-code', false));
     fireEvent.click(await screen.findByRole('button', { name: '장바구니 고치기 메뉴' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: '이름 바꾸기…' }));
     const input = await screen.findByRole('textbox', { name: '대화 이름' });
@@ -336,6 +341,8 @@ describe('independent project browsing', () => {
     await useNavigation.persist.rehydrate();
     const reopened = mount('/');
     await waitFor(() => expect(reopened.router.state.location.href).toBe('/board' + q(docs)));
+    // The map has no rail; the expansion is there again on a page that has one.
+    await reopened.router.navigate({ to: '/settings' });
     await toggle('alpine-code', true);
     await toggle('docs-site', true);
     expect(useNavigation.getState().lastSessions[docs]).toBe('readme');

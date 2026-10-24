@@ -3,7 +3,7 @@ import { createMemoryHistory, createRouter, RouterProvider } from '@tanstack/rea
 import { act, cleanup, fireEvent, render, renderHook, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useDockOpen, useDockTab } from '@/features/dock/state';
+import { showDockTab, useDockOpen, useDockTab } from '@/features/dock/state';
 import { blogBoard, blogConversation, type PlanMoment } from '@/features/product-map/planExample';
 import { boardScript } from '@/features/product-map/testBoard';
 import { LocaleProvider } from '@/shared/i18n';
@@ -110,35 +110,32 @@ afterEach(() => {
 });
 
 describe('앱 열기 (#7)', () => {
-  it('starts the project the way it runs and shows it, with no command to type', async () => {
+  it('starts the project the way it runs and shows it in the app view, with no command to type', async () => {
     const { request } = mount('built');
     fireEvent.click(await screen.findByRole('button', { name: '앱 열기' }));
-    const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
-    expect(within(dock).getByRole('tab', { name: '앱 미리보기', selected: true })).toBeTruthy();
-    expect(await within(dock).findByTitle('미리보기', {}, { timeout: 3000 })).toBeTruthy();
+    // The app takes the map's place, large, with the top bar's 지도 | 앱 on 앱.
+    expect(await screen.findByTitle('alpine-code 앱', {}, { timeout: 3000 })).toBeTruthy();
+    expect(screen.getByText('앱이 열려 있어요 · 이 컴퓨터에서만 보여요')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '앱', pressed: true })).toBeTruthy();
     expect(request).toHaveBeenCalledWith('devServers/open', expect.objectContaining({ cwd }));
     expect(request.mock.calls.some(([method]) => method === 'devServers/start')).toBe(false);
-    // The command and the port are there, folded under 고급.
-    const advanced = within(dock).getByText('고급').closest('details')!;
-    expect(advanced.open).toBe(false);
-    expect(within(advanced).getByRole('textbox', { hidden: true })).toBeTruthy();
   });
 
   it('hands it to the AI, not me, when nothing in the project says how it runs', async () => {
     const { request } = mount('built', { results: { 'devServers/open': { server: null } } });
     fireEvent.click(await screen.findByRole('button', { name: '앱 열기' }));
-    const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
-    expect(await within(dock).findByText(/여는 방법을 아직 몰라요/)).toBeTruthy();
-    // The command form stays folded: no one is asked to type a command.
-    expect(within(dock).getByText('고급').closest('details')!.open).toBe(false);
+    expect(await screen.findByText(/여는 방법을 아직 몰라요/)).toBeTruthy();
+    const app = screen.getByRole('region', { name: '앱' });
     // Once the AI has made it ready, the app is opened again from here.
-    expect(within(dock).getByRole('button', { name: '다시 열기' })).toBeTruthy();
-    fireEvent.click(within(dock).getByRole('button', { name: 'AI에게 열 수 있게 해 달라고 하기' }));
+    expect(within(app).getByRole('button', { name: '다시 열기' })).toBeTruthy();
+    fireEvent.click(within(app).getByRole('button', { name: 'AI에게 열 수 있게 해 달라고 하기' }));
     await vi.waitFor(() => {
       const sent = request.mock.calls.find(([, params]) => JSON.stringify(params ?? {}).includes('PORT 환경변수'));
       expect(sent?.[0]).toBe('flow/prepare');
     });
-    expect(within(dock).getByRole('tab', { name: '대화', selected: true })).toBeTruthy();
+    // The conversation is what the right side shows, not a tool.
+    const dock = screen.getByRole('complementary', { name: '오른쪽 창' });
+    expect(within(dock).queryByRole('button', { name: '대화' })).toBeNull();
   });
 });
 
@@ -161,13 +158,15 @@ describe('앱 열기 that fails (#7)', () => {
         'devServers/logs': ({ offset }) => ({ text: offset ? '' : log, nextOffset: log.length, total: log.length }),
       },
     });
+    act(() => showDockTab('terminal'));
     fireEvent.click(await screen.findByRole('button', { name: '앱 열기' }));
-    const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
-    expect(await within(dock).findByText('앱을 열지 못했어요. AI가 실행 기록을 보고 고칠 수 있어요.')).toBeTruthy();
-    expect(within(dock).getByRole('button', { name: '다시 열기' })).toBeTruthy();
+    expect(await screen.findByText('앱을 열지 못했어요')).toBeTruthy();
+    const app = screen.getByRole('region', { name: '앱' });
+    expect(within(app).getByRole('button', { name: '다시 열기' })).toBeTruthy();
     // The output has arrived before the button is pressed.
     await vi.waitFor(() => expect(request).toHaveBeenCalledWith('devServers/logs', expect.anything()));
-    fireEvent.click(within(dock).getByRole('button', { name: 'AI에게 고쳐 달라고 하기' }));
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+    fireEvent.click(within(app).getByRole('button', { name: 'AI에게 고쳐 달라고 하기' }));
     await vi.waitFor(() => {
       const sent = request.mock.calls.find(([, params]) => JSON.stringify(params ?? {}).includes('Cannot find module'));
       // A request to the map, as if typed into its input.
@@ -176,7 +175,9 @@ describe('앱 열기 that fails (#7)', () => {
       expect(JSON.stringify(sent![1])).toContain('npm run dev');
       expect(JSON.stringify(sent![1])).not.toContain('\\u001b');
     });
-    expect(within(dock).getByRole('tab', { name: '대화', selected: true })).toBeTruthy();
+    // The terminal that was open gives way to the conversation, where the fixing shows.
+    const dock = screen.getByRole('complementary', { name: '오른쪽 창' });
+    expect(within(dock).queryByRole('button', { name: '대화' })).toBeNull();
   });
 });
 
@@ -187,7 +188,8 @@ describe('올리기 from the map (#13, #23)', () => {
     fireEvent.click(within(line).getByRole('button', { name: '인터넷에 올리기' }));
     // Signed out, the sheet asks for the account first.
     expect(await screen.findByText('인터넷에 올리려면 Alpine 계정이 필요해요. 무료예요.')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /^올리기/ })).toBeTruthy();
+    // The completion card holds 인터넷에 올리기, so the top bar has no button of its own for a plan.
+    expect(screen.queryByRole('button', { name: /^올리기/ })).toBeNull();
   });
 
   it('promises nothing online when Alpine Cloud is off', async () => {
@@ -201,7 +203,7 @@ describe('올리기 from the map (#13, #23)', () => {
 describe('a plan stays quiet until it is built', () => {
   it.each([['asking'], ['building']] as const)('offers no 올리기 while it is %s', async (moment) => {
     mount(moment, {}, { build: moment === 'building' ? { status: 'running' } : {} });
-    await screen.findByRole('button', { name: '사이드바 열기' });
+    await screen.findByRole('button', { name: /다른 프로젝트로/ });
     // The top bar's word comes from the map, so once it shows the map has been read.
     await screen.findByText(moment === 'asking' ? '기획 중' : '만드는 중');
     expect(screen.queryByRole('button', { name: /^올리기/ })).toBeNull();
@@ -287,14 +289,15 @@ describe('the top bar on the map (#10)', () => {
     ['built', {}, '다 만들었어요'],
   ] as const)('says where a plan stands: %s %o is %s', async (moment, build, word) => {
     mount(moment, {}, { build });
-    const bar = (await screen.findByRole('button', { name: '사이드바 열기' })).parentElement!;
+    await screen.findByRole('main', { name: '제품 지도' });
+    const bar = screen.getByRole('button', { name: /다른 프로젝트로/ }).parentElement!;
     expect(await within(bar).findByText(word)).toBeTruthy();
   });
 
-  it("names the dock tab of the map's conversation 대화 (#88)", async () => {
+  it("keeps the map's conversation on the right with no row of tabs (#88)", async () => {
     mount('built');
     const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
-    expect(within(dock).getByRole('tab', { name: '대화' })).toBeTruthy();
+    expect(within(dock).queryByRole('tablist')).toBeNull();
     expect(within(dock).queryByRole('tab', { name: '요약' })).toBeNull();
   });
 });
@@ -303,7 +306,8 @@ describe('되돌리기 from the data (#49)', () => {
   it('opens the restore points from the live data, and goes back to the data', async () => {
     mount('built', {}, { account: { signedIn: true, data: 'live' } });
     const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
-    fireEvent.click(await within(dock).findByRole('button', { name: '더보기' }));
+    fireEvent.click(await within(dock).findByRole('button', { name: '더 보기' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: '개발 도구' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: '데이터' }));
     fireEvent.click(await within(dock).findByRole('button', { name: '되돌리기 지점' }));
     expect(await within(dock).findByRole('radiogroup', { name: '되돌리기 지점' })).toBeTruthy();

@@ -40,8 +40,9 @@ function useRailOpen(): [boolean, () => void] {
 }
 
 /**
- * The window: a top bar across the top, and under it the rail (where) beside a floating card holding the rest. Routes
- * fill the card: the centre (what happened) and, for a session or the product map, the right dock (work result, later surfaces) on its right.
+ * The window. On the map and 새 프로젝트, the page fills it and draws its own bar (no rail). Elsewhere (a conversation,
+ * settings, agents, the memory): a top bar across the top, and under it the rail (where) beside a floating card
+ * holding the rest: the centre (what happened) and, for a session, the right dock on its right.
  */
 export const Route = createRootRoute({
   component: Root,
@@ -64,18 +65,35 @@ function Root() {
   useForgetFinished(onNewSession);
   const newSession = useNewSessionShortcut();
   useAppMenu(railOpen, { newSession, openFolder, toggleRail });
+  // The map and 새 프로젝트 have no rail: the project's name ⌄ and ⋯ do its work, and the page draws its own bar
+  // (flow-spec, 화면의 뼈대).
+  const framed = useRouterState({
+    select: (state) => {
+      const id = state.matches.at(-1)?.routeId;
+      return id === '/board' || id === '/';
+    },
+  });
+  const content = (
+    <div key={page} className="motion-page flex min-h-0 min-w-0 grow">
+      {!waiting && <Outlet />}
+    </div>
+  );
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-canvas-sunken">
-      <TopBar railOpen={railOpen} onToggleRail={toggleRail} />
+      {!framed && <TopBar railOpen={railOpen} onToggleRail={toggleRail} />}
       <EngineStopped />
-      <div className="flex min-h-0 grow">
-        <Rail open={railOpen} />
-        <div className="mr-2 mb-2 flex min-w-0 grow overflow-hidden rounded-xl border border-line bg-canvas">
-          <div key={page} className="motion-page flex min-h-0 min-w-0 grow">
-            {!waiting && <Outlet />}
+      {framed ? (
+        content
+      ) : (
+        <div className="flex min-h-0 grow">
+          <Rail open={railOpen} />
+          <div className="mr-2 mb-2 flex min-w-0 grow overflow-hidden rounded-xl border border-line bg-canvas">
+            {content}
           </div>
         </div>
-      </div>
+      )}
+      {/* Kept in one place whatever the page, so going between them never starts them over (opening the app
+          goes back to the last map only once). */}
       <NavigationController onRestored={restored} />
       <FirstRun auto={onNewSession && !restoring} />
       <DroppedSkillsDialog outcome={dropped} onClose={closeDropped} />

@@ -48,7 +48,7 @@ afterEach(() => {
 describe('the update button', () => {
   it('stays away until a newer version has downloaded', async () => {
     mount();
-    await screen.findByRole('button', { name: '뒤로' });
+    await screen.findByRole('button', { name: '더 보기' });
     expect(screen.queryByRole('button', { name: '다시 시작해서 업데이트' })).toBeNull();
   });
 

@@ -323,11 +323,12 @@ describe('a deleted map starts over from the code (#72)', () => {
 });
 
 describe('the same words everywhere (#47, #54, #67, #74, #77, #80, #84, #89)', () => {
-  it('says there is no project yet on a first rail', async () => {
+  it('says there is no project yet in a first project menu', async () => {
     mount('/', { extra: { results: { 'projects/list': { projects: [], clones: [] } } } });
-    const rail = await screen.findByRole('navigation', { name: '주 메뉴' });
-    expect(await within(rail).findByText('아직 프로젝트가 없어요.')).toBeTruthy();
-    expect(within(rail).queryByText('이곳에 표시할 대화가 없어요.')).toBeNull();
+    fireEvent.click(await screen.findByRole('button', { name: /다른 프로젝트로/ }));
+    const list = await screen.findByRole('list', { name: '최근 프로젝트' });
+    expect(await within(list).findByText('아직 프로젝트가 없어요.')).toBeTruthy();
+    expect(screen.queryByText('이곳에 표시할 대화가 없어요.')).toBeNull();
   });
 
   it('names the connection settings one way, shows the version plainly, and asks for a missing key with a button', async () => {
@@ -348,14 +349,14 @@ describe('the same words everywhere (#47, #54, #67, #74, #77, #80, #84, #89)', (
     expect(screen.queryByText(/프로토콜/)).toBeNull();
   });
 
-  it('names the dock’s places in plain words, the ones used most beside their icons', async () => {
+  it('names the developer tools in plain words under ⋯ beside the map', async () => {
     mount('/board' + q(app));
     const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
-    for (const name of ['대화', '앱 미리보기', '파일'])
-      expect(within(dock).getByRole('tab', { name }).textContent).toBe(name);
-    expect(within(dock).getByRole('tab', { name: '바뀐 파일' }).textContent).toBe('');
-    fireEvent.click(within(dock).getByRole('button', { name: '더보기' }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'AI가 실행한 명령' }));
+    fireEvent.click(within(dock).getByRole('button', { name: '더 보기' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: '개발 도구' }));
+    for (const name of ['터미널', '바뀐 파일', '파일', 'AI가 실행한 명령'])
+      expect(await screen.findByRole('menuitem', { name })).toBeTruthy();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'AI가 실행한 명령' }));
     expect(await within(dock).findByText('AI가 실행한 명령이 없어요.')).toBeTruthy();
   });
 
@@ -368,7 +369,7 @@ describe('the same words everywhere (#47, #54, #67, #74, #77, #80, #84, #89)', (
   });
 
   it('calls a conversation 대화, and its build record by plain words', async () => {
-    mount('/board' + q(app), {
+    mount('/session/plain', {
       sessions: [
         { info: sessionInfo({ id: 'plain', cwd: app, title: '' }) },
         { info: sessionInfo({ id: 'build-1', cwd: app, purpose: 'build', title: 'Build the planned product' }) },

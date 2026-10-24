@@ -4,16 +4,13 @@ import { ArrowLeft, ArrowRight, GitBranch, PanelLeft } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
 import { DockToggle } from '@/features/dock/Dock';
-import { useMapTalk } from '@/features/product-map/mapTalk';
-import { MapStatusWord } from '@/features/product-map/MapStatus';
-import { planPhase } from '@/features/product-map/planData';
 import { PublishButton } from '@/features/publish/PublishButton';
-import { usePublishable } from '@/features/publish/publishRequest';
+import { useCurrentProject } from '@/features/rail/currentProject';
 import { useWorkResult } from '@/features/work-result/useWorkResult';
 import { StatusWord } from '@/shared/components/status';
 import { useMessages } from '@/shared/i18n';
 import { restartToUpdate, useUpdateCheck, useUpdateReady } from '@/shared/platform';
-import { useCloudEnabled, useProductMap, useProjectGit, useProjects, useSession } from '@/shared/server';
+import { useCloudEnabled, useProjectGit, useProjects, useSession } from '@/shared/server';
 
 import { menuMessages, messages } from './messages';
 import { useWorkRunning } from './useWorkRunning';
@@ -22,16 +19,18 @@ const iconButton =
   'inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-fg-muted hover:bg-hover hover:text-fg';
 
 /**
- * The one line over the whole window: room for the traffic lights, the sidebar button, back and forward, then for a
- * session where it runs (project, branch) and its state (on the product map, the project), at the far end the dock button, and after it the update button once a new version is ready. The bar and its
- * empty parts drag the window; the buttons never do. 새 프로젝트 is in no project, so it names none.
+ * The line over the pages away from the map (a conversation, settings, agents, the memory): room for the traffic
+ * lights, the sidebar button, back and forward, then for a session where it runs (project, branch) and its state, else
+ * the project's name leading back to its map; at the far end the dock button, and after it the update button once a
+ * new version is ready. The bar and its empty parts drag the window; the buttons never do. The map and 새 프로젝트 have
+ * their own bar (ShellTopBar).
  */
 export function TopBar({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail: () => void }) {
   const t = useMessages(messages);
   const router = useRouter();
   const match = useMatch({ from: '/session/$sessionId', shouldThrow: false });
-  const board = useMatch({ from: '/board', shouldThrow: false });
   const memory = useMatch({ from: '/memory', shouldThrow: false });
+  const current = useCurrentProject();
   return (
     <div data-tauri-drag-region className="flex h-11.5 shrink-0 items-center gap-1 bg-canvas-sunken pr-3 pl-20">
       <button
@@ -51,12 +50,9 @@ export function TopBar({ railOpen, onToggleRail }: { railOpen: boolean; onToggle
       </button>
       {match ? (
         <SessionPart sessionId={match.params.sessionId} />
-      ) : board ? (
-        <BoardPart project={board.search.project} sessionId={board.search.session ?? null} />
-      ) : memory ? (
-        <ProjectName project={memory.search.project} />
       ) : (
-        <span data-tauri-drag-region className="grow self-stretch" />
+        // Settings, agents and the memory are away from the map: the project's name leads back to it.
+        <ProjectName project={memory?.search.project ?? current ?? undefined} />
       )}
       <UpdateButton />
     </div>
@@ -68,7 +64,7 @@ export function TopBar({ railOpen, onToggleRail }: { railOpen: boolean; onToggle
  * work, so while it works this asks first; a restart that fails says so instead of doing nothing. While "업데이트
  * 확인…" checks or downloads, it says so here at once.
  */
-function UpdateButton() {
+export function UpdateButton() {
   const t = useMessages(menuMessages);
   const version = useUpdateReady();
   const phase = useUpdateCheck((state) => state.phase);
@@ -181,44 +177,9 @@ function SessionPart({ sessionId }: { sessionId: string }) {
 }
 
 /**
- * The project of the product map and where the map stands (기획 중, 만드는 중…), 올리기 when it has a web app to put
- * online (Alpine Cloud), and the dock button counting the changed files of the attached session.
+ * The project name with ←, on a page with no dock (settings, agents, the memory); pressed, it goes back to the
+ * project's map. With no project yet, nothing.
  */
-function BoardPart({ project, sessionId }: { project?: string; sessionId: string | null }) {
-  const projects = useProjects();
-  const result = useWorkResult(sessionId, project);
-  const listed = projects.data?.projects.find((p) => p.path === project);
-  const name = project && (listed?.name ?? project.split('/').pop());
-  // The board renders no dock for a project that is missing or archived, so the toggle would open nothing.
-  const shown = !!listed && !listed.archived;
-  const cloud = useCloudEnabled();
-  // A plan is put on the internet once it is built, not while it is still being planned or made.
-  const board = useProductMap(shown ? (project ?? '') : '').data;
-  const unbuilt = !!board?.planned && planPhase(board, false, false) !== 'built';
-  const publishable = usePublishable(shown ? (project ?? '') : '', cloud && shown && !unbuilt);
-  // The AI's fixes from the sheet go where the map's words go.
-  const { talkTo } = useMapTalk(shown ? (project ?? '') : '');
-  return (
-    <>
-      <Drag className="ml-3 gap-2">
-        {name && (
-          <span className="truncate text-body font-medium" title={project}>
-            {name}
-          </span>
-        )}
-        {shown && project && <MapStatusWord cwd={project} className="ml-1" />}
-      </Drag>
-      {publishable && project && name && (
-        <div className="mr-2 shrink-0">
-          <PublishButton cwd={project} name={name} sessionId={talkTo} />
-        </div>
-      )}
-      {shown && <DockToggle files={result?.files.length} />}
-    </>
-  );
-}
-
-/** The project name, on a page with no dock (the memory); pressed, it goes back to the project's map. */
 function ProjectName({ project }: { project?: string }) {
   const t = useMessages(messages);
   const projects = useProjects();
@@ -231,9 +192,10 @@ function ProjectName({ project }: { project?: string }) {
           to="/board"
           search={{ project }}
           title={t.openMapOf(name)}
-          className="truncate rounded-md px-1 text-body font-medium hover:bg-hover"
+          className="inline-flex min-w-0 items-center gap-1 rounded-md px-1 text-body font-medium hover:bg-hover"
         >
-          {name}
+          <ArrowLeft size={14} strokeWidth={1.6} aria-hidden="true" className="shrink-0 text-fg-muted" />
+          <span className="truncate">{name}</span>
         </Link>
       )}
     </Drag>
