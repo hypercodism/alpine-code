@@ -3305,6 +3305,19 @@
           ],
           "type": "string"
         },
+        "path": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "pattern": "^/([^/\\s]\\S*)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "tags": {
           "items": {
             "maxLength": 40,
@@ -4053,6 +4066,21 @@
           "maxLength": 60,
           "type": "string"
         },
+        "device": {
+          "anyOf": [
+            {
+              "enum": [
+                "phone",
+                "computer"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "nodeIds": {
           "items": {
             "type": "string"
@@ -4286,6 +4314,19 @@
             "data"
           ],
           "type": "string"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "pattern": "^/([^/\\s]\\S*)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "tags": {
           "items": {
@@ -6369,6 +6410,21 @@
           "default": "",
           "maxLength": 60,
           "type": "string"
+        },
+        "device": {
+          "anyOf": [
+            {
+              "enum": [
+                "phone",
+                "computer"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "nodeIds": {
           "items": {

@@ -1684,6 +1684,9 @@ class FeatureFile(Message):
     title: str = Field(min_length=1, max_length=120)
     description: str = Field(default="", max_length=4000)
     kind: Literal["screen", "api", "sdk", "process", "data"] = "process"
+    path: str | None = Field(default=None, max_length=200, pattern=r"^/([^/\s]\S*)?$")
+    """For a screen: its address inside the running app (``/reservations``), written when the screen is built, so the
+    app view can open that screen. A path only, never a scheme or host."""
     tags: list[Annotated[str, Field(min_length=1, max_length=40)]] = Field(default_factory=list, max_length=50)
     """A few short words for finding the card: the product part or topic it belongs to (결제, 관리자). The agent's
     choice; there is no fixed list."""
@@ -1769,6 +1772,9 @@ class ProductFlow(Message):
     actor: str = Field(default="", max_length=60)
     """Who walks this journey, in the product's own words (손님, 사장님, 다른 화면을 만드는 개발자). Journeys with the
     same actor sit together on the person-first map; empty until the map names one."""
+    device: Literal["phone", "computer"] | None = None
+    """What the person on this journey uses it on: ``phone`` on the go, ``computer`` for desk work (staff, admin).
+    Set when planning; a computer journey's screens are drawn at desktop width. Empty on maps made before 2026-10-25."""
     node_ids: list[str] = Field(default_factory=list, max_length=200)
     """The journey's steps: card ids, or ``flow:<flow id>`` for a step that calls another flow (the ways to one result
     gathered in their own flow, e.g. connecting a model). Edges use the same ids."""

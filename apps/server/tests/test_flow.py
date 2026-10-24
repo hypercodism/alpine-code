@@ -970,6 +970,7 @@ def test_planning_starts_from_words_with_the_planning_skill(proj):
     assert not prepare(proj, action="discover", nodeId=None, flowId=None).board.document.nodes
     assert get(proj).planned  # a map that began as a plan stays one
     assert '<skill_content name="product-planning">' in prepared.prompt and "ask_user" in prepared.prompt
+    assert "a `device` (phone or computer)" in prepared.prompt and "about 1280 px wide" in prepared.prompt
     assert "Do not record checks" not in prepared.prompt and "ALREADY implemented" not in prepared.prompt
     with pytest.raises(MethodError, match="Describe"):
         prepare(proj, action="plan", request=" ", nodeId=None, flowId=None)
@@ -980,6 +981,7 @@ def test_building_a_plan_goes_on_without_asking_and_checks_the_promises(proj):
     prepared = prepare(proj, action="build", request="이대로 만들어 주세요.", nodeId=None, flowId=None)
     assert "Choose your own order" in prepared.prompt and '"by": "ai"' in prepared.prompt
     assert "new unique `id`" in prepared.prompt  # building records checks
+    assert "write `path`" in prepared.prompt  # so the app view can open each built screen
     assert "<skill_content" not in prepared.prompt  # the skill came with the plan, in the same conversation
 
 
@@ -1042,6 +1044,42 @@ def test_a_card_keeps_its_decisions(proj):
     write_map(proj, features=[{"id": "order", "title": "Order", "decisions": [decision], "tentative": True}])
     [node] = get(proj).document.nodes
     assert (node.decisions[0].answer, node.decisions[0].by, node.tentative) == ("나만", "ai", True)
+
+
+def test_a_journey_keeps_its_device_and_a_screen_its_path(proj):
+    write_map(
+        proj,
+        features=[
+            {"id": "order", "title": "Order", "kind": "screen", "path": "/orders?tab=open"},
+            {"id": "pay", "title": "Pay"},
+        ],
+        flows=[
+            {"id": "web", "title": "Order", "device": "phone", "nodeIds": ["order", "pay"]},
+            {"id": "admin", "title": "Manage", "device": "computer", "nodeIds": ["order"]},
+            {"id": "sdk", "title": "Old map", "nodeIds": ["pay"]},
+        ],
+    )
+    board = get(proj)
+    assert not board.problems
+    assert {f.id: f.device for f in board.document.flows} == {"admin": "computer", "sdk": None, "web": "phone"}
+    assert {n.id: n.path for n in board.document.nodes} == {"order": "/orders?tab=open", "pay": None}
+    actor_flow(FlowActorParams(cwd=str(proj), flow_ids=["admin"], actor="관리자"))  # rewriting a flow keeps its device
+    assert json.loads((proj / BASE / "flows/admin.json").read_text())["device"] == "computer"
+
+
+@pytest.mark.parametrize(
+    "path", ["orders", "https://shop.example/orders", "//shop.example/orders", "/a b", "/" + "x" * 200]
+)
+def test_a_screen_path_is_an_address_inside_the_app(proj, path):
+    write_map(proj, features=[{"id": "order", "title": "Order", "path": path}], flows=[])
+    board = get(proj)
+    assert not board.document.nodes and any(p.file.endswith("features/order.json") for p in board.problems)
+
+
+def test_a_journey_device_is_phone_or_computer(proj):
+    write_map(proj, flows=[{"id": "web", "title": "Order", "device": "tablet", "nodeIds": ["order"]}])
+    board = get(proj)
+    assert not board.document.flows and any(p.file.endswith("flows/web.json") for p in board.problems)
 
 
 def test_branch_is_attached_and_existing_work_survives(proj):

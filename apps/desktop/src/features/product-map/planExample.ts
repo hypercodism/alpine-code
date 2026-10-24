@@ -5,7 +5,7 @@ import type { Item } from '@/shared/server';
 /**
  * What the AI might write into the map files for "개발 블로그 만들어 줘", for the stories: two people, six screens
  * drawn with the theme tokens, the promises it assumes, and how the plan stands at three moments (asking, building,
- * built).
+ * built). The visitor reads on a phone; the writer writes at a computer, so the writer's screens are desktop wide.
  */
 
 const tag = (text: string) => `<span class="rounded-card bg-surface px-3 py-1 text-xs text-muted">${text}</span>`;
@@ -55,7 +55,7 @@ const comment = `<div class="px-5 py-6">
     <div><p class="text-sm font-semibold">한결</p><p class="mt-1 text-sm leading-6">네, 하나라도 실패하면 아무것도 반영되지 않아요.</p></div></div>
 </div>`;
 
-const login = `<div class="flex min-h-[520px] flex-col justify-center px-8">
+const login = `<div class="mx-auto flex min-h-[640px] max-w-sm flex-col justify-center px-8">
   <p class="font-display text-2xl font-bold">개발자의 기록</p>
   <p class="mt-2 text-sm text-muted">글쓴이만 로그인해요</p>
   <div class="mt-8 rounded-card border border-line px-4 py-3 text-sm text-muted">you@example.com</div>
@@ -63,23 +63,35 @@ const login = `<div class="flex min-h-[520px] flex-col justify-center px-8">
   <p class="mt-4 text-center text-xs text-muted">비밀번호 없이 들어와요</p>
 </div>`;
 
-const write = `<div class="px-5 py-5">
-  <div class="flex items-center justify-between text-sm">
-    <span class="text-muted">임시 저장됨</span>
-    <span class="rounded-card bg-accent px-4 py-1.5 text-on-accent">발행</span>
+const write = `<div class="flex min-h-[760px] flex-col">
+  <div class="flex items-center justify-between border-b border-line px-8 py-4 text-sm">
+    <span class="font-display text-lg font-bold">개발자의 기록</span>
+    <span class="flex items-center gap-4"><span class="text-muted">임시 저장됨</span>
+    <span class="rounded-card bg-accent px-4 py-1.5 text-on-accent">발행</span></span>
   </div>
-  <p class="font-display mt-6 text-2xl font-bold text-muted">제목을 입력하세요</p>
-  <div class="mt-5 flex flex-col gap-3 text-[15px] leading-7">
-    <p><span class="text-muted">##</span> 시작하며</p>
-    <p>D1을 쓰다가 막힌 이야기.</p>
-    <p class="rounded-card bg-surface p-3 text-xs leading-5">\`\`\`ts<br>await db.batch([...])<br>\`\`\`</p>
-    <p class="text-muted">- 배운 점</p>
+  <div class="grid grow grid-cols-2">
+    <div class="border-r border-line px-10 py-8">
+      <p class="font-display text-3xl font-bold text-muted">제목을 입력하세요</p>
+      <div class="mt-6 flex flex-col gap-3 text-[15px] leading-7">
+        <p><span class="text-muted">##</span> 시작하며</p>
+        <p>D1을 쓰다가 막힌 이야기.</p>
+        <p class="rounded-card bg-surface p-3 text-xs leading-5">\`\`\`ts<br>await db.batch([...])<br>\`\`\`</p>
+        <p class="text-muted">- 배운 점</p>
+      </div>
+    </div>
+    <div class="px-10 py-8">
+      <p class="text-xs text-muted">미리 보기</p>
+      <h2 class="font-display mt-4 text-xl font-bold">시작하며</h2>
+      <p class="mt-2 text-[15px] leading-7">D1을 쓰다가 막힌 이야기.</p>
+      <pre class="mt-3 rounded-card bg-surface p-3 text-xs leading-5">await db.batch([...])</pre>
+      <ul class="mt-3 list-disc pl-5 text-[15px] leading-7"><li>배운 점</li></ul>
+    </div>
   </div>
 </div>`;
 
-const publish = `<div class="px-5 py-6">
-  <h1 class="font-display text-xl font-bold">발행하기</h1>
-  <div class="mt-5 h-32 rounded-card bg-surface"></div>
+const publish = `<div class="mx-auto max-w-2xl px-8 py-10">
+  <h1 class="font-display text-2xl font-bold">발행하기</h1>
+  <div class="mt-5 h-48 rounded-card bg-surface"></div>
   <p class="mt-4 text-sm text-muted">한 줄 요약</p>
   <div class="mt-1 rounded-card border border-line px-3 py-2 text-sm">batch로 트랜잭션 흉내 내기</div>
   <p class="mt-4 text-sm text-muted">태그</p>
@@ -102,6 +114,16 @@ export const QUIET_LOOK: MapLook = {
 };
 
 const SCREENS: Record<string, string> = { list, read, comment, login, write, publish };
+
+/** Where each screen lives in the built blog, written on its card once it is built. */
+const PATHS: Record<string, string> = {
+  list: '/',
+  read: '/posts/d1-batch',
+  comment: '/posts/d1-batch#comments',
+  login: '/login',
+  write: '/write',
+  publish: '/write/publish',
+};
 
 const card = (id: string, title: string, promises: [string, string][], more: Partial<FlowNode> = {}): FlowNode => ({
   id,
@@ -137,6 +159,7 @@ const FLOWS: ProductFlow[] = [
     description: '방문자가 관심 있는 글을 찾아 읽을 수 있어야 한다',
     trigger: '블로그 주소로 들어와요',
     actor: '방문자',
+    device: 'phone',
     nodeIds: ['list', 'read', 'comment'],
     edges: [
       { source: 'list', target: 'read' },
@@ -149,6 +172,7 @@ const FLOWS: ProductFlow[] = [
     description: '글쓴이가 마크다운으로 글을 써서 올릴 수 있어야 한다',
     trigger: '로그인해요',
     actor: '글쓴이',
+    device: 'computer',
     nodeIds: ['login', 'write', 'publish'],
     edges: [
       { source: 'login', target: 'write' },
@@ -192,7 +216,8 @@ export function blogBoard(moment: PlanMoment): FlowGetResult {
             ]
           : [];
     const sources = node.id === 'write' ? ['src/routes/write.tsx'] : [];
-    return { ...node, phase, tentative: false, decisions, sources } as FlowNode;
+    const path = phase === 'built' ? PATHS[node.id] : undefined;
+    return { ...node, phase, tentative: false, decisions, sources, ...(path ? { path } : {}) } as FlowNode;
   });
   const passed = (id: string) => moment === 'built' || (started && ['login', 'list', 'read'].includes(id));
   return {

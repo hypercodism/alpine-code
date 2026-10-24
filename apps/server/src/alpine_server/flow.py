@@ -1015,8 +1015,10 @@ _BUILD = """\
 Build the whole planned product now; the person approved the map and need not watch. The map is the contract: its
 promises are what done means. Choose your own order: with every journey in hand, design the data and structure for
 all of them first. While you work on a card set its phase to building, and to built once it works; list in its
-`sources` the files that make it (open each in this session). A screen you can run: capture it into the card's
-`preview` (a real screenshot, project-relative, never under .alpine-code/) once it looks right.
+`sources` the files that make it (open each in this session). On each screen card write `path`: the address inside
+the running app that shows that screen (`/reservations`), a path only, so the app can open it. A screen you can run:
+capture it into the card's `preview` (a real screenshot, project-relative, never under .alpine-code/) once it looks
+right.
 When a product question comes up that the map does not answer, do not stop: take the pick you would recommend, record
 it on the card as a decision with "by": "ai" (with the options you weighed), and go on. Stop to ask with ask_user only
 when no sensible default exists.
@@ -1030,8 +1032,9 @@ PLANNING_SKILL = "product-planning"
 _PLAN = """\
 The product does not exist yet: plan it with the person on this map before anything is built, as the planning skill
 below says. Draw the first map now, then ask what is left with ask_user, one question per turn. Write cards with
-phase planned, kind screen for screens, conditions for the promises you assume, no sources and no checks. Do not
-write product code, install anything or start servers until the person says to build.
+phase planned, kind screen for screens, conditions for the promises you assume, no sources and no checks. Give each
+flow a `device` (phone or computer) and draw a computer journey's screens at desktop width. Do not write product
+code, install anything or start servers until the person says to build.
 """
 
 

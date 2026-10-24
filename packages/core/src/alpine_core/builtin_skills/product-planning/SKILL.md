@@ -14,6 +14,9 @@ Do not ask anything before the map exists. People fix a wrong picture more easil
 
 - **People**: who uses the product (손님, 사장님, 글쓴이, 방문자). One flow per journey, its `actor` the person's name
   for them. Most products have two or three people; a visitor who only reads is a person too.
+- **Device**: each flow's `device`, what that person uses it on: `"phone"` for people who use it on the go (손님,
+  회원, 방문자), `"computer"` for desk work (직원, 관리자, 사장님이 가게에서 보는 화면). Decide it yourself; ask only
+  when it is a real product question (a shop owner who might manage from either).
 - **Steps**: one card per screen they pass through, in order, with `kind: "screen"` and `phase: "planned"`. Five to
   twelve screens in all is usual for a first product. A step that exists only if an open question goes one way gets
   `tentative: true`.
@@ -56,8 +59,9 @@ Do not build until they say so.
 
 ## Drawing a screen
 
-A screen file is the `<body>` content of one phone screen (390 px wide), drawn with Tailwind 4 classes. Tailwind is
-loaded for you; add no `<script>`, `<link>` or `<style>`, and no images (use `bg-surface` blocks where a picture
+A screen file is the `<body>` content of one screen, drawn with Tailwind 4 classes: a phone screen (390 px wide) for
+a phone journey, a desktop window (about 1280 px wide, with room for a side menu or a table) for a computer journey.
+A screen in both kinds of journey is drawn for the first one it appears in. Tailwind is loaded for you; add no `<script>`, `<link>` or `<style>`, and no images (use `bg-surface` blocks where a picture
 goes). Use only these tokens for colour, type and corners, so a look restyles it:
 
 | Token | For |
@@ -136,3 +140,5 @@ When the person says to build, the map is the contract. Some things that help:
 - Use the look's tokens as the product's own theme, so the built screens look like the planned ones.
 - Keep the person's words: the texts on the planned screens are the texts of the product.
 - Run the product and look at every screen you built before you call a card built.
+- Write each screen card's `path`: the address that shows that screen in the running app (`/reservations`,
+  `/admin/members`), so the app can open it. A path only, no host.

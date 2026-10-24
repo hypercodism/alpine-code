@@ -1107,6 +1107,7 @@ export interface FeatureFile {
   title: string;
   description?: string;
   kind?: 'screen' | 'api' | 'sdk' | 'process' | 'data';
+  path?: string | null;
   /**
    * @maxItems 50
    */
@@ -2211,6 +2212,7 @@ export interface FlowFile {
   description?: string;
   trigger?: string;
   actor?: string;
+  device?: ('phone' | 'computer') | null;
   /**
    * @maxItems 200
    */
@@ -2290,6 +2292,7 @@ export interface ProductFlow {
   description?: string;
   trigger?: string;
   actor?: string;
+  device?: ('phone' | 'computer') | null;
   /**
    * @maxItems 200
    */
@@ -2310,6 +2313,7 @@ export interface FlowNode {
   title: string;
   description?: string;
   kind?: 'screen' | 'api' | 'sdk' | 'process' | 'data';
+  path?: string | null;
   /**
    * @maxItems 50
    */

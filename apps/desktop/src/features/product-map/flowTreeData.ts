@@ -9,6 +9,7 @@ import {
   type TreeMap,
   type TreePromise,
 } from './flowTreeModel';
+import type { Device } from './planLook';
 
 /**
  * The person-first tree from what the server sends for the map (`flow/get`): cards with their promises and the state
@@ -31,7 +32,10 @@ export function toTreeMap(
 ): TreeMap {
   const document = result.document ?? {};
   const cards: Record<string, TreeCard> = {};
-  for (const node of document.nodes ?? []) cards[node.id] = toCard(node, result, working);
+  const devices = new Map<string, Device>();
+  for (const flow of document.flows ?? [])
+    for (const step of flow.nodeIds ?? []) if (flow.device && !devices.has(step)) devices.set(step, flow.device);
+  for (const node of document.nodes ?? []) cards[node.id] = toCard(node, result, working, devices.get(node.id));
 
   const groups = new Map<string, ProductFlow[]>();
   for (const flow of document.flows ?? []) {
@@ -80,10 +84,11 @@ function toJourney(flow: ProductFlow): Journey {
     trigger: text(flow.trigger),
     steps: flow.nodeIds ?? [],
     edges: (flow.edges ?? []).map((edge) => ({ from: edge.source, to: edge.target, label: edge.label ?? '' })),
+    device: flow.device ?? null,
   };
 }
 
-function toCard(node: FlowNode, result: FlowGetResult, working: ReadonlySet<string>): TreeCard {
+function toCard(node: FlowNode, result: FlowGetResult, working: ReadonlySet<string>, device?: Device): TreeCard {
   const state = result.states?.[node.id];
   const checking = !!node.sessionId && working.has(node.sessionId);
   const promises: TreePromise[] = (node.conditions ?? []).map((condition) => {
@@ -125,9 +130,10 @@ function toCard(node: FlowNode, result: FlowGetResult, working: ReadonlySet<stri
       : result.sketches?.[node.id]
         ? { src: result.sketches[node.id]!, kind: 'sketch', at: null }
         : result.screens?.[node.id]
-          ? { src: result.screens[node.id]!, kind: 'planned', at: null }
+          ? { src: result.screens[node.id]!, kind: 'planned', at: null, device: device ?? null }
           : undefined,
     tentative: !!node.tentative,
+    path: node.path ?? null,
     picks: (node.decisions ?? []).map((pick) => ({
       question: pick.question,
       options: pick.options ?? [],

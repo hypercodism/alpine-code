@@ -36,5 +36,14 @@ export const screenPage = (body: string) =>
   `<!doctype html><html lang="ko"><head><meta charset="utf-8">${FONTS}</head>` +
   `<body class="bg-page text-ink font-body antialiased">${body}</body></html>`;
 
+/** What the person on a journey uses it on (`ProductFlow.device`); a journey without one is drawn for a phone. */
+export type Device = 'phone' | 'computer';
+
 /** Planned screens are drawn as a phone screen, then made smaller to fit. */
 export const SCREEN_WIDTH = 390;
+
+/** A computer journey's screens are drawn as a desktop window. */
+export const DESKTOP_WIDTH = 1280;
+
+/** The width a planned screen is drawn at, by the device of the journey it belongs to. */
+export const screenWidthFor = (device?: Device | null) => (device === 'computer' ? DESKTOP_WIDTH : SCREEN_WIDTH);

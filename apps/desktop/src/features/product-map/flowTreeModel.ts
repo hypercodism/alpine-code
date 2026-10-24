@@ -1,3 +1,5 @@
+import type { Device } from './planLook';
+
 /**
  * The product map read person first: who uses the product, the journeys each of them takes, the steps of a journey
  * (the map's cards) and, hanging off every step, its promises ("when this happens, this must happen") as branches.
@@ -80,6 +82,8 @@ export interface TreeCard {
   screen?: CardScreen;
   /** A planned step that exists only if an open question goes one way: drawn dashed until it is answered. */
   tentative?: boolean;
+  /** For a built screen: its address inside the running app (`/reservations`), so the app view can open it. */
+  path?: string | null;
   /** Product questions answered on this card, oldest first: by the person, or by the AI on its own. */
   picks?: CardPick[];
 }
@@ -104,6 +108,8 @@ export interface CardScreen {
   kind: 'shot' | 'sketch' | 'planned';
   /** When it was captured or drawn. */
   at?: string | null;
+  /** For `planned`: the device of the first journey the card is in, which sets the width it is drawn at. */
+  device?: Device | null;
 }
 
 /** A card that shows something to a person, or already has a picture of it, gets room for its screen. */
@@ -128,6 +134,8 @@ export interface Journey {
   steps: string[];
   /** How the steps lead to one another: branches (several ways on), merges and loops back, each with its condition. */
   edges?: { from: string; to: string; label: string }[];
+  /** What the person uses it on; empty on maps made before devices, read as a phone. */
+  device?: Device | null;
 }
 
 export interface Person {

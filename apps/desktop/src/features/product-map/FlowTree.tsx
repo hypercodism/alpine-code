@@ -64,7 +64,7 @@ import {
   useText,
   type PromiseTarget,
 } from './treeParts';
-import { SCREEN_WIDTH, screenPage, WIREFRAME } from './planLook';
+import { screenPage, screenWidthFor, WIREFRAME } from './planLook';
 import { CHECKLIST_ROWS, layoutTree, SCREEN_H, stepId, THUMB_W, type LaidNode } from './treeLayout';
 
 export type { PromiseTarget } from './treeParts';
@@ -858,12 +858,12 @@ function ScreenView({ screen, look }: { screen: CardScreen; look: string }) {
           <PenLine size={12} aria-hidden />
           {t.screenPlanned}
         </span>
-        <div className="mx-auto w-full max-w-72">
+        <div className={clsx('mx-auto w-full', screen.device !== 'computer' && 'max-w-72')}>
           <HtmlFrame
             html={screenPage(screen.src)}
             title=""
-            pageWidth={SCREEN_WIDTH}
-            ratio={1.6}
+            pageWidth={screenWidthFor(screen.device)}
+            ratio={screen.device === 'computer' ? 0.625 : 1.6}
             theme={look}
             className="rounded-lg border border-line-subtle bg-canvas"
           />
@@ -938,7 +938,7 @@ function ScreenThumb({ screen, look, touched }: { screen?: CardScreen; look: str
         <HtmlFrame
           html={screenPage(screen.src)}
           title=""
-          pageWidth={SCREEN_WIDTH}
+          pageWidth={screenWidthFor(screen.device)}
           ratio={(SCREEN_H - 10) / THUMB_W}
           theme={look}
           inert
