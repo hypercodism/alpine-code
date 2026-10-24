@@ -4,7 +4,8 @@ import { useCallback, useRef, type ReactNode } from 'react';
 import { useMessages } from '@/shared/i18n';
 import { useEditFlow, useServer, useSetActor, useSetFlow } from '@/shared/server';
 
-import { FlowTree, type StepParts } from './FlowTree';
+import { Filmstrip } from './Filmstrip';
+import type { StepParts } from './FlowTree';
 import { flowTreeMessages } from './flowTreeMessages';
 import { usePacedMap } from './pacedMap';
 import type { TreeMap } from './flowTreeModel';
@@ -15,7 +16,7 @@ export type JourneyStart = (
 ) => Promise<boolean>;
 
 /**
- * The person-first tree on the project's real map. Reading comes from `flow/get`; what the person asks for goes the
+ * The project's real map as a filmstrip of its screens. Reading comes from `flow/get`; what the person asks for goes the
  * way the map already sends it: checks, fixes and new journeys start an AI session (`flow/prepare`), promises are
  * added or removed with `flow/edit`, and the person's own calls on a card are written with `flow/set`.
  */
@@ -36,6 +37,9 @@ export function JourneyMap({
   asked,
   onPlan,
   waitNote,
+  planned = false,
+  making = null,
+  onChangePick,
 }: {
   cwd: string;
   /** `board` read person first (`toTreeMap`). */
@@ -63,6 +67,12 @@ export function JourneyMap({
   onPlan?: (words: string) => void;
   /** Why asks from the open details cannot start now. */
   waitNote?: string | null;
+  /** A product that began as a plan. */
+  planned?: boolean;
+  /** The card the build works on now. */
+  making?: string | null;
+  /** Opens what the AI decided on a card, to answer it again. */
+  onChangePick?: (cardId: string) => void;
 }) {
   const t = useMessages(flowTreeMessages);
   const edit = useEditFlow();
@@ -80,8 +90,11 @@ export function JourneyMap({
   const nodeOf = (id: string) => board.document?.nodes?.find((node) => node.id === id) ?? null;
 
   return (
-    <FlowTree
+    <Filmstrip
       map={map}
+      planned={planned}
+      making={making}
+      onChangePick={onChangePick}
       drawing={drawing}
       lit={lit}
       reveal={reveal}

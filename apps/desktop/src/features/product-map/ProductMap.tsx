@@ -3,7 +3,7 @@ import { Button, Dialog, LinkButton, Popover, SlidingPanel } from '@alpine/ui/pr
 import clsx from 'clsx';
 import { Brain, ChevronRight, CircleX, RotateCcw, Search, Sparkles, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
 import { AgentChip, ModeChip, type Mode } from '@/shared/components/composer';
@@ -42,10 +42,13 @@ import { Changes, newChanges, useLastSeen } from './Changes';
 import { REMOVED } from './Conditions';
 import { Coverage } from './Coverage';
 import { noticeRow, recheckIds } from './Focus';
+import { filmMessages } from './filmMessages';
 import { changedCards } from './FlowTree';
 import { toTreeMap } from './flowTreeData';
+import { hasScreenArea } from './flowTreeModel';
 import { flowTreeMessages } from './flowTreeMessages';
 import { JourneyMap } from './JourneyMap';
+import { useMapActionStore } from './mapActions';
 import { Bar, CONNECTION, PlanBar, Working, type PlanReview, type PlanTeamAnswer } from './PlanBar';
 import { buildActivity, lastReply, pendingQuestion, planPhase, stopReason, TEAM_WORKING } from './planData';
 import { mapLookCss } from './planLook';
@@ -105,6 +108,7 @@ export function ProductMap({
   hidden = false,
   talkSlot,
   onShowTalk,
+  onOpenInApp,
 }: {
   cwd: string;
   sessionId?: string | null;
@@ -136,10 +140,13 @@ export function ProductMap({
   talkSlot?: HTMLElement | null;
   /** Shows the conversation beside the map, where the input is. */
   onShowTalk?: () => void;
+  /** Opens the running app at a built screen's address (its card's `path`). */
+  onOpenInApp?: (cardId: string) => void;
 }) {
   const t = useMessages(messages);
   const tree = useMessages(flowTreeMessages);
   const plan = useMessages(planMessages);
+  const film = useMessages(filmMessages);
   const board = useProductMap(cwd);
   const sessions = useSessions().data;
   const create = useNewSession();
@@ -271,13 +278,9 @@ export function ProductMap({
         ? toTreeMap(data, working, project, {
             unnamed: { ko: tree.unnamed, en: tree.unnamed },
             unnamedRole: { ko: tree.unnamedRole, en: tree.unnamedRole },
-            // A plan shows its cards as soon as they are written, before the AI puts them on journeys.
-            ...(data.planned
-              ? {
-                  unplaced: { ko: plan.unplaced, en: plan.unplaced },
-                  unplacedRole: { ko: plan.unplacedRole, en: plan.unplacedRole },
-                }
-              : {}),
+            // Cards show as soon as they are written, in a row of their own until a journey holds them.
+            unplaced: { ko: plan.unplaced, en: plan.unplaced },
+            unplacedRole: { ko: plan.unplacedRole, en: plan.unplacedRole },
           })
         : null,
     [data, working, project, tree.unnamed, tree.unnamedRole, plan.unplaced, plan.unplacedRole],
@@ -337,6 +340,13 @@ export function ProductMap({
   };
 
   const nodeOf = (id: string) => document?.nodes?.find((n) => n.id === id) ?? null;
+  // A built screen opens in the running app at its address; without one (or where the page cannot go to one), the
+  // app opens at its first screen.
+  const canOpenInApp = !!onOpenInApp || !!onOpenApp;
+  const openInApp = (cardId: string) => {
+    if (onOpenInApp && nodeOf(cardId)?.path) onOpenInApp(cardId);
+    else onOpenApp?.();
+  };
   const conversation = useSession(mapConversation?.id ?? null);
   const conversationWorking = atWork(mapConversation);
   // My words to the conversation the map talks to, as they are: answers to its questions and anything else about the
@@ -488,6 +498,11 @@ export function ProductMap({
     buildSessionId &&
     teamAction.mutate({ action: answer, sessionId: buildSessionId, runId: buildTeam.id });
   const promisesAll = Object.values(treeMap?.cards ?? {}).flatMap((card) => card.promises);
+  // The card the build works on now: the one its latest edit touched, else one the AI marked as being built.
+  const making =
+    phase === 'building'
+      ? ([...touching].at(-1) ?? document?.nodes?.find((node) => node.phase === 'building')?.id ?? null)
+      : null;
   // Who does the map's work: the conversation the map talks to once it exists (the build while it is unfinished),
   // until then my pick for it (else the project's last agent, as a new conversation would take).
   const agents = useAgents().data?.agents;
@@ -536,6 +551,29 @@ export function ProductMap({
       onChange={setNewAgent}
     />
   );
+  // The top bar starts the build and stops the work through this map (MapTopActions), as the map itself would.
+  const latest = useRef({ build: () => {}, stop: () => {} });
+  useLayoutEffect(() => {
+    latest.current = { build: () => void startBuild(t.buildRequest), stop: stopWork };
+  });
+  const registerActions = useMapActionStore((state) => state.register);
+  const left = data?.undecided?.length ?? 0;
+  const cardCount = document?.nodes?.length ?? 0;
+  const builtCount = (document?.nodes ?? []).filter((node) => node.phase === 'built').length;
+  const mapWorking = workBusy || talking || phase === 'building';
+  useEffect(() => {
+    registerActions(cwd, {
+      phase,
+      left,
+      cards: cardCount,
+      built: builtCount,
+      working: mapWorking,
+      busy,
+      build: () => latest.current.build(),
+      stop: () => latest.current.stop(),
+    });
+  }, [registerActions, cwd, phase, left, cardCount, builtCount, mapWorking, busy]);
+  useEffect(() => () => registerActions(cwd, null), [registerActions, cwd]);
   // What a promise's own answers need: the map, whether it may be written, and how to ask the AI about it.
   const promiseProps = (node: FlowNode) => ({
     cwd,
@@ -918,38 +956,42 @@ export function ProductMap({
       {/* Before the first card the map may already exist (being drawn, or stopped early): its menu (scope, delete)
           is here too, so a map is never out of reach. */}
       {!hasMap && data && (workBusy || data.exists) && (
-        <div className="flex min-h-11 shrink-0 items-center gap-2 border-b border-line px-3 py-1.5">
+        <div className="flex min-h-11 shrink-0 items-center gap-2 bg-canvas-sunken px-10 py-1.5">
           <span className="grow" />
           {mapMenu}
         </div>
       )}
+      {/* Over the filmstrip, quiet: the search (a plan being decided has nothing to search yet), what wants a look
+          only when something does, and the map's menu. */}
       {hasMap && data && (
-        <div className="flex min-h-11 shrink-0 flex-wrap items-center gap-2 border-b border-line px-3 py-1.5">
-          <label className="relative flex w-60 min-w-40 items-center">
-            <span className="sr-only">{t.searchLabel}</span>
-            <Search size={13} className="pointer-events-none absolute left-2.5 text-fg-faint" />
-            <input
-              ref={search}
-              type="search"
-              value={query}
-              placeholder={t.searchPlaceholder}
-              onChange={(event) => {
-                hit.current = -1;
-                setQuery(event.target.value);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'Escape') {
-                  event.stopPropagation();
+        <div className="flex min-h-11 shrink-0 flex-wrap items-center gap-2 bg-canvas-sunken px-10 py-1.5">
+          {!planning && (
+            <label className="relative flex w-52 min-w-36 items-center">
+              <span className="sr-only">{t.searchLabel}</span>
+              <Search size={13} className="pointer-events-none absolute left-2.5 text-fg-faint" />
+              <input
+                ref={search}
+                type="search"
+                value={query}
+                placeholder={t.searchPlaceholder}
+                onChange={(event) => {
                   hit.current = -1;
-                  setQuery('');
-                } else if (event.key === 'Enter' && query.trim()) {
-                  event.preventDefault();
-                  nextHit();
-                }
-              }}
-              className="h-8 w-full min-w-0 rounded-lg border border-line bg-canvas-raised pr-2 pl-8 text-body"
-            />
-          </label>
+                  setQuery(event.target.value);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') {
+                    event.stopPropagation();
+                    hit.current = -1;
+                    setQuery('');
+                  } else if (event.key === 'Enter' && query.trim()) {
+                    event.preventDefault();
+                    nextHit();
+                  }
+                }}
+                className="h-8 w-full min-w-0 rounded-lg border border-line bg-canvas-raised pr-2 pl-8 text-body"
+              />
+            </label>
+          )}
           {query.trim() && (
             <span className="flex items-center gap-2 text-meta text-fg-muted">
               <span className="tabular-nums">{t.found(hits.length)}</span>
@@ -966,11 +1008,6 @@ export function ProductMap({
             </span>
           )}
           <span className="grow" />
-          {phase === 'asking' && !!data.undecided?.length && (
-            <span className="inline-flex h-7 shrink-0 items-center rounded-full border border-line px-2.5 text-meta text-attention">
-              {plan.left(data.undecided.length)}
-            </span>
-          )}
           {lenses.failed.size > 0 && (
             <Chip pressed={lens === 'failed'} tone="danger" onClick={() => pick('failed')}>
               <CircleX size={13} aria-hidden />
@@ -1003,7 +1040,7 @@ export function ProductMap({
       {notices && data && (
         <ul
           aria-label={t.noticesLabel}
-          className="flex shrink-0 flex-wrap items-center gap-1 border-b border-line bg-canvas-sunken px-2 py-1"
+          className="flex shrink-0 flex-wrap items-center gap-1 border-b border-line bg-canvas-sunken px-8 py-1"
         >
           {!planned && uncovered > 0 && data.coverage && (
             <Coverage coverage={data.coverage} exclude={data.exclude ?? []} disabled={locked} onSync={syncMap} />
@@ -1183,6 +1220,20 @@ export function ProductMap({
           </div>
         ) : !data ? (
           <p className="p-8 text-body text-fg-muted">{t.loading}</p>
+        ) : !hasMap && planned ? (
+          // A plan before its first card: the place of its first screen, drawn as the AI reads the one line (or, when
+          // it stopped before a card, still a plan waiting to be drawn on; the bar under the conversation says so).
+          <div className="flex min-w-0 grow flex-col items-center justify-center gap-4 bg-canvas-sunken p-8">
+            <span
+              aria-hidden
+              className={clsx(
+                'h-100 w-50 border border-dashed border-line',
+                (drawing || busy) && 'animate-pulse motion-reduce:animate-none',
+              )}
+              style={{ borderRadius: 26 }}
+            />
+            {(drawing || busy) && <p className="text-body text-fg-muted">{film.firstScreens}</p>}
+          </div>
         ) : !hasMap && (drawing || busy) && flight ? (
           // The stand-in card holds the first place until the first journey lands.
           <div className="min-w-0 grow" />
@@ -1190,12 +1241,6 @@ export function ProductMap({
           // The canvas, still empty: the first cards land here as soon as the AI writes them.
           <div className="flex min-w-0 grow items-center justify-center">
             <span aria-hidden className="h-16 w-44 animate-pulse rounded-xl border border-dashed border-line" />
-          </div>
-        ) : !hasMap && planned ? (
-          // A plan stopped before its first card: still a plan, waiting for the AI to draw on (the bar below says so),
-          // not a project whose code is yet to be read.
-          <div className="flex min-w-0 grow items-center justify-center">
-            <span aria-hidden className="h-16 w-44 rounded-xl border border-dashed border-line" />
           </div>
         ) : !hasMap && checkingFolder ? (
           <p className="p-8 text-body text-fg-muted">{t.checkingFolder}</p>
@@ -1241,6 +1286,9 @@ export function ProductMap({
               look={planned ? look : undefined}
               touching={touching}
               asked={phase === 'asking' ? (question?.about ?? null) : null}
+              planned={planned}
+              making={making}
+              onChangePick={planned ? setReviewing : undefined}
               onPlan={planning ? (words) => void say(words) : undefined}
               // A plan takes words while it works; checks and fixes wait until the AI is free, and say so.
               waitNote={!planning && anyActive ? t.busyNote : null}
@@ -1302,6 +1350,13 @@ export function ProductMap({
                           onRecheck={planning ? undefined : () => void start('verify', { node })}
                         />
                       )}
+                      {canOpenInApp && node.kind === 'screen' && node.phase === 'built' && (
+                        <p>
+                          <Dialog.Close render={<LinkButton />} onClick={() => openInApp(cardId)}>
+                            {film.openInApp}
+                          </Dialog.Close>
+                        </p>
+                      )}
                     </>
                   ),
                 };
@@ -1341,8 +1396,21 @@ export function ProductMap({
                   checked: promisesAll.filter((p) => p.status === 'passed').length,
                   total: promisesAll.length,
                   aiPicks: aiPicked.length,
-                  cards: data?.document?.nodes?.length ?? 0,
-                  done: (data?.document?.nodes ?? []).filter((node) => node.phase === 'built').length,
+                  cards: cardCount,
+                  done: builtCount,
+                  screens: Object.values(treeMap?.cards ?? {}).filter(hasScreenArea).length,
+                  open: Object.values(treeMap?.cards ?? {}).flatMap((card) =>
+                    card.promises
+                      .filter((promise) => promise.status !== 'passed')
+                      .map((promise) => ({
+                        cardId: card.id,
+                        card: card.title,
+                        promiseId: promise.id,
+                        text: promise.then,
+                        note: promise.status === 'failed' ? promise.note : '',
+                        failed: promise.status === 'failed',
+                      })),
+                  ),
                 }}
                 team={
                   buildTeam?.status === 'proposed' || buildTeam?.status === 'over'
@@ -1366,7 +1434,6 @@ export function ProductMap({
                 onDecideRest={() => say(plan.decideRestMessage)}
                 onAskOn={() => say(plan.askOnMessage)}
                 onDrawOn={() => say(plan.drawOnMessage)}
-                onBuild={() => void startBuild(t.buildRequest)}
                 onDecide={(option) => {
                   const label = pickReview?.question.options[option]?.label;
                   // The answer it already has needs nothing sent.
@@ -1376,7 +1443,12 @@ export function ProductMap({
                 onCloseReview={() => setReviewing(null)}
                 onNextReview={nextReview}
                 onReviewPicks={() => reviewOrder[0] && setReviewing(reviewOrder[0])}
-                onOpenApp={() => onOpenApp?.()}
+                onFix={(cardId, promiseId) => {
+                  const node = nodeOf(cardId);
+                  const broken = node?.conditions?.find((condition) => condition.id === promiseId)?.expectation;
+                  if (node && broken) void askAbout(node, tree.fixRequest(node.title, broken));
+                }}
+                onOpenInApp={canOpenInApp ? openInApp : undefined}
                 onPublish={onPublish}
                 onFixConnection={() => onFixConnection?.()}
                 onStop={stopWork}

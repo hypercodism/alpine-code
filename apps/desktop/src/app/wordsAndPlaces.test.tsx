@@ -126,8 +126,11 @@ describe('what can not start now says why (#30)', () => {
     fireEvent.keyDown(menu, { key: 'Escape' });
     // A check from a person's panel: it used to be ignored without a word.
     const map = screen.getByRole('main', { name: '제품 지도' });
-    fireEvent.click(within(map).getByRole('button', { name: '요약' }));
-    fireEvent.click(within(within(map).getByRole('complementary')).getAllByRole('button')[0]!);
+    // A person's name over their rows opens their details.
+    const first = within(map)
+      .getAllByRole('region')
+      .find((region) => region.dataset.person)!;
+    fireEvent.click(within(first).getAllByRole('button')[0]!);
     const person = await screen.findByRole('dialog');
     // The details say it before anything is pressed, since they lie over the map's own line.
     expect(within(person).getByText(/확인이나 고치기는 그 일이 끝나면 할 수 있어요/)).toBeTruthy();

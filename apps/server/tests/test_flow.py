@@ -723,6 +723,7 @@ def test_sync_sees_every_change_with_the_cards_that_cite_it(proj):
     prompt = prepare(proj, action="sync", nodeId=None, flowId=None, request="").prompt
     assert "Refunds keep 40% after three uses" in prompt
     assert "- src/refund.py — cards: order" in prompt and "- coupon.py — no card" in prompt
+    assert "Give each flow a `device`" in prompt and "in the card's `path`" in prompt  # sync keeps them too
     assert "deps.lock" not in prompt
     assert "-RATE = 1.0" in prompt and "+RATE = 0.6" in prompt
     assert "rewrite or add its promises" in prompt
@@ -960,6 +961,8 @@ def test_discovery_starts_empty_creates_the_map_and_writes_schemas(proj):
     assert "how we know it holds" in prepared.prompt and "Do not record checks" not in prepared.prompt
     # Decision 18: a flow is a journey through one door, and every card sits where its user meets it.
     assert "through one door of the product" in prepared.prompt and "Upkeep features" not in prepared.prompt
+    # The filmstrip draws each journey on its device and opens a screen at its address (map-first 44, 45).
+    assert "Give each flow a `device`" in prepared.prompt and "in the card's `path`" in prepared.prompt
     assert json.loads((proj / BASE / "state/project.json").read_text())["syncSession"] == "s1"
 
 

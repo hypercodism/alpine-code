@@ -931,6 +931,8 @@ For screens, capture a real screenshot if a tool allows and store its project-re
 you may draw it from the code as a plain SVG wireframe (boxes, lines and the screen's visible texts; no photos, no
 realistic styling) saved under .alpine-code/map/sketches/ and store its project-relative path in `sketch`; the app
 labels it as drawn. Never put a drawing in `preview`, and capture a real screenshot once a tool allows.
+When you know where a screen lives in the running app, write it in the card's `path`: the address inside the app
+(`/reservations`), a path only, so the app can open that screen.
 When trying a card needs something a person would not know (a test account, keys, seed data, a command, a running
 server), write it in `howToTry` in plain words.
 Phase: built means implemented, NOT verified; new branches start planned; use building while actually working.
@@ -942,6 +944,9 @@ the product's own words (손님, 사장님, 다른 화면을 만드는 개발자
 or not (an agent, a scheduled job, another program); flows of the same actor share the exact same words. The person
 works on this grouping with you and may rename or regroup actors in the app: build on what they wrote, and change
 it when the product gives a reason.
+Give each flow a `device`: phone when its user is on a phone (an app or a mobile web page), computer when they sit at
+a computer (admin pages, desk work, a desktop app, a terminal); read it from the code (mobile layouts, native app
+folders, wide admin tables) and leave it out when nothing tells.
 - When the trigger, the goal or the door differs, make separate flows (a team lead deciding what to do today and a
   member finishing a task are two flows, even on the same screens; working in the desktop app and in the terminal
   are two flows, even when both speak the same protocol).

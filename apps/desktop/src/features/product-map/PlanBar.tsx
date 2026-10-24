@@ -36,6 +36,28 @@ export interface PlanStop {
   team: boolean;
 }
 
+/** A promise the finished product does not keep yet (or nobody saw it keep), with the screen it is on. */
+export interface PlanOpenPromise {
+  cardId: string;
+  card: string;
+  promiseId: string;
+  text: string;
+  /** What the last check saw, when it failed. */
+  note: string;
+  failed: boolean;
+}
+
+/** The product once built: its screens, its promises and how many hold, what the AI decided, what is still open. */
+export interface PlanBuilt {
+  checked: number;
+  total: number;
+  aiPicks: number;
+  cards: number;
+  done: number;
+  screens: number;
+  open: PlanOpenPromise[];
+}
+
 /** What the person can say to the build's TF from the map, as on its card in the conversation. */
 export type PlanTeamAnswer = 'start' | 'decline' | 'allowMore' | 'takeResults';
 
@@ -44,9 +66,10 @@ export const CONNECTION = new Set<RunStoppedItem['reason']>(['signed_out', 'cred
 
 /**
  * What a planned map says just above its input, from facts only: the question the AI waits on (on the card it
- * changes), "이대로 만들기" once nothing is left, what the AI does now while it builds (with 멈추기, and a call to look
- * when it waits for my OK), and once built, what was checked and what the AI decided on its own. A question the AI
- * answered while building can be opened from its card and answered again here, one after another.
+ * changes), that everything is decided (이대로 만들기 itself is in the top bar), what the AI does now while it builds
+ * (with 멈추기, and a call to look when it waits for my OK), and once built, the completion card: what was checked,
+ * each promise not checked yet with 바로 고치기, and 인터넷에 올리기. A question the AI answered while building can be
+ * opened from its card and answered again here, one after another.
  */
 export function PlanBar({
   docked = false,
@@ -68,12 +91,12 @@ export function PlanBar({
   onDecideRest,
   onAskOn,
   onDrawOn,
-  onBuild,
   onDecide,
   onCloseReview,
   onNextReview,
   onReviewPicks,
-  onOpenApp,
+  onFix,
+  onOpenInApp,
   onPublish,
   onTeam,
   onContinue,
@@ -103,7 +126,7 @@ export function PlanBar({
   /** How many product decisions are still open. */
   left: number;
   review: PlanReview | null;
-  built: { checked: number; total: number; aiPicks: number; cards: number; done: number };
+  built: PlanBuilt;
   /** The build's TF while it waits for the person. */
   team: PlanTeam | null;
   stop: PlanStop;
@@ -114,12 +137,14 @@ export function PlanBar({
   onAskOn: () => void;
   /** Asks the AI to go on drawing a plan that stopped before its first card. */
   onDrawOn: () => void;
-  onBuild: () => void;
   onDecide: (option: number) => void;
   onCloseReview: () => void;
   onNextReview: () => void;
   onReviewPicks: () => void;
-  onOpenApp: () => void;
+  /** Asks the AI to fix one promise the built product does not keep, as a request about its card. */
+  onFix: (cardId: string, promiseId: string) => void;
+  /** Opens the running app at a screen; absent where the page cannot, or for a screen without an address. */
+  onOpenInApp?: (cardId: string) => boolean | void;
   /** Puts the app online (Alpine Cloud); absent when there is nowhere to put it. */
   onPublish?: () => void;
   onTeam: (answer: PlanTeamAnswer) => void;
@@ -192,14 +217,7 @@ export function PlanBar({
         <Button onClick={onDecideRest}>{t.decideRest}</Button>
       </Bar>
     );
-  if (phase === 'ready')
-    return (
-      <Bar title={t.ready} hint={t.readyHint}>
-        <Button variant="primary" onClick={onBuild}>
-          {t.build}
-        </Button>
-      </Bar>
-    );
+  if (phase === 'ready') return <Bar title={t.ready} hint={t.readyHint} />;
   if (phase === 'building' && activity)
     return <Working key={activity.text} text={activity.text} hint={t.leaveHint} stop={t.stop} onStop={onStop} />;
   if (phase === 'team' && team?.status === 'proposed')
@@ -257,32 +275,94 @@ export function PlanBar({
   }
   if (phase === 'built')
     return (
-      <section className="pointer-events-auto motion-step flex flex-wrap items-center gap-3 rounded-xl border border-line bg-canvas-raised p-3 shadow-overlay">
-        <div className="flex min-w-0 grow basis-60 flex-col">
-          <p className="text-reading text-fg">{t.builtTitle}</p>
-          <p className="text-meta text-fg-muted">
-            {built.checked === built.total ? t.checkedAll(built.total) : t.checkedSome(built.checked, built.total)}
-            {built.aiPicks > 0 && (
-              <>
-                {' · '}
-                <LinkButton className="min-h-5 px-0.5" onClick={onReviewPicks}>
-                  {t.aiPicks(built.aiPicks)}
-                </LinkButton>
-              </>
-            )}
-          </p>
-        </div>
-        {onPublish && <Button onClick={onPublish}>{t.publish}</Button>}
-        <Button variant="primary" onClick={onOpenApp}>
-          {t.openApp}
-        </Button>
-      </section>
+      <Done built={built} onReviewPicks={onReviewPicks} onFix={onFix} onOpenInApp={onOpenInApp} onPublish={onPublish} />
     );
   return null;
 }
 
+/** Promises the completion card lists one by one; the rest are counted. */
+const OPEN_ROWS = 5;
+
+/**
+ * The completion card: it is built, how many screens and how many promises were checked, each promise still open with
+ * 바로 고치기, and 인터넷에 올리기 as its one button (none without Alpine Cloud). The app opens from the top bar.
+ */
+function Done({
+  built,
+  onReviewPicks,
+  onFix,
+  onOpenInApp,
+  onPublish,
+}: {
+  built: PlanBuilt;
+  onReviewPicks: () => void;
+  onFix: (cardId: string, promiseId: string) => void;
+  onOpenInApp?: (cardId: string) => boolean | void;
+  onPublish?: () => void;
+}) {
+  const t = useMessages(messages);
+  const shown = built.open.slice(0, OPEN_ROWS);
+  return (
+    <section
+      aria-label={t.builtTitle}
+      className="pointer-events-auto motion-step flex flex-col gap-3 rounded-xl border border-line bg-canvas-raised p-4 shadow-overlay"
+    >
+      <div className="flex flex-col">
+        <p className="text-reading font-medium text-fg">{t.builtTitle}</p>
+        <p className="text-meta text-fg-muted">
+          {t.builtCounts(built.screens, built.total, built.checked)}
+          {built.aiPicks > 0 && (
+            <>
+              {' · '}
+              <LinkButton className="min-h-5 px-0.5" onClick={onReviewPicks}>
+                {t.aiPicks(built.aiPicks)}
+              </LinkButton>
+            </>
+          )}
+        </p>
+      </div>
+      {shown.length > 0 && (
+        <ul aria-label={t.openPromises} className="flex flex-col gap-3 border-t border-line-subtle pt-3">
+          {shown.map((open) => (
+            <li key={`${open.cardId}/${open.promiseId}`} className="flex flex-col items-start gap-1.5">
+              <p className="flex gap-2 text-body text-fg">
+                <span
+                  aria-hidden
+                  className={clsx('w-3 shrink-0 text-center', open.failed ? 'text-danger' : 'text-fg-faint')}
+                >
+                  {open.failed ? '✗' : '·'}
+                </span>
+                <span className="min-w-0">
+                  {open.card} · {open.text}
+                  {open.note && <span className="block text-meta text-fg-muted">{open.note}</span>}
+                </span>
+              </p>
+              <span className="ml-5 flex items-center gap-3">
+                <Button onClick={() => onFix(open.cardId, open.promiseId)}>{t.fixNow}</Button>
+                {onOpenInApp && (
+                  <LinkButton className="min-h-5 px-0.5" onClick={() => onOpenInApp(open.cardId)}>
+                    {t.seeInApp}
+                  </LinkButton>
+                )}
+              </span>
+            </li>
+          ))}
+          {built.open.length > shown.length && (
+            <li className="ml-5 text-meta text-fg-muted">{t.moreOpen(built.open.length - shown.length)}</li>
+          )}
+        </ul>
+      )}
+      {onPublish && (
+        <Button variant="primary" className="w-full" onClick={onPublish}>
+          {t.publish}
+        </Button>
+      )}
+    </section>
+  );
+}
+
 /** One line of where the plan (or the map's work) stands and the answers to it. */
-export function Bar({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
+export function Bar({ title, hint, children }: { title: string; hint?: string; children?: ReactNode }) {
   return (
     <section className="pointer-events-auto motion-step flex flex-wrap items-center gap-3 rounded-xl border border-line bg-canvas-raised p-3 shadow-overlay">
       <div className="flex min-w-0 grow basis-60 flex-col">

@@ -337,11 +337,8 @@ describe('a planned product on its map', () => {
     await screen.findByText('AI가 확인을 기다려요');
     // The card's own "AI가 정함 · 바꾸기", in its panel.
     const card = await waitFor(() => {
-      const found = screen
-        .getAllByRole('button', { hidden: true })
-        .find((b) => b.hasAttribute('aria-expanded') && b.closest('[data-node]') && within(b).queryByText('발행'));
-      expect(found).toBeTruthy();
-      return found!;
+      for (const more of screen.queryAllByRole('button', { name: /^화면 \d+개 더/ })) fireEvent.click(more);
+      return screen.getAllByRole('button', { name: '발행 열기', hidden: true })[0]!;
     });
     fireEvent.click(card);
     fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: '바꾸기' }));
@@ -413,7 +410,7 @@ describe('a planned product on its map', () => {
   it("once built, does not bring back what the plan's conversation said last as the answer (#10)", async () => {
     const planning = [said('u1', '개발 블로그 만들어 줘'), reply('a1', '이제 정할 것이 없어요. 만들 준비가 됐어요.')];
     mount(blog('asking', { undecided: [] }), { mapItems: planning });
-    expect(await screen.findByRole('button', { name: '이대로 만들기' })).toBeTruthy();
+    expect(await screen.findByText('다 정했어요')).toBeTruthy();
     expect(screen.queryByRole('region', { name: 'AI의 답' })).toBeNull();
     // Built afterwards (the map comes back after the build): the planning words stay behind.
     cleanup();

@@ -133,6 +133,7 @@ function toCard(node: FlowNode, result: FlowGetResult, working: ReadonlySet<stri
           ? { src: result.screens[node.id]!, kind: 'planned', at: null, device: device ?? null }
           : undefined,
     tentative: !!node.tentative,
+    phase: node.phase ?? null,
     path: node.path ?? null,
     picks: (node.decisions ?? []).map((pick) => ({
       question: pick.question,

@@ -21,25 +21,19 @@ import { bookingBoard, boardScript, ORDER_FLOW, SDK_FLOW, seeded, withBoard } fr
 const cwd = '/project';
 /** The map's top row is there once the map has loaded. */
 const loaded = () => screen.findByRole('button', { name: '지도 메뉴' });
-/** The step cards with this title (a step shared by two journeys has a card in each). */
-const stepCards = (title: string) =>
-  screen
-    .getAllByRole('button', { hidden: true })
-    .filter(
-      (button) =>
-        button.hasAttribute('aria-expanded') &&
-        button.closest('[data-node]') &&
-        within(button).queryAllByText(title, { exact: true }).length > 0,
-    );
-/** The first step card with this title, once the map has drawn it. */
+/** The screens with this title on the filmstrip (a step shared by two journeys shows in each). */
+const stepCards = (title: string) => screen.queryAllByRole('button', { name: `${title} 열기`, hidden: true });
+/** The first step card with this title, once the map has drawn it (long rows opened, so every screen shows). */
 async function stepCard(title: string) {
-  await waitFor(() => expect(stepCards(title).length).toBeGreaterThan(0));
+  await waitFor(() => {
+    for (const more of screen.queryAllByRole('button', { name: /^화면 \d+개 더/ })) fireEvent.click(more);
+    expect(stepCards(title).length).toBeGreaterThan(0);
+  });
   return stepCards(title)[0]!;
 }
 /** Whether the map quiets this card (a search or a status lights the others). */
-const dimmed = (card: HTMLElement) =>
-  (card.closest('[data-node]')!.firstElementChild as HTMLElement).style.opacity === '0.35';
-/** Opens a step's panel from its card on the canvas. */
+const dimmed = (card: HTMLElement) => card.closest('[data-card]')!.classList.contains('opacity-35');
+/** Opens a step's panel from its screen on the filmstrip. */
 async function openStep(title: string) {
   fireEvent.click(await stepCard(title));
   return screen.findByRole('dialog');
@@ -65,9 +59,9 @@ async function menuItem(name: RegExp | string, role: 'menuitem' | 'menuitemcheck
 }
 /** The row under the top one that lists what wants a look, or null when nothing does. */
 const notices = () => screen.queryByRole('list', { name: '지도에서 볼 것' });
-/** Every step card on the canvas. */
+/** Every step on the filmstrip. */
 const allSteps = () =>
-  screen.getAllByRole('button').filter((b) => b.hasAttribute('aria-expanded') && b.closest('[data-node]'));
+  screen.getAllByRole('button').filter((b) => b.getAttribute('aria-haspopup') === 'dialog' && b.closest('[data-card]'));
 
 /** The project's folders for the scope picker: apps (web, api), src, and ones a map never needs. */
 const folders: Script = {
@@ -234,7 +228,11 @@ describe('living product map', () => {
   });
   it("shows a step's promises, where else it is used, and a failed promise's plain record", async () => {
     mount();
-    const panel = await openStep('결제');
+    await stepCard('결제');
+    fireEvent.click(
+      within(screen.getByRole('region', { name: ORDER_FLOW.title })).getByRole('button', { name: '결제 열기' }),
+    );
+    const panel = await screen.findByRole('dialog');
     expect(within(panel).getByText('약속 4개 중 3개 통과')).toBeTruthy();
     expect(within(panel).getByText(ORDER_FLOW.title)).toBeTruthy();
     const elsewhere = within(panel).getByText('다른 여정에도 나와요').parentElement!;
@@ -326,9 +324,9 @@ describe('living product map', () => {
     expect(screen.queryByRole('tab')).toBeNull();
     expect(screen.queryByRole('radio', { name: '카드 지도' })).toBeNull();
     expect(screen.queryByRole('radio', { name: '사람별 흐름' })).toBeNull();
-    expect(screen.getAllByRole('button', { name: new RegExp(ORDER_FLOW.title) })).toHaveLength(1);
-    // A step on two journeys has a card on each.
-    expect(await screen.findAllByText('결제', { exact: true })).toHaveLength(2);
+    expect(screen.getAllByRole('region', { name: ORDER_FLOW.title })).toHaveLength(1);
+    // A step on two journeys has a screen on each.
+    await stepCard('결제');
     expect(stepCards('결제')).toHaveLength(2);
     expect(localStorage.getItem('alpine.product-map.view')).toBeNull();
   });
@@ -341,10 +339,14 @@ describe('living product map', () => {
     );
     const card = await stepCard('상품 찾기');
     expect(card.querySelector('img')!.getAttribute('src')).toBe('data:image/png;base64,AAAA');
-    expect(within(card).getByText('실제 화면')).toBeTruthy();
-    for (const title of ['장바구니', '비회원 주문'])
-      expect(within(await stepCard(title)).getByText('아직 화면이 없어요')).toBeTruthy();
-    expect(within(await stepCard('결제')).queryByText('아직 화면이 없어요')).toBeNull();
+    expect(within(card.closest('[data-card]') as HTMLElement).getByText('실제 화면')).toBeTruthy();
+    // A screen with no picture yet is an empty frame with its name; a step with nothing to see is a low card.
+    for (const title of ['장바구니', '비회원 주문']) {
+      const empty = await stepCard(title);
+      expect(empty.querySelector('img')).toBeNull();
+      expect(within(empty).getByText(title)).toBeTruthy();
+    }
+    expect(within(await stepCard('결제')).getByText('화면 없음')).toBeTruthy();
   });
   it('closes the step panel with Esc', async () => {
     mount();
@@ -370,8 +372,8 @@ describe('the top row', () => {
     expect(allSteps().some(dimmed)).toBe(false);
     fireEvent.change(box, { target: { value: '장바구니' } });
     expect(dimmed(await stepCard('장바구니'))).toBe(false);
-    // The steps that lead to a hit stay clear, so its journey still reads; the rest quiets down.
-    expect(dimmed(await stepCard('상품 찾기'))).toBe(false);
+    // The rest quiets down; the journey's row still reads in order around the hit.
+    expect(dimmed(await stepCard('상품 찾기'))).toBe(true);
     expect(dimmed(await stepCard('주문 요청'))).toBe(true);
     expect(screen.getByText('1개 찾음')).toBeTruthy();
     // One hit: no "다음".
@@ -1522,19 +1524,21 @@ describe('flows that call another flow (decision 19)', () => {
       }),
     );
     await loaded();
-    const link = screen.getByRole('button', { name: new RegExp(`^이 여정을 거쳐요${calledTitle}`) });
+    const link = screen.getByRole('button', { name: `다른 흐름${calledTitle}` });
+    const scrolled = vi.mocked(Element.prototype.scrollIntoView);
+    scrolled.mockClear();
     fireEvent.click(link);
-    const panel = await screen.findByRole('dialog');
-    expect(within(panel).getByRole('heading', { name: calledTitle })).toBeTruthy();
+    // It leads to that journey's row.
+    await waitFor(() => expect(scrolled.mock.contexts).toContain(screen.getByRole('region', { name: calledTitle })));
   });
 });
 
 describe('person-first view', () => {
-  /** The map opens alone; the summary beside it lists the people, and picking one opens them over the map. */
+  /** A person's name over their rows opens them over the map. */
   async function openFirstPerson() {
-    fireEvent.click(await screen.findByRole('button', { name: '요약' }));
-    const summary = screen.getByRole('complementary');
-    fireEvent.click(within(summary).getAllByRole('button')[0]!);
+    await loaded();
+    const first = screen.getAllByRole('region').find((region) => region.dataset.person)!;
+    fireEvent.click(within(first).getAllByRole('button')[0]!);
     return screen.findByRole('dialog');
   }
 
@@ -1560,7 +1564,7 @@ describe('person-first view', () => {
         ),
       ).toBe(true),
     );
-    expect(await screen.findByRole('heading', { name: '회원', hidden: true })).toBeTruthy();
+    expect(await screen.findByRole('region', { name: '회원', hidden: true })).toBeTruthy();
   });
 });
 
