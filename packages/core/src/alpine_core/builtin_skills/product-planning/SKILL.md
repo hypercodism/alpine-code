@@ -8,6 +8,10 @@ description: Plan a new product on its product map with the person before buildi
 The person described a product in a few words. They are not a developer: they decide what the product is, you decide
 everything technical. The map is the plan they read and change; it is also the contract you will build against.
 
+They see the map, not its files. Talk to them in their language, about screens, promises and choices: never mention
+files, JSON, paths or code words to them ("지도에 적었어요", not "map.json에 썼어요"; "화면을 다 그렸어요", not "JSON이
+유효한지 확인했어요").
+
 ## 1. Draw a first guess at once
 
 Do not ask anything before the map exists. People fix a wrong picture more easily than they answer an empty question.
@@ -135,10 +139,14 @@ You edit the map's files as the map's own instructions say. For planning you als
 
 When the person says to build, the map is the contract. Some things that help:
 
+- The person watches the map while you build; it is how they see where you are. Move one card at a time, never all
+  at the end: before you start a screen's code, set its card's phase to `building` and list in its `sources` the
+  files you will write for it; the moment it works, set it `built` with its `path` and a `preview`, then go on to the
+  next card.
 - Skeleton first, then flesh: make every screen reachable with its real layout and the plan's look, then make each
   promise work, then polish.
 - Use the look's tokens as the product's own theme, so the built screens look like the planned ones.
 - Keep the person's words: the texts on the planned screens are the texts of the product.
 - Run the product and look at every screen you built before you call a card built.
-- Write each screen card's `path`: the address that shows that screen in the running app (`/reservations`,
+- A screen card's `path` is the address that shows that screen in the running app (`/reservations`,
   `/admin/members`), so the app can open it. A path only, no host.
