@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, Navigate } from '@tanstack/react-router';
 
 import { CHANGES_TAB, SUMMARY_TAB, WorkspaceDock } from '@/app/WorkspaceDock';
 import { showDockTab } from '@/features/dock/state';
@@ -26,7 +26,18 @@ function SessionRoute() {
   const resultTab = useWorkResultTab(sessionId);
   const taskForceTab = useTaskForceTab(sessionId, renderRecord);
   const session = useSession(sessionId);
-  const cwd = session.data?.info.cwd;
+  const info = session.data?.info;
+  const cwd = info?.cwd;
+  // A map's own conversation is talked to on its map (map-first 40), from wherever its link came (search, Ctrl+Tab,
+  // the agents screen): the map's current one is its map, a build or one the map let go of opens beside it.
+  if (cwd && info.purpose)
+    return (
+      <Navigate
+        to="/board"
+        search={info.purpose === 'map' && !info.archived ? { project: cwd } : { project: cwd, session: sessionId }}
+        replace
+      />
+    );
   if (!cwd) return <Session key={sessionId} sessionId={sessionId} />;
   return (
     <WorkspaceDock

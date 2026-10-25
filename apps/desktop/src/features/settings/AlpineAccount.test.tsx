@@ -2,6 +2,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { CloudStatus } from '@alpine/protocol';
+
 import { LocaleProvider } from '@/shared/i18n';
 import { cloudScript, scriptedConnection, ServerProvider, type CloudScriptOptions } from '@/shared/server';
 
@@ -97,17 +99,34 @@ describe('AlpineAccount', () => {
     expect(screen.getByRole('button', { name: '로그인' })).toBeTruthy();
   });
 
-  it('shows nothing until the server has answered', () => {
-    const connection = scriptedConnection({});
+  it('says it is loading until the server has answered, and offers to ask again when it could not (#51)', async () => {
+    let fails = true;
+    const base = cloudScript();
+    const status = base.results!['cloud/status'] as () => CloudStatus;
+    const connection = scriptedConnection({
+      results: {
+        ...base.results,
+        'cloud/status': async () => {
+          if (fails) throw new Error('down');
+          return status();
+        },
+      },
+    });
     render(
       <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
         <ServerProvider connection={connection}>
           <LocaleProvider locale="ko">
-            <AlpineAccount />
+            <dl>
+              <AlpineAccount />
+            </dl>
           </LocaleProvider>
         </ServerProvider>
       </QueryClientProvider>,
     );
-    expect(screen.queryByText('Alpine 계정')).toBeNull();
+    expect(screen.getByText('계정 정보를 불러오는 중…')).toBeTruthy();
+    expect(await screen.findByText('계정 정보를 불러오지 못했어요.')).toBeTruthy();
+    fails = false;
+    fireEvent.click(screen.getByRole('button', { name: '다시 시도' }));
+    await waitFor(() => expect(screen.queryByText('계정 정보를 불러오지 못했어요.')).toBeNull());
   });
 });

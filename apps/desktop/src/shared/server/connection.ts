@@ -18,6 +18,13 @@ export interface ServerConnection {
   subscribe(listener: (notification: Notification) => void): () => void;
 }
 
+/**
+ * The notification a connection sends, once, when the server process is gone: every request still waiting has failed
+ * with `SERVER_EXITED_CODE`, and so does every request after it.
+ */
+export const SERVER_EXITED = 'server/exited';
+export const SERVER_EXITED_CODE = -32099;
+
 export class ServerError extends Error {
   constructor(
     readonly code: number,

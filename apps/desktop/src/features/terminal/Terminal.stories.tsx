@@ -150,7 +150,7 @@ export const Sidebar: Story = {
     await screen.findByRole('textbox', { name: /터미널 입력|Terminal input/ });
     await userEvent.click(screen.getByRole('button', { name: /터미널 분할|Split terminal/ }));
     await expect(await screen.findAllByRole('textbox', { name: /터미널 입력|Terminal input/ })).toHaveLength(2);
-    await expect(screen.queryByRole('button', { name: /다른 터미널|Other terminals/ })).not.toBeInTheDocument();
+    await expect(screen.queryByRole('button', { name: /터미널 바꾸기|Switch terminal/ })).not.toBeInTheDocument();
   },
   decorators: [
     (Story) => (

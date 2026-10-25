@@ -2,7 +2,7 @@ import type { SessionInfo } from '@alpine/protocol';
 import { Dialog, Input } from '@alpine/ui/primitives';
 import { useMatch, useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
-import { Archive, Folder, MessageSquare, Search } from 'lucide-react';
+import { Archive, Folder, Map as MapIcon, MessageSquare, Search } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 
 import { StatusWord } from '@/shared/components/status';
@@ -13,9 +13,14 @@ import { useOpenProject, useProjects, useSearchSessions, useSessions } from '@/s
 import { useCurrentProject } from './currentProject';
 import { messages } from './messages';
 
-/** Lives outside the rail so search and session shortcuts also work when the rail is hidden. */
-export function NavigationController() {
-  const sessions = useSessions().data;
+/**
+ * Lives outside the rail so search and session shortcuts also work when the rail is hidden. Opening the app it goes
+ * back to where I was; `onRestored` hears when that is settled (gone there, or nowhere to go), so nothing is drawn on
+ * the way.
+ */
+export function NavigationController({ onRestored }: { onRestored?: () => void }) {
+  const sessionsQuery = useSessions();
+  const sessions = sessionsQuery.data;
   const match = useMatch({ from: '/session/$sessionId', shouldThrow: false });
   const id = match?.params.sessionId;
   const info = sessions?.find((s) => s.id === id);
@@ -24,17 +29,25 @@ export function NavigationController() {
   const restored = useRef(false);
   const visit = useNavigation((s) => s.visit);
   const navigate = useNavigate();
-  const projects = useProjects().data?.projects;
+  const projectsQuery = useProjects();
+  const projects = projectsQuery.data?.projects;
+  const unanswered = sessionsQuery.isError || projectsQuery.isError;
   useEffect(() => {
-    if (restored.current || !sessions || !projects) return;
-    restored.current = true;
-    if (!start || start.search.project || start.search.new) return;
-    const prefs = useNavigation.getState();
-    const session = sessions.find((s) => s.id === prefs.lastSessions[prefs.lastProject ?? ''] && !s.archived);
-    if (session && projects.some((p) => p.path === session.cwd && !p.archived)) {
-      void navigate({ to: '/session/$sessionId', params: { sessionId: session.id }, replace: true });
+    if (restored.current) return;
+    // A server that cannot say leaves me where I am, which then shows what went wrong.
+    if (unanswered) {
+      restored.current = true;
+      return onRestored?.();
     }
-  }, [sessions, projects, start, navigate]);
+    if (!sessions || !projects) return;
+    restored.current = true;
+    if (!start || start.search.project || start.search.folder) return onRestored?.();
+    // Opening the app goes back to the last project, which is its map (map-first 1); without one, 새 프로젝트.
+    const last = useNavigation.getState().lastProject;
+    if (last && projects.some((p) => p.path === last && !p.archived)) {
+      void navigate({ to: '/board', search: { project: last }, replace: true }).finally(() => onRestored?.());
+    } else onRestored?.();
+  }, [sessions, projects, unanswered, start, navigate, onRestored]);
   useEffect(() => {
     if (!current) return;
     useNavigation.setState((state) => ({ expanded: { ...state.expanded, [current]: true } }));
@@ -61,10 +74,11 @@ export function NavigationController() {
         !useNavigation.getState().searchOpen
       ) {
         const paths = new Set(projects?.filter((p) => !p.archived).map((p) => p.path));
-        // Creation order stays stable while background sessions update their activity times.
+        // Creation order stays stable while background sessions update their activity times. The map's own
+        // conversations are its map, which the rail opens; this goes through the conversations of their own.
         const listed =
           sessions
-            ?.filter((s) => !s.archived && paths.has(s.cwd))
+            ?.filter((s) => !s.archived && !s.purpose && paths.has(s.cwd))
             .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)) ?? [];
         if (!listed.length) return;
         event.preventDefault();
@@ -118,9 +132,18 @@ function SearchContents({ onClose, title }: { onClose: () => void; title: string
   const listRef = useRef<HTMLDivElement>(null);
   const needle = term.trim().toLocaleLowerCase();
   const byPath = new Map(projects.map((p) => [p.path, p]));
+  // The map's own conversations are named as the rail names them, not as chats.
+  const named = (session: SessionInfo) =>
+    session.purpose === 'build'
+      ? t.buildRecord
+      : session.purpose === 'map'
+        ? session.archived
+          ? t.oldMapTalk
+          : t.mapTalk
+        : session.title || t.untitledSession;
   const sessionEntry = (session: SessionInfo, excerpt = session.summary): SearchEntry => ({
     key: session.id,
-    title: session.title || t.untitledSession,
+    title: named(session),
     path: session.cwd,
     project: byPath.get(session.cwd)?.name ?? session.cwd.split('/').pop() ?? session.cwd,
     session,
@@ -155,8 +178,11 @@ function SearchContents({ onClose, title }: { onClose: () => void; title: string
   }, [selectedKey]);
   const choose = (entry: SearchEntry) => {
     const go = () => {
-      // A project opens its map, as on the rail.
-      if (entry.session) void navigate({ to: '/session/$sessionId', params: { sessionId: entry.session.id } });
+      // A project opens its map, as on the rail; so does the map's own conversation, and a record opens beside it.
+      const session = entry.session;
+      if (session && !session.purpose) void navigate({ to: '/session/$sessionId', params: { sessionId: session.id } });
+      else if (session && (session.purpose === 'build' || session.archived))
+        void navigate({ to: '/board', search: { project: entry.path, session: session.id } });
       else void navigate({ to: '/board', search: { project: entry.path } });
       onClose();
     };
@@ -220,7 +246,9 @@ function SearchContents({ onClose, title }: { onClose: () => void; title: string
               i === selected ? 'bg-selected' : 'hover:bg-hover',
             )}
           >
-            {entry.session ? (
+            {entry.session?.purpose ? (
+              <MapIcon size={16} className="mt-0.5 shrink-0 text-fg-muted" aria-hidden="true" />
+            ) : entry.session ? (
               <MessageSquare size={16} className="mt-0.5 shrink-0 text-fg-muted" aria-hidden="true" />
             ) : (
               <Folder size={16} className="mt-0.5 shrink-0 text-fg-muted" aria-hidden="true" />

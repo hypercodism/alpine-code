@@ -7,8 +7,8 @@ import type { agentMessages } from './messages';
 export const BUILTIN_TOOLS = ['read', 'glob', 'grep', 'write', 'edit', 'bash'] as const;
 type Builtin = (typeof BUILTIN_TOOLS)[number];
 
-/** The tools Alpine says in plain words: the built-ins and the memory's, which every agent has. */
-const LABELED = [...BUILTIN_TOOLS, 'propose_memory'] as const;
+/** The tools Alpine says in plain words: the built-ins, and asking and the memory's, which every agent has. */
+const LABELED = [...BUILTIN_TOOLS, 'ask_user', 'propose_memory'] as const;
 type Labeled = (typeof LABELED)[number];
 
 /** A tool that comes with Alpine, and whether an agent can turn it off. */

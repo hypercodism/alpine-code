@@ -132,7 +132,12 @@ export function skillsScript({ empty = false, delayMs = 0 }: SkillsScriptOptions
         choices: [],
       };
     }
-    const name = text.match(/--skill\s+([\w.-]+)/)?.[1] ?? text.match(/\/([\w.-]+?)(?:\.zip|\.skill)?\/?$/)?.[1];
+    // A SKILL.md in a folder on this computer is there only in a folder named as a skill: a dropped project folder
+    // or file has none, as on the server.
+    const local = text.match(/^\/.*\/([^/]+)\/SKILL\.md$/);
+    if (local && !/skill/i.test(local[1]!)) throw new ServerError(-32000, 'not found', { reason: 'not_found' });
+    const name =
+      local?.[1] ?? text.match(/--skill\s+([\w.-]+)/)?.[1] ?? text.match(/\/([\w.-]+?)(?:\.zip|\.skill)?\/?$/)?.[1];
     if (!name || !/[/\\]/.test(text)) throw new ServerError(-32000, 'unknown source', { reason: 'unknown_source' });
     if (name === 'missing') throw new ServerError(-32000, 'no skills', { reason: 'no_skills' });
     return { source: text, added: [install(name, text)], choices: [] };

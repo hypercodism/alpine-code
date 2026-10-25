@@ -20,7 +20,9 @@ function show(extra: { summary: string | null; cleared: number }) {
 describe('CompactionLine', () => {
   it('opens to the cleared results and the summary', () => {
     show({ summary: '남은 일: 테스트 하나', cleared: 14 });
-    const line = screen.getByRole('button', { name: /대화를 정리했어요 · 96,000 → 12,000 토큰/ });
+    // The line says what happened in plain words; the sizes are only on hover (#89).
+    const line = screen.getByRole('button', { name: '대화가 길어져 앞부분을 정리했어요' });
+    expect(line.getAttribute('title')).toBe('대화 길이 96,000 → 12,000 토큰');
     expect(line.getAttribute('aria-expanded')).toBe('false');
     fireEvent.click(line);
     expect(line.getAttribute('aria-expanded')).toBe('true');
@@ -38,6 +40,6 @@ describe('CompactionLine', () => {
   it('is a plain line when there is nothing to open', () => {
     show({ summary: null, cleared: 0 });
     expect(screen.queryByRole('button')).toBeNull();
-    expect(screen.getByText(/대화를 정리했어요/)).toBeTruthy();
+    expect(screen.getByText('대화가 길어져 앞부분을 정리했어요')).toBeTruthy();
   });
 });

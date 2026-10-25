@@ -3,12 +3,14 @@
 import importlib
 import io
 import json
+import subprocess
 import threading
 
 import pytest
 from alpineagents import ProviderError
 from alpineagents.testing import FakeModel
 
+from alpine_core import templates as templates_module
 from alpine_protocol import JudgedChange, JudgedNew, ProjectsJudgeParams
 from alpine_server.judge import judge_project
 from alpine_server.methods import MethodError
@@ -20,7 +22,7 @@ core_judge = importlib.import_module("alpine_core.judge")
 NEW = {
     "kind": "new",
     "template": "web-lite",
-    "reason": "로그인과 예약 저장이면 Lite로 충분해요.",
+    "reason": "로그인과 예약 저장이면 웹앱으로 충분해요.",
     "name": "craft-booking",
 }
 
@@ -245,14 +247,60 @@ def test_only_the_templates_the_server_has_are_offered_to_a_chosen_new_project(t
     assert ask(new_project=True).template == "blank"
 
 
-def test_a_chosen_new_project_with_nothing_to_make_or_nothing_written_is_a_change(tmp_path, monkeypatch, templates):
+def test_a_chosen_new_project_with_nothing_written_is_a_change(monkeypatch, templates):
     def fail(settings):
         raise AssertionError("the model must not be made")
 
     monkeypatch.setattr(core_judge, "make_model", fail)
     assert call(text="   ", locale="ko", new_project=True)["result"] == {"judgement": {"kind": "change"}}
+
+
+def test_a_chosen_new_project_with_no_templates_says_so_before_any_setup_is_shown(tmp_path, monkeypatch, templates):
+    def fail(settings):
+        raise AssertionError("the model must not be made")
+
+    monkeypatch.setattr(core_judge, "make_model", fail)
     monkeypatch.setenv("ALPINE_TEMPLATES", str(tmp_path / "nothing-here"))
-    assert call(text="앱 만들어 줘", locale="ko", new_project=True)["result"] == {"judgement": {"kind": "change"}}
+    assert call(text="앱 만들어 줘", locale="ko", new_project=True)["error"]["data"] == {"reason": "not_found"}
+
+
+@pytest.fixture
+def no_local_templates(tmp_path, monkeypatch):
+    """A normal install: no templates folder of a developer's, so they are fetched from the public repository."""
+    monkeypatch.delenv("ALPINE_TEMPLATES", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path / "user"))
+
+
+def public_repo(tmp_path, *names):
+    repo = tmp_path / "public"
+    for name in names:
+        (repo / name).mkdir(parents=True)
+        (repo / name / "AGENTS.md").write_text("# template\n")
+    for args in (
+        ("init", "-q"),
+        ("add", "-A"),
+        ("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "x"),
+    ):
+        subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
+    return f"file://{repo}"
+
+
+def test_the_first_new_project_fetches_the_templates_and_offers_them(tmp_path, monkeypatch, no_local_templates):
+    monkeypatch.setattr(templates_module, "TEMPLATES_REPO", public_repo(tmp_path, "blank", "web-lite"))
+    model = model_says(monkeypatch, json.dumps(NEW))
+    assert ask(new_project=True) == JudgedNew(template="web-lite", reason=NEW["reason"], name="craft-booking")
+    assert "`blank`" in model.requests[0].system
+    assert templates_module.fetched_templates() is not None
+
+
+def test_templates_that_cannot_be_fetched_say_why(tmp_path, monkeypatch, no_local_templates):
+    model_says(monkeypatch, json.dumps(NEW))
+    monkeypatch.setattr(templates_module, "TEMPLATES_REPO", f"file://{tmp_path / 'not-there'}")
+    assert call(text="앱 만들어 줘", locale="ko", new_project=True)["error"]["data"] == {"reason": "not_found"}
+    monkeypatch.setattr(templates_module, "TEMPLATES_REPO", "http://127.0.0.1:9/alpine-templates.git")
+    assert call(text="앱 만들어 줘", locale="ko", new_project=True)["error"]["data"] == {"reason": "unreachable"}
+    monkeypatch.setattr(templates_module, "git_tools_ready", lambda: False)
+    assert call(text="앱 만들어 줘", locale="ko", new_project=True)["error"]["data"] == {"reason": "no_git_tools"}
 
 
 def test_a_failed_model_call_for_a_chosen_new_project_is_model_failed(templates, monkeypatch):
@@ -261,9 +309,10 @@ def test_a_failed_model_call_for_a_chosen_new_project_is_model_failed(templates,
     assert error["data"] == {"reason": "model_failed"}
 
 
-def test_with_alpine_cloud_off_nothing_is_a_new_app(templates, monkeypatch):
-    monkeypatch.delenv("ALPINE_CLOUD_URL")
+def test_with_alpine_cloud_off_the_model_still_picks_from_what_needs_no_cloud(templates, monkeypatch):
+    monkeypatch.setenv("ALPINE_CLOUD_URL", "")
+    (templates / "web-pro").mkdir()
     model = model_says(monkeypatch, json.dumps(NEW))
     result = judge_project(ProjectsJudgeParams(text="make a booking site", locale="en", new_project=True))
-    assert result.judgement == JudgedChange()
-    assert model.requests == []  # no template to offer: the model is not even asked
+    assert result.judgement == JudgedNew(template="web-lite", reason=NEW["reason"], name="craft-booking")
+    assert "web-pro" not in model.requests[0].system  # a realtime web app needs Alpine Cloud

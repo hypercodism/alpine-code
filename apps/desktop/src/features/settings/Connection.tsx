@@ -1,5 +1,5 @@
 import type { ConnectionInfo, ConnectionsListResult } from '@alpine/protocol';
-import { Button, Dialog, Menu, NativeSelect } from '@alpine/ui/primitives';
+import { Button, Dialog, LinkButton, Menu, NativeSelect } from '@alpine/ui/primitives';
 import {
   ArrowUpRight,
   ChevronRight,
@@ -27,7 +27,6 @@ import {
   CHATGPT_USAGE_URL,
   useChatGPTSignOut,
   useCloudEnabled,
-  useCloudSignOut,
   useCloudStatus,
   useConnections,
   useModelsOf,
@@ -38,6 +37,7 @@ import {
   shownModels,
 } from '@/shared/server';
 
+import { AlpineSignOutDialog } from './AlpineAccount';
 import { messages } from './messages';
 import { ModelsDialog } from './ModelsDialog';
 
@@ -46,7 +46,7 @@ type Sheet =
   | { kind: 'api-key'; provider?: string }
   | { kind: 'local'; address?: string }
   | { kind: 'chatgpt'; connection?: string; consent?: boolean }
-  | { kind: 'alpine' }
+  | { kind: 'alpine'; again?: boolean }
   | null;
 
 const fieldRow = 'grid items-center gap-3 py-5 sm:grid-cols-2 sm:gap-6 not-first:border-t not-first:border-line-subtle';
@@ -54,6 +54,7 @@ const fieldRow = 'grid items-center gap-3 py-5 sm:grid-cols-2 sm:gap-6 not-first
 /** A short provider name; addresses and account details are displayed separately. */
 function providerName(connection: ConnectionInfo, data: ConnectionsListResult) {
   if (connection.account) return 'ChatGPT';
+  if (connection.provider === 'alpine') return 'Alpine';
   const provider = data.providers.find((item) => item.id === connection.provider);
   if (provider) return provider.name;
   try {
@@ -63,8 +64,11 @@ function providerName(connection: ConnectionInfo, data: ConnectionsListResult) {
   }
 }
 
-/** Connected providers, the method chooser, and defaults for new chats. */
-export function ConnectionTab() {
+/**
+ * Connected providers, the method chooser, and defaults for new chats. The Alpine account itself (plan, credits) is
+ * in Settings › General; `onAlpineAccount` goes there.
+ */
+export function ConnectionTab({ onAlpineAccount }: { onAlpineAccount: () => void }) {
   const t = useMessages(messages);
   const c = useMessages(connectMessages);
   const connections = useConnections();
@@ -74,7 +78,23 @@ export function ConnectionTab() {
   const cloud = useCloudEnabled();
   const alpine = useCloudStatus(cloud).data;
   const data = connections.data;
-  if (!data) return null;
+  if (!data)
+    return (
+      <div className="mx-auto flex w-full max-w-240 flex-col items-center gap-3 py-12 text-center">
+        {connections.isError ? (
+          <>
+            <p role="alert" className="text-body text-danger">
+              {t.connectionsFailed}
+            </p>
+            <Button disabled={connections.isFetching} onClick={() => void connections.refetch()}>
+              {t.retry}
+            </Button>
+          </>
+        ) : (
+          <p className="text-body text-fg-muted">{t.connectionsLoading}</p>
+        )}
+      </div>
+    );
 
   return (
     <div className="mx-auto flex w-full max-w-240 flex-col gap-8 pb-8">
@@ -95,7 +115,13 @@ export function ConnectionTab() {
           ) : (
             data.connections.map((connection) => {
               const name = providerName(connection, data);
-              const Icon = connection.account ? MessagesSquare : connection.provider ? KeyRound : Server;
+              const Icon = connection.account
+                ? MessagesSquare
+                : connection.provider === 'alpine'
+                  ? Snowflake
+                  : connection.provider
+                    ? KeyRound
+                    : Server;
               return (
                 <div
                   key={connection.name}
@@ -112,19 +138,31 @@ export function ConnectionTab() {
                         {connection.account?.email ?? alpine?.account?.email}
                       </p>
                     )}
-                    <Status connection={connection} data={data} />
+                    <Status
+                      connection={connection}
+                      data={data}
+                      onAddKey={() =>
+                        connection.provider && setSheet({ kind: 'api-key', provider: connection.provider })
+                      }
+                    />
                   </div>
                   <div className="ml-auto flex w-full max-w-full items-center gap-2 pl-13 sm:w-auto sm:pl-0">
                     {connection.account ? (
                       <ChatGPTActions
                         connection={connection}
                         onSignIn={(consent) => setSheet({ kind: 'chatgpt', connection: connection.name, consent })}
+                        onRemove={() => setRemoving(connection)}
                       />
                     ) : connection.provider === 'alpine' ? (
-                      <>
-                        <Button onClick={() => setChoosing(connection)}>{t.chooseModels}</Button>
-                        <AlpineActions label={t.connectionActions(name)} />
-                      </>
+                      <AlpineActions
+                        connection={connection}
+                        label={t.connectionActions(name)}
+                        cloud={cloud}
+                        onChooseModels={() => setChoosing(connection)}
+                        onSignIn={() => setSheet({ kind: 'alpine', again: true })}
+                        onAccount={onAlpineAccount}
+                        onRemove={() => setRemoving(connection)}
+                      />
                     ) : (
                       <>
                         <Button onClick={() => setChoosing(connection)}>{t.chooseModels}</Button>
@@ -246,7 +284,10 @@ export function ConnectionTab() {
             />
           )}
           {sheet?.kind === 'alpine' && (
-            <AlpineSignIn onBack={() => setSheet({ kind: 'add' })} onDone={() => setSheet(null)} />
+            <AlpineSignIn
+              {...(sheet.again ? { onClose: () => setSheet(null) } : { onBack: () => setSheet({ kind: 'add' }) })}
+              onDone={() => setSheet(null)}
+            />
           )}
           {sheet?.kind === 'local' && (
             <LocalServerForm
@@ -303,7 +344,7 @@ function RemoveDialog({
           <>
             <div className="flex flex-col gap-2">
               <Dialog.Title>{t.removeTitle(connectionLabel(connection, data.providers, c))}</Dialog.Title>
-              <Dialog.Description>{t.removeLead}</Dialog.Description>
+              <Dialog.Description>{connection.account ? t.removeAccountLead : t.removeLead}</Dialog.Description>
               {defaultOnIt && (
                 <p className="text-body">{t.removeDefault(defaultOnIt.slice(defaultOnIt.indexOf('/') + 1))}</p>
               )}
@@ -370,7 +411,16 @@ function AddMethod({
 }
 
 /** How it is paid for, or what is missing. Limits and spend come with usage tracking. */
-function Status({ connection, data }: { connection: ConnectionInfo; data: ConnectionsListResult }) {
+function Status({
+  connection,
+  data,
+  onAddKey,
+}: {
+  connection: ConnectionInfo;
+  data: ConnectionsListResult;
+  /** Opens the key form for a provider whose key is missing. */
+  onAddKey: () => void;
+}) {
   const c = useMessages(connectMessages);
   if (connection.account) {
     const { signedIn, planUsage } = connection.account;
@@ -378,14 +428,23 @@ function Status({ connection, data }: { connection: ConnectionInfo; data: Connec
     const text = !signedIn ? c.chatgptSignedOut : c.chatgptPlanOff;
     return <span className={signedIn ? 'text-meta text-fg-muted' : 'text-meta text-danger'}>{text}</span>;
   }
-  const provider = data.providers.find((p) => p.id === connection.provider);
-  if (provider?.id === 'alpine')
+  // Not among the providers: Alpine signs in instead of taking a key.
+  if (connection.provider === 'alpine')
     return (
       <span className={connection.hasKey ? 'text-meta text-fg-muted' : 'text-meta text-danger'}>
         {connection.hasKey ? c.alpineCredits : c.alpineSignedOut}
       </span>
     );
-  if (provider && !connection.hasKey) return <span className="text-meta text-danger">{c.noKey(provider.keyEnv)}</span>;
+  const provider = data.providers.find((p) => p.id === connection.provider);
+  if (provider && !connection.hasKey)
+    return (
+      <span className="flex flex-wrap items-center gap-x-2 text-meta text-danger">
+        {c.noKey}
+        <LinkButton className="min-h-5 px-0.5" onClick={onAddKey}>
+          {c.addKey}
+        </LinkButton>
+      </span>
+    );
   if (!provider)
     return (
       <span className="text-meta text-fg-muted wrap-anywhere">{connection.baseUrl?.replace(/^https?:\/\//, '')}</span>
@@ -470,26 +529,70 @@ function ModelSelect({
   );
 }
 
-/** The Alpine connection's one action: signing out of the account that pays for it. */
-function AlpineActions({ label }: { label: string }) {
+/**
+ * The Alpine connection is the Alpine account. Signed in: its models, the way to the account in Settings › General,
+ * and signing out, asked the same way as there. Signed out: signing in again, or deleting what is left.
+ */
+function AlpineActions({
+  connection,
+  label,
+  cloud,
+  onChooseModels,
+  onSignIn,
+  onAccount,
+  onRemove,
+}: {
+  connection: ConnectionInfo;
+  label: string;
+  cloud: boolean;
+  onChooseModels: () => void;
+  onSignIn: () => void;
+  onAccount: () => void;
+  onRemove: () => void;
+}) {
+  const t = useMessages(messages);
   const c = useMessages(connectMessages);
-  const signOut = useCloudSignOut();
+  const [signingOut, setSigningOut] = useState(false);
+  if (!connection.hasKey)
+    return (
+      <>
+        {cloud && <Button onClick={onSignIn}>{c.signInAgain}</Button>}
+        <ActionsMenu label={label}>
+          <Menu.Item className="text-danger" onClick={onRemove}>
+            {t.remove}
+          </Menu.Item>
+        </ActionsMenu>
+      </>
+    );
   return (
-    <ActionsMenu label={label}>
-      <Menu.Item disabled={signOut.isPending} onClick={() => signOut.mutate()}>
-        {c.signOut}
-      </Menu.Item>
-    </ActionsMenu>
+    <>
+      <Button onClick={onChooseModels}>{t.chooseModels}</Button>
+      <ActionsMenu label={label}>
+        {cloud && (
+          <>
+            <Menu.Item onClick={onAccount}>{t.alpineManage}</Menu.Item>
+            <Menu.Separator />
+          </>
+        )}
+        <Menu.Item onClick={() => setSigningOut(true)}>{t.alpineSignOutMenu}</Menu.Item>
+      </ActionsMenu>
+      <AlpineSignOutDialog open={signingOut} onClose={() => setSigningOut(false)} />
+    </>
   );
 }
 
-/** A ChatGPT account's actions: while signed in, its usage page and signing out; otherwise signing in again. */
+/**
+ * A ChatGPT account's actions: while signed in, its usage page and signing out; otherwise signing in again. Deleting
+ * the connection is there either way.
+ */
 function ChatGPTActions({
   connection,
   onSignIn,
+  onRemove,
 }: {
   connection: ConnectionInfo;
   onSignIn: (consent: boolean) => void;
+  onRemove: () => void;
 }) {
   const c = useMessages(connectMessages);
   const signOut = useChatGPTSignOut();
@@ -512,13 +615,19 @@ function ChatGPTActions({
           <ArrowUpRight size={14} aria-hidden="true" />
         </Button>
       )}
-      {account.signedIn && (
-        <ActionsMenu label={t.connectionActions('ChatGPT')}>
-          <Menu.Item disabled={signOut.isPending} onClick={() => signOut.mutate(connection.name)}>
-            {c.signOut}
-          </Menu.Item>
-        </ActionsMenu>
-      )}
+      <ActionsMenu label={t.connectionActions('ChatGPT')}>
+        {account.signedIn && (
+          <>
+            <Menu.Item disabled={signOut.isPending} onClick={() => signOut.mutate(connection.name)}>
+              {c.signOut}
+            </Menu.Item>
+            <Menu.Separator />
+          </>
+        )}
+        <Menu.Item className="text-danger" onClick={onRemove}>
+          {t.remove}
+        </Menu.Item>
+      </ActionsMenu>
       {signOut.error && (
         <p className="w-full text-meta text-danger" role="alert">
           {signOut.error.message}

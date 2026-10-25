@@ -29,6 +29,8 @@ import {
 } from 'lucide-react';
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
+import { HtmlFrame } from '@/shared/components/html-frame';
+import { FallingSnow } from '@/shared/components/snowscape';
 import { useFormat, useMessages } from '@/shared/i18n';
 
 import {
@@ -62,7 +64,8 @@ import {
   useText,
   type PromiseTarget,
 } from './treeParts';
-import { CHECKLIST_ROWS, layoutTree, SCREEN_H, stepId, type LaidNode } from './treeLayout';
+import { screenPage, screenWidthFor, WIREFRAME } from './planLook';
+import { CHECKLIST_ROWS, layoutTree, SCREEN_H, stepId, THUMB_W, type LaidNode } from './treeLayout';
 
 export type { PromiseTarget } from './treeParts';
 
@@ -74,7 +77,12 @@ export interface StepParts {
 
 export interface FlowTreeProps {
   map: TreeMap;
-  onCheck: (targets: PromiseTarget[]) => void;
+  /** Asks the AI to check promises against the code; absent on a plan not built yet (nothing to check). */
+  onCheck?: (targets: PromiseTarget[]) => void;
+  /** A plan not built yet: a journey's missing steps are drawn, not found in code. */
+  planning?: boolean;
+  /** Why the AI cannot take work from here now (it is busy elsewhere): said at the top of the open details. */
+  waitNote?: string | null;
   onFix: (targets: PromiseTarget[]) => void;
   onAddPromise: (cardId: string, when: string, then: string) => void;
   onRemovePromise: (target: PromiseTarget) => void;
@@ -113,10 +121,16 @@ export interface FlowTreeProps {
   stepParts?: (cardId: string) => StepParts;
   /** More for an open promise, after its last check (what the check saw: pictures, output, who confirmed it). */
   promiseExtras?: (cardId: string, promiseId: string) => ReactNode;
+  /** The look planned screens wear (theme CSS); grey lines without one. */
+  look?: string;
+  /** Cards the AI's work touches now: outlined, their screen frosted with snow falling on it. */
+  touching?: ReadonlySet<string>;
+  /** The card a question is about now: outlined so its screen can be read while answering. */
+  asked?: string | null;
 }
 
 /** What the side panel shows: a node's details, a promise of a step, or a form for what a "+" adds. */
-type Focus =
+export type Focus =
   | { kind: 'person'; personId: string }
   | { kind: 'journey'; personId: string; journeyId: string }
   | { kind: 'step'; personId: string; journeyId: string; cardId: string }
@@ -271,6 +285,16 @@ export function FlowTree(props: FlowTreeProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [asked]);
 
+  // The card a question is about comes into view, without opening it: the question is read beside it.
+  useEffect(() => {
+    const where = props.asked && stepOf(props.asked);
+    if (!props.asked || !where) return;
+    const timer = setTimeout(() => canvas.current?.reveal(stepId(where.journey.id, props.asked!)), 420);
+    return () => clearTimeout(timer);
+    // Only a new question moves the view.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.asked]);
+
   /** Opens the step of a promise, picks the promise and brings it into view once it has grown in. */
   const show = (target: PromiseTarget, personId: string) => {
     const journey = map.people
@@ -359,9 +383,6 @@ export function FlowTree(props: FlowTreeProps) {
       setFocus((current) => (current && current.kind !== 'addPerson' ? { ...current, personId: moved.id } : current));
   }, [focus, person, map]);
 
-  const focusScreen =
-    focus && (focus.kind === 'step' || focus.kind === 'promise') ? map.cards[focus.cardId]?.screen : undefined;
-
   return (
     <div className="flex h-full min-h-0 w-full bg-canvas text-body text-fg">
       <TreeCanvas
@@ -378,6 +399,9 @@ export function FlowTree(props: FlowTreeProps) {
             map={map}
             open={openSteps.has(node.id)}
             picked={node.id === focusId}
+            look={props.look ?? WIREFRAME}
+            touched={!!node.cardId && !!props.touching?.has(node.cardId)}
+            asked={!!node.cardId && node.cardId === props.asked}
             onHover={hoverNode}
             onPress={pressNode}
           />
@@ -437,53 +461,21 @@ export function FlowTree(props: FlowTreeProps) {
         </aside>
       )}
       {/* A card's details open over the map; the side keeps the product's summary. */}
-      <Dialog.Root
-        open={focus !== null}
-        onOpenChange={(open, details) => {
-          // Escape in a field I am writing cancels that field, not the whole card.
-          const active = globalThis.document.activeElement;
-          if (
-            !open &&
-            details.reason === 'escape-key' &&
-            active?.matches('input, textarea, [contenteditable="true"]')
-          ) {
-            details.cancel();
-            return;
-          }
-          if (!open) setFocus(null);
+      <CardDialog
+        map={map}
+        focus={focus}
+        person={person}
+        props={props}
+        onShow={show}
+        onFocus={(next) => {
+          setFocus(next);
+          if (next.kind === 'promise')
+            setOpenSteps((current) => new Set(current).add(stepId(next.journeyId, next.cardId)));
+          reveal(focusNodeId(next));
         }}
-      >
-        <Dialog.Popup
-          className={clsx('relative max-h-[85vh] gap-0 overflow-y-auto p-0', focusScreen && 'w-[min(760px,94vw)]!')}
-        >
-          <Dialog.Close
-            aria-label={t.close}
-            title={t.close}
-            className="absolute top-3 right-3 z-10 flex size-7 cursor-pointer items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-hover hover:text-fg"
-          >
-            <X size={14} aria-hidden />
-          </Dialog.Close>
-          {focusScreen && <ScreenView key={focusScreen.src} screen={focusScreen} />}
-          <div>
-            <Panel
-              key={focusId ?? 'product'}
-              focus={focus}
-              map={map}
-              person={person}
-              props={props}
-              onShow={show}
-              onFocus={(next) => {
-                setFocus(next);
-                if (next.kind === 'promise')
-                  setOpenSteps((current) => new Set(current).add(stepId(next.journeyId, next.cardId)));
-                reveal(focusNodeId(next));
-              }}
-              onRemove={removePromise}
-              onDone={setFocus}
-            />
-          </div>
-        </Dialog.Popup>
-      </Dialog.Root>
+        onRemove={removePromise}
+        onDone={setFocus}
+      />
     </div>
   );
 }
@@ -504,6 +496,9 @@ const NodeView = memo(function NodeView({
   map,
   open,
   picked,
+  look,
+  touched,
+  asked,
   onHover: hover,
   onPress: press,
 }: {
@@ -511,6 +506,9 @@ const NodeView = memo(function NodeView({
   map: TreeMap;
   open: boolean;
   picked: boolean;
+  look: string;
+  touched: boolean;
+  asked: boolean;
   onHover: (id: string, on: boolean) => void;
   onPress: (node: LaidNode) => void;
 }) {
@@ -571,17 +569,19 @@ const NodeView = memo(function NodeView({
         node,
         shell(
           clsx(
-            'rounded-xl border bg-canvas-raised p-3.5',
+            'rounded-xl border p-3.5',
+            card.tentative ? 'border-dashed bg-canvas' : 'bg-canvas-raised',
             counts.failed
               ? 'border-danger'
               : counts.recheck
                 ? 'border-attention'
-                : open
+                : open || touched || asked
                   ? 'border-interactive'
                   : 'border-line hover:border-interactive',
+            (touched || asked) && 'ring-3 ring-interactive/15',
             counts.checking > 0 && 'motion-sweep',
           ),
-          <StepCard card={card} number={node.index + 1} open={open} loops={node.loops} />,
+          <StepCard card={card} number={node.index + 1} open={open} loops={node.loops} look={look} touched={touched} />,
         ),
       );
     }
@@ -727,11 +727,15 @@ function StepCard({
   number,
   open,
   loops,
+  look,
+  touched,
 }: {
   card: TreeCard;
   number: number;
   open: boolean;
   loops?: LaidNode['loops'];
+  look: string;
+  touched: boolean;
 }) {
   const t = useMessages(messages);
   const format = useFormat();
@@ -764,8 +768,9 @@ function StepCard({
         )}
       </CardLabel>
       <span className="mt-1.5 shrink-0 truncate font-medium">{card.title}</span>
+      <PickLine card={card} />
       {card.description && <span className="shrink-0 truncate text-meta text-fg-muted">{card.description}</span>}
-      {hasScreenArea(card) && <ScreenThumb screen={card.screen} />}
+      {hasScreenArea(card) && <ScreenThumb screen={card.screen} look={look} touched={touched} />}
       <ul className="mt-2 flex shrink-0 flex-col">
         {shown.map((promise) => (
           <CheckRow key={promise.id} promise={promise} />
@@ -802,10 +807,29 @@ function StepCard({
  * keep their shape; a tall one stops at a part of the window so the details stay in reach, and pressing it shows it
  * whole.
  */
-function ScreenView({ screen }: { screen: CardScreen }) {
+function ScreenView({ screen, look }: { screen: CardScreen; look: string }) {
   const t = useMessages(messages);
   const format = useFormat();
   const [whole, setWhole] = useState(false);
+  if (screen.kind === 'planned')
+    return (
+      <div className="flex flex-col gap-2 border-b border-line bg-canvas-sunken px-5 pt-5 pb-4">
+        <span className="flex items-center gap-1.5 pr-8 text-meta text-fg-muted">
+          <PenLine size={12} aria-hidden />
+          {t.screenPlanned}
+        </span>
+        <div className={clsx('mx-auto w-full', screen.device !== 'computer' && 'max-w-72')}>
+          <HtmlFrame
+            html={screenPage(screen.src)}
+            title=""
+            pageWidth={screenWidthFor(screen.device)}
+            ratio={screen.device === 'computer' ? 0.625 : 1.6}
+            theme={look}
+            className="rounded-lg border border-line-subtle bg-canvas"
+          />
+        </div>
+      </div>
+    );
   return (
     <div className="flex flex-col gap-2 border-b border-line bg-canvas-sunken px-5 pt-5 pb-4">
       <span className="flex items-center gap-1.5 pr-8 text-meta text-fg-muted">
@@ -836,8 +860,23 @@ function ScreenView({ screen }: { screen: CardScreen }) {
   );
 }
 
-/** The card's screen at a glance: a real capture, a sketch marked as one, or room left for one. */
-function ScreenThumb({ screen }: { screen?: CardScreen }) {
+/**
+ * What was decided on a card, in one line under its title: the person's latest answer, or what the AI took on its own
+ * ("AI가 정함 · 같이 지워요"), which the person can change from the card.
+ */
+function PickLine({ card }: { card: TreeCard }) {
+  const t = useMessages(messages);
+  const last = card.picks?.at(-1);
+  if (!last) return null;
+  return (
+    <span className="shrink-0 truncate text-meta text-fg-muted">
+      {last.by === 'ai' ? `${t.aiPicked} · ${last.answer}` : last.answer}
+    </span>
+  );
+}
+
+/** The card's screen at a glance: a real capture, a sketch marked as one, a planned screen, or room left for one. */
+function ScreenThumb({ screen, look, touched }: { screen?: CardScreen; look: string; touched: boolean }) {
   const t = useMessages(messages);
   const format = useFormat();
   if (!screen)
@@ -850,6 +889,28 @@ function ScreenThumb({ screen }: { screen?: CardScreen }) {
         {t.noScreen}
       </span>
     );
+  if (screen.kind === 'planned')
+    return (
+      <span
+        className="relative mt-2 block shrink-0 overflow-hidden rounded-md border border-line-subtle bg-canvas"
+        style={{ height: SCREEN_H - 10 }}
+      >
+        <HtmlFrame
+          html={screenPage(screen.src)}
+          title=""
+          pageWidth={screenWidthFor(screen.device)}
+          ratio={(SCREEN_H - 10) / THUMB_W}
+          theme={look}
+          inert
+          className={clsx('transition-[filter] duration-(--motion-panel)', touched && 'blur-[1.5px]')}
+        />
+        {touched && (
+          <span aria-hidden className="motion-content absolute inset-0 bg-brand-blue/15">
+            <FallingSnow />
+          </span>
+        )}
+      </span>
+    );
   return (
     <span
       className={clsx(
@@ -859,6 +920,11 @@ function ScreenThumb({ screen }: { screen?: CardScreen }) {
       style={{ height: SCREEN_H - 10 }}
     >
       <img src={screen.src} alt="" draggable={false} className="size-full object-cover object-top" />
+      {touched && (
+        <span aria-hidden className="motion-content absolute inset-0 bg-brand-blue/15">
+          <FallingSnow />
+        </span>
+      )}
       <span className="absolute bottom-1.5 left-1.5 flex items-center gap-1 rounded-sm bg-canvas-raised/90 px-1.5 py-0.5 text-meta text-fg-muted shadow-overlay">
         {screen.kind === 'sketch' ? <PenLine size={11} aria-hidden /> : <Camera size={11} aria-hidden />}
         {screen.kind === 'sketch' ? t.screenSketch : t.screenShot}
@@ -1007,6 +1073,78 @@ function ExpandTools({
 }
 
 // ---------------------------------------------------------------- panel
+
+/**
+ * A card's details over the map, opened from any view of it: its screen large, then its promises, what was decided and
+ * the page's own parts. Escape in a field being written cancels that field, not the whole card.
+ */
+export function CardDialog({
+  map,
+  focus,
+  person,
+  props,
+  onShow,
+  onFocus,
+  onRemove,
+  onDone,
+}: {
+  map: TreeMap;
+  focus: Focus | null;
+  person: Person | undefined;
+  props: FlowTreeProps;
+  onShow: (target: PromiseTarget, personId: string) => void;
+  onFocus: (focus: Focus) => void;
+  onRemove: (target: PromiseTarget) => void;
+  onDone: (focus: Focus | null) => void;
+}) {
+  const t = useMessages(messages);
+  const focusScreen =
+    focus && (focus.kind === 'step' || focus.kind === 'promise') ? map.cards[focus.cardId]?.screen : undefined;
+  return (
+    <Dialog.Root
+      open={focus !== null}
+      onOpenChange={(open, details) => {
+        const active = globalThis.document.activeElement;
+        if (!open && details.reason === 'escape-key' && active?.matches('input, textarea, [contenteditable="true"]')) {
+          details.cancel();
+          return;
+        }
+        if (!open) onDone(null);
+      }}
+    >
+      <Dialog.Popup
+        className={clsx('relative max-h-[85vh] gap-0 overflow-y-auto p-0', focusScreen && 'w-[min(760px,94vw)]!')}
+      >
+        <Dialog.Close
+          aria-label={t.close}
+          title={t.close}
+          className="absolute top-3 right-3 z-10 flex size-7 cursor-pointer items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-hover hover:text-fg"
+        >
+          <X size={14} aria-hidden />
+        </Dialog.Close>
+        {focusScreen && <ScreenView key={focusScreen.src} screen={focusScreen} look={props.look ?? WIREFRAME} />}
+        {props.waitNote && (
+          <p role="status" className="mx-5 mt-5 mr-12 rounded-lg bg-canvas-sunken px-3 py-2 text-meta text-attention">
+            {props.waitNote}
+          </p>
+        )}
+        <div>
+          <Panel
+            key={focusNodeId(focus) ?? 'product'}
+            focus={focus}
+            map={map}
+            person={person}
+            props={props}
+            onShow={onShow}
+            onFocus={onFocus}
+            onRemove={onRemove}
+            onDone={onDone}
+          />
+        </div>
+      </Dialog.Popup>
+    </Dialog.Root>
+  );
+}
 
 function Panel({
   map,
@@ -1217,14 +1355,15 @@ function PersonPanel({
         </>
       ),
     });
-  if (counts.recheck)
+  const check = props.onCheck;
+  if (counts.recheck && check)
     todo.push({
       key: 'recheck',
       text: t.todoRecheck(counts.recheck),
       tone: 'attention',
       actions: (
         <>
-          <Button variant={counts.failed ? 'secondary' : 'primary'} onClick={() => props.onCheck(targets(['recheck']))}>
+          <Button variant={counts.failed ? 'secondary' : 'primary'} onClick={() => check(targets(['recheck']))}>
             {t.todoRecheckAction}
           </Button>
           <LinkButton onClick={() => onShow(targets(['recheck'])[0]!)}>{t.todoShow}</LinkButton>
@@ -1238,20 +1377,20 @@ function PersonPanel({
       tone: 'attention',
       actions: <LinkButton onClick={() => onShow(targets(['blocked'])[0]!)}>{t.todoWhy}</LinkButton>,
     });
-  if (counts.planned)
+  if (counts.planned && check)
     todo.push({
       key: 'planned',
       text: t.todoPlanned(counts.planned),
-      actions: <Button onClick={() => props.onCheck(targets(['planned']))}>{t.todoMatch}</Button>,
+      actions: <Button onClick={() => check(targets(['planned']))}>{t.todoMatch}</Button>,
     });
-  if (counts.unconfirmed)
+  if (counts.unconfirmed && check)
     todo.push({
       key: 'unconfirmed',
       text: t.todoUnconfirmed(counts.unconfirmed),
       actions: (
         <Button
           variant={counts.failed || counts.recheck ? 'secondary' : 'primary'}
-          onClick={() => props.onCheck(targets(['unconfirmed']))}
+          onClick={() => check(targets(['unconfirmed']))}
         >
           {t.todoCheck}
         </Button>
@@ -1394,9 +1533,9 @@ function JourneyPanel({
       )}
       {journey.steps.length === 0 ? (
         <div className="flex flex-col items-start gap-3">
-          <p className="text-fg-muted">{t.noSteps}</p>
+          <p className="text-fg-muted">{props.planning ? t.noStepsPlan : t.noSteps}</p>
           <Button variant="primary" onClick={() => props.onFindSteps(journey.id)}>
-            {t.findSteps}
+            {props.planning ? t.drawSteps : t.findSteps}
           </Button>
         </div>
       ) : (
@@ -1429,9 +1568,9 @@ function JourneyPanel({
               );
             })}
           </ol>
-          {unchecked.length > 0 && (
+          {unchecked.length > 0 && props.onCheck && (
             <div>
-              <Button variant="primary" onClick={() => props.onCheck(unchecked)}>
+              <Button variant="primary" onClick={() => props.onCheck!(unchecked)}>
                 {t.checkJourney}
               </Button>
             </div>

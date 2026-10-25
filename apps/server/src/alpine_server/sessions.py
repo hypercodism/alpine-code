@@ -17,6 +17,7 @@ from typing import Any
 
 from alpine_core import (
     ApprovalRequest,
+    Asking,
     Builtins,
     ConfigError,
     Decision,
@@ -90,6 +91,7 @@ from alpine_protocol import (
 
 from . import map_state
 from .agents import agents
+from .flow import planning_files
 from .methods import APP_ERROR, INVALID_PARAMS, MethodError
 from .skills import skills
 from .tools import list_tools
@@ -192,9 +194,9 @@ class SessionManager:
         }
 
     def tool_sources(self, project: Path) -> list[ToolSource]:
-        """Where a folder's tools come from, for its sessions and for ``tools/list``: the built-ins, the project's
-        memory, then (when Alpine Cloud is on) the live data of its published app."""
-        sources: list[ToolSource] = [Builtins(Workspace(project)), self.memories.of(project)]
+        """Where a folder's tools come from, for its sessions and for ``tools/list``: the built-ins, asking the
+        person, the project's memory, then (when Alpine Cloud is on) the live data of its published app."""
+        sources: list[ToolSource] = [Builtins(Workspace(project)), Asking(), self.memories.of(project)]
         return [*sources, LiveData(project)] if cloud_settings.enabled() else sources
 
     async def shutdown(self) -> None:
@@ -543,6 +545,9 @@ class SessionManager:
     def _keep(self, session: Session, approver: _Approver) -> _Live:
         """A live session; a turn it asks for itself (a TF's result) runs as its task, after the one running."""
         live = _Live(session, approver)
+        if session.info.purpose == "map":
+            root = session.workspace.root
+            session.policy.editable = lambda: planning_files(root)
 
         def turn(notice: str) -> None:
             before = live.task

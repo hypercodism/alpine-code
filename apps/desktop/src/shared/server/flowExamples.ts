@@ -295,6 +295,7 @@ const STUDIO_BASE: ProductMap = {
       title: '첫 수업 예약하기',
       description: '처음 온 회원이 가입하고 수업을 고르면, 이용권이 없어도 결제하고 바로 예약할 수 있어야 한다.',
       trigger: '처음 온 회원이 광고 링크로 앱을 연다',
+      device: 'phone',
       nodeIds: [
         'signup',
         'phone-verify',
@@ -314,6 +315,7 @@ const STUDIO_BASE: ProductMap = {
       title: '예약 취소와 환불',
       description: '회원이 예약을 취소하면, 규정에 맞게 이용권이나 결제 금액을 돌려받을 수 있어야 한다.',
       trigger: '회원이 예약 내역에서 취소를 누른다',
+      device: 'phone',
       nodeIds: ['cancel', 'pass-deduct', 'refund', 'toss-webhook', 'receipt', 'waitlist', 'waitlist-notify'],
     },
     {
@@ -321,6 +323,7 @@ const STUDIO_BASE: ProductMap = {
       title: '수업 당일',
       description: '수업 날이 되면, 회원은 미리 알림을 받고 강사는 출석과 노쇼를 처리할 수 있어야 한다.',
       trigger: '수업 2시간 전, 알림 작업이 돈다',
+      device: 'computer',
       nodeIds: ['reminder', 'kakao-alimtalk', 'notify-retry', 'roster', 'checkin', 'no-show', 'pass-deduct'],
     },
     {
@@ -328,6 +331,7 @@ const STUDIO_BASE: ProductMap = {
       title: '휴강 처리',
       description: '관리자가 수업을 닫으면, 예약자 모두가 환불받고 안내 메시지를 받을 수 있어야 한다.',
       trigger: '관리자가 강사 사정으로 수업을 닫는다',
+      device: 'computer',
       nodeIds: ['admin-schedule', 'admin-closure', 'refund', 'kakao-alimtalk', 'receipt'],
     },
     {
@@ -342,6 +346,7 @@ const STUDIO_BASE: ProductMap = {
       title: '월말 정산',
       description: '대표가 월초에 정산 화면을 열면, 지난달 판매와 환불을 한눈에 확인할 수 있어야 한다.',
       trigger: '대표가 매달 1일에 정산 화면을 연다',
+      device: 'computer',
       nodeIds: ['sales-report', 'receipt'],
     },
   ],
@@ -1240,10 +1245,24 @@ const STUDIO_SHOTS: Record<string, string> = {
   'cancel/early': screenImage('예약 내역', ['리포머 기초 · 월 10:00', '취소됨 · 이용권 1회 돌아옴', '남은 횟수 10회']),
 };
 
+/** Where each built screen lives in the studio's app, written on its card when it was built. */
+const SCREEN_PATHS: Record<string, string> = {
+  signup: '/signup',
+  'health-note': '/me/health',
+  schedule: '/schedule',
+  'class-detail': '/classes/yoga-0930',
+  cancel: '/bookings/b-1042/cancel',
+  checkin: '/studio/checkin',
+  'pass-purchase': '/passes',
+  roster: '/studio/roster',
+  'admin-schedule': '/admin/classes',
+};
+
 function enrich(map: ProductMap): ProductMap {
   const document = structuredClone(map);
   for (const node of document.nodes ?? []) {
     Object.assign(node, NODE_META[node.id]);
+    if (node.phase === 'built' && SCREEN_PATHS[node.id]) node.path = SCREEN_PATHS[node.id];
     for (const check of node.checks ?? []) {
       const key = `${node.id}/${check.conditionId}`;
       const [at, plain] = CHECK_NOTES[key] ?? ['2026-10-02T02:20:00Z', '전체 빌드가 문제없이 끝났어요.'];

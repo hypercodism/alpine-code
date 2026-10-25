@@ -18,6 +18,15 @@ const BUILTIN: ToolSummary[] = [
   ask: ask as ToolSummary['ask'],
 }));
 
+const ASK_USER: ToolSummary = {
+  name: 'ask_user',
+  description: 'Ask the person one product question and let them pick an answer.',
+  params: [],
+  readOnly: true,
+  openWorld: false,
+  ask: 'never',
+};
+
 const PROPOSE_MEMORY: ToolSummary = {
   name: 'propose_memory',
   description: 'Suggest something to remember in later sessions.',
@@ -120,6 +129,7 @@ export function toolsScript(store: AgentStore = agentStore()): Script {
       'tools/list': () => ({
         tools: [
           ...BUILTIN.map((tool) => ({ tool, origin: 'builtin' as const, optional: true })),
+          { tool: ASK_USER, origin: 'builtin' as const, optional: false },
           { tool: PROPOSE_MEMORY, origin: 'memory' as const, optional: false },
         ],
       }),

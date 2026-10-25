@@ -233,3 +233,15 @@ describe('sessionScript', () => {
     await expect(connection.request('session/open', { sessionId: id })).rejects.toMatchObject({ code: -32001 });
   });
 });
+
+describe('the demo files', () => {
+  it('lists only what is in the folder asked for, so the tree ends (no src/src/src...)', async () => {
+    const connection = scriptedConnection(sessionScript());
+    const list = async (path: string) =>
+      (await connection.request('files/list', { cwd: '/Users/me/alpine-code', path })).entries.map((e) => e.path);
+    expect(await list('')).toEqual(['src', 'README.md', 'package.json']);
+    expect(await list('src')).toEqual(['src/components', 'src/App.tsx', 'src/main.tsx']);
+    expect(await list('src/components')).toEqual(['src/components/Button.tsx']);
+    expect(await list('README.md')).toEqual([]);
+  });
+});

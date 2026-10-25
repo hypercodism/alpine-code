@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useDockOpen, useDockTab } from '@/features/dock/state';
+import { useNavigation } from '@/shared/navigation';
 import { LocaleProvider } from '@/shared/i18n';
 import {
   cloudScript,
@@ -103,19 +104,13 @@ describe('프로젝트 추가', () => {
     return within(await screen.findByRole('dialog')).getAllByRole('button');
   };
 
-  it('lists 새로 만들기 with Alpine Cloud', async () => {
-    mount('/session/work', true);
-    await settle();
-    expect((await open()).map((row) => row.textContent?.slice(0, 5))).toContain('새로 만들');
-  });
-
-  it('lists only 받기 and 열기 without it, as before', async () => {
-    mount('/session/work', false);
-    await settle();
-    expect((await open()).map((row) => row.textContent)).toEqual([
-      '회사·팀 프로젝트 받기GitHub, GitLab 같은 저장소 주소로',
-      '내 컴퓨터의 프로젝트 열기이미 이 컴퓨터에 있는 폴더⌘O',
-    ]);
+  it('lists 새 프로젝트 first, with Alpine Cloud or without it (map-first 42)', async () => {
+    for (const cloud of [true, false]) {
+      mount('/session/work', cloud);
+      await settle();
+      expect((await open()).map((row) => row.textContent?.slice(0, 5))).toEqual(['새 프로젝', '회사·팀 ', '내 컴퓨터']);
+      cleanup();
+    }
   });
 });
 
@@ -127,21 +122,23 @@ describe('Settings', () => {
 
   it('shows no Alpine account without it, and no Alpine row where a connection is added', async () => {
     mount('/settings', false);
-    await screen.findByText('서버');
+    await screen.findByText('버전');
     await settle();
     expect(screen.queryByText('Alpine 계정')).toBeNull();
     fireEvent.click(await screen.findByRole('tab', { name: /모델 연결/ }));
-    fireEvent.click(await screen.findByRole('button', { name: /공급자 추가/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /연결 추가/ }));
     const sheet = await screen.findByRole('dialog');
     expect(within(sheet).getByRole('button', { name: /ChatGPT/ })).toBeTruthy();
     expect(within(sheet).queryByText(/Alpine으로 시작/)).toBeNull();
   });
 });
 
-describe('the new session', () => {
-  it('says what to change and judges nothing without Alpine Cloud', async () => {
+describe('새 프로젝트', () => {
+  it('asks what to make, with Alpine Cloud or without it (map-first 42)', async () => {
+    // Opening the app goes back to the last project's map; with none, it is 새 프로젝트.
+    useNavigation.setState({ lastProject: null });
     mount('/', false);
-    await waitFor(() => expect(screen.getByRole('heading', { name: '무엇을 바꿔 볼까요?' })).toBeTruthy());
-    expect(screen.queryByRole('heading', { name: '무엇을 만들어 볼까요?' })).toBeNull();
+    await waitFor(() => expect(screen.getByRole('heading', { name: '무엇을 만들어 볼까요?' })).toBeTruthy());
+    expect(screen.queryByRole('heading', { name: '무엇을 바꿔 볼까요?' })).toBeNull();
   });
 });

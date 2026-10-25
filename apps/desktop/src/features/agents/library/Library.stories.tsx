@@ -20,7 +20,7 @@ function Example({ start, ...props }: React.ComponentProps<typeof Library> & { s
 }
 
 /**
- * Board 에이전트 화면, the library side: skills to find, add, open and write. MCP and 서브에이전트 are 준비 중.
+ * Board 에이전트 화면, the library side: skills to find, add, open and write. MCP and 서브에이전트 are not shown until they exist.
  */
 const meta = {
   title: 'Agents/Library',
@@ -73,6 +73,3 @@ export const SkillDetail: Story = { args: { start: { kind: 'skill', name: 'weekl
 export const OtherAppsSkill: Story = { args: { start: { kind: 'skill', name: 'commit-messages' } } };
 
 export const NewSkill: Story = { args: { start: { kind: 'new-skill' } } };
-
-/** MCP is 준비 중. */
-export const Mcp: Story = { args: { start: { kind: 'list', tab: 'mcp' } } };

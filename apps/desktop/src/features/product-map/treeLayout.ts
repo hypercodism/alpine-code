@@ -67,7 +67,9 @@ const START_W = 216;
 const JOURNEY_W = 264;
 const STEP_W = 336;
 /** The screen on a step card: 16:10 across the card, with the gap under it. */
-export const SCREEN_H = Math.round((STEP_W - 28) * 0.625) + 10;
+/** How wide a step's screen is drawn: the card less its padding. */
+export const THUMB_W = STEP_W - 28;
+export const SCREEN_H = Math.round(THUMB_W * 0.625) + 10;
 /** Between the lines of one journey: room for a branch's condition above its first card. */
 const LANE_GAP = 34;
 const JOURNEY_GAP = 28;

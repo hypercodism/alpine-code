@@ -1,4 +1,5 @@
 import type { AgentInfo } from '@alpine/protocol';
+import { Button } from '@alpine/ui/primitives';
 import { useCallback, useEffect, useState } from 'react';
 
 import { agentMessages, agentName } from '@/shared/components/agent';
@@ -35,8 +36,28 @@ export function Agents({
   library?: 'skill';
   onChange: (search: Search) => void;
 }) {
-  const agents = useAgents().data?.agents;
-  if (!agents) return null;
+  const t = useMessages(agentsMessages);
+  const query = useAgents();
+  const agents = query.data?.agents;
+  if (!agents)
+    return (
+      <div className="flex grow flex-col items-center justify-center gap-3 p-8">
+        {query.isError ? (
+          <>
+            <p role="alert" className="text-body text-fg-muted">
+              {t.loadFailed}
+            </p>
+            <Button disabled={query.isFetching} onClick={() => void query.refetch()}>
+              {t.retry}
+            </Button>
+          </>
+        ) : (
+          <p role="status" className="text-body text-fg-muted">
+            {t.loading}
+          </p>
+        )}
+      </div>
+    );
   const agent = agents.find((a) => a.id === agentId) ?? agents.find((a) => a.id === 'default') ?? agents[0];
   if (!agent) return null;
   const select = (id: string) => onChange(id && id !== 'default' ? { agent: id } : {});

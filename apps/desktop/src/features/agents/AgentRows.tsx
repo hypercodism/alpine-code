@@ -52,8 +52,8 @@ function Remove({ label, onClick }: { label: string; onClick: () => void }) {
 }
 
 /**
- * Board 에이전트 화면, the rows: 모델, 지침, 기본 도구, 스킬 and the two
- * that are 준비 중. `onChange` saves the agent; `onAdd` and `onRemove` save a tool change and tell about it.
+ * Board 에이전트 화면, the rows: 모델, 지침, 기본 도구 and 스킬 (MCP and subagents get rows once they exist).
+ * `onChange` saves the agent; `onAdd` and `onRemove` save a tool change and tell about it.
  */
 export function AgentRows({
   agent,
@@ -127,20 +127,6 @@ export function AgentRows({
         onBrowse={() => onBrowse('skill')}
         actions={skillActions}
       />
-
-      {(
-        [
-          [t.mcpLabel, t.mcpNote, t.mcpSoon],
-          [t.subLabel, t.subNote, t.subSoon],
-        ] as const
-      ).map(([label, note, soon]) => (
-        <Row key={label} label={label} note={note}>
-          <div className="flex items-center gap-2.5 rounded-xl border border-dashed border-line px-3 py-2.5 text-fg-muted">
-            <span className="shrink-0 rounded-full bg-canvas-sunken px-2 text-meta">{t.soon}</span>
-            <span className="text-meta">{soon}</span>
-          </div>
-        </Row>
-      ))}
     </div>
   );
 }

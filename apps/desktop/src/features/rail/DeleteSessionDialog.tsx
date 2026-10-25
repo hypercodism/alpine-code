@@ -19,7 +19,8 @@ export function DeleteSessionDialog({ session, onClose }: { session: SessionInfo
     if (!session) return;
     remove.mutate(session.id, {
       onSuccess: () => {
-        if (shown === session.id) void navigate({ to: '/' });
+        // Its project's map stays: deleting one conversation never leaves the project.
+        if (shown === session.id) void navigate({ to: '/board', search: { project: session.cwd } });
         onClose();
       },
     });

@@ -14,8 +14,9 @@ export {
   type NodeInstallState,
 } from './cloud';
 export { CHATGPT_USAGE_URL, useChatGPTSignIn, useChatGPTSignOut, type SignInState } from './chatgpt';
-export { ServerError, type Notification, type ServerConnection } from './connection';
+export { SERVER_EXITED, SERVER_EXITED_CODE, ServerError, type Notification, type ServerConnection } from './connection';
 export { ServerProvider, useServer } from './context';
+export { useAsking } from './asking';
 export { useAgents, useDeleteAgent, useSaveAgent } from './agents';
 export { useAddSkill, useRemoveSkill, useSaveSkill, useSearchSkills, useSkill, useSkills } from './skills';
 export { useApproveMemory, useForgetMemory, useMemory, useRejectMemory } from './memory';
@@ -82,6 +83,7 @@ export {
 } from './queries';
 export { useTools } from './tools';
 export {
+  ALPINE_CONNECTION,
   CHATGPT_CONNECTION,
   CONNECTED,
   chatScript,

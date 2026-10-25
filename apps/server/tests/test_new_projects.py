@@ -1,4 +1,4 @@
-"""``projects/create``: a template becomes a project on the rail, and a session starts on the idea."""
+"""``projects/create``: a template becomes a project on the rail, and its map conversation plans the idea."""
 
 from __future__ import annotations
 
@@ -15,8 +15,9 @@ from alpineagents.testing import FakeModel
 from alpine_core import ConfigError, ProjectList, Settings
 from alpine_core import session as session_module
 from alpine_core import templates as templates_module
-from alpine_protocol import ProjectsCreateParams, SessionOpenParams
+from alpine_protocol import FlowGetParams, ProjectsCreateParams, SessionOpenParams
 from alpine_server import new_projects as new_projects_module
+from alpine_server.flow import get_flow
 from alpine_server.methods import MethodError
 from alpine_server.new_projects import NewProjects
 from alpine_server.sessions import SessionManager
@@ -106,9 +107,18 @@ def test_a_project_is_made_from_the_template_and_the_agent_gets_the_idea(monkeyp
         assert [p.path for p in ProjectList.default().list()] == [folder]
 
         items = await harness.items(result.session_id)
-        assert [(i.kind, i.text) for i in items] == [("user_message", "예약을 받는 앱"), ("agent_message", "On it.")]
+        assert [i.kind for i in items] == ["user_message", "agent_message"]
+        # The idea starts the project's map as a plan, with the planning and design skills (map-first 3, 15).
+        assert items[0].text.startswith("예약을 받는 앱") and '<skill_content name="product-planning">' in items[0].text
+        assert '<skill_content name="product-design">' in items[0].text
         opened = await harness.sessions.open(SessionOpenParams(session_id=result.session_id))
-        assert Path(opened.info.cwd) == folder
+        assert Path(opened.info.cwd) == folder and opened.info.purpose == "map"
+        assert get_flow(FlowGetParams(cwd=str(folder))).planned
+        # While it is planned, the map conversation writes the map without asking, whatever the mode.
+        session = harness.sessions._live[result.session_id].session
+        write = session._agent.tool_map["write"]
+        assert session.policy.evaluate("write", {"path": ".alpine-code/map/screens/home.html"}, write).allowed
+        assert not session.policy.evaluate("write", {"path": "src/app.tsx"}, write).allowed
         await harness.close()
 
     run(scenario())
@@ -202,6 +212,86 @@ def test_without_git_the_project_is_still_made_and_the_agent_starts(monkeypatch,
         assert [c.step for c in harness.changes] == ["folder", "agent"]
         await harness.items(result.session_id)
         await harness.close()
+
+    run(scenario())
+
+
+def test_a_project_starts_in_an_empty_folder_the_person_made(monkeypatch, tmp_path):
+    mine = tmp_path / "Developments" / "devlog"
+    mine.mkdir(parents=True)
+    (mine / ".DS_Store").write_text("")
+
+    async def scenario():
+        harness = Harness(monkeypatch, "ok")
+        result = await harness.create(folder=str(mine), name="ignored")
+        assert Path(result.project.path) == mine.resolve() and (mine / "package.json").exists()
+        assert get_flow(FlowGetParams(cwd=str(mine))).planned
+        await harness.items(result.session_id)
+        await harness.close()
+
+    run(scenario())
+
+
+def test_an_empty_git_repository_counts_as_an_empty_folder_and_keeps_its_remote(monkeypatch, tmp_path):
+    cloned = tmp_path / "from-github"
+    cloned.mkdir()
+    git(cloned, "init", "-q")
+    git(cloned, "remote", "add", "origin", "https://github.com/me/from-github.git")
+
+    async def scenario():
+        harness = Harness(monkeypatch, "ok")
+        result = await harness.create(folder=str(cloned), name="ignored")
+        assert (cloned / "package.json").exists()
+        assert git(cloned, "remote", "get-url", "origin").strip() == "https://github.com/me/from-github.git"
+        assert "Start from the web-lite template" in git(cloned, "log", "--format=%s")
+        await harness.items(result.session_id)
+        await harness.close()
+
+    run(scenario())
+
+
+def test_with_no_templates_to_be_had_nothing_is_made_and_the_reason_is_said(monkeypatch, repos, tmp_path):
+    monkeypatch.delenv("ALPINE_TEMPLATES")
+    monkeypatch.setenv("HOME", str(tmp_path / "user"))
+    monkeypatch.setattr(templates_module, "TEMPLATES_REPO", "http://127.0.0.1:9/alpine-templates.git")
+
+    async def scenario():
+        harness = Harness(monkeypatch, "ok")
+        with pytest.raises(MethodError) as refused:
+            await harness.create()
+        assert refused.value.data.reason == "unreachable" and harness.changes == []
+        assert not repos.exists() or list(repos.iterdir()) == []
+
+    run(scenario())
+
+
+def test_a_folder_with_files_in_it_is_not_started_in(monkeypatch, tmp_path):
+    theirs = tmp_path / "theirs"
+    theirs.mkdir()
+    (theirs / "notes.md").write_text("mine")
+
+    async def scenario():
+        harness = Harness(monkeypatch, "ok")
+        with pytest.raises(MethodError) as refused:
+            await harness.create(folder=str(theirs))
+        assert refused.value.data.reason == "not_empty"
+        assert [p.name for p in theirs.iterdir()] == ["notes.md"] and harness.changes == []
+
+    run(scenario())
+
+
+def test_a_failure_in_the_persons_folder_empties_it_but_keeps_it(monkeypatch, tmp_path):
+    mine = tmp_path / "mine"
+    mine.mkdir()
+    broken = tmp_path / "gitconfig"
+    broken.write_text("[user\n\tnot a config file\n")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(broken))
+
+    async def scenario():
+        harness = Harness(monkeypatch, "ok")
+        with pytest.raises(MethodError):
+            await harness.create(folder=str(mine))
+        assert mine.is_dir() and list(mine.iterdir()) == []
 
     run(scenario())
 
@@ -316,7 +406,7 @@ def test_creations_at_the_same_time_with_the_same_name_get_different_folders(mon
             assert git(Path(result.project.path), "rev-list", "--count", "HEAD").strip() == "1"
         ideas = {}
         for result in results:  # each session got the idea of its own request
-            ideas[result.project.name] = (await harness.items(result.session_id))[0].text
+            ideas[result.project.name] = (await harness.items(result.session_id))[0].text.split("\n")[0]
         assert sorted(ideas.values()) == [f"idea {n}" for n in range(5)]
         assert len({p.path for p in ProjectList.default().list()}) == 5
         await harness.close()

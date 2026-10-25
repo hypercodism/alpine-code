@@ -55,7 +55,14 @@ export function Terminal({ cwd, sessionId, processId, onSelectProcess, onOpenDev
   const processes = terminals.data?.processes ?? noProcesses;
   const active = processes.find((process) => process.id === (processId ?? selected)) ?? processes.at(-1);
   const secondary = processes.find((process) => process.id === split && process.id !== active?.id);
-  const background = processes.filter((process) => process.id !== active?.id && process.id !== secondary?.id);
+  // The other terminals to switch to: the ones still running. Commands that finished (the AI runs many) are in AI가
+  // 실행한 명령, not here.
+  const background = processes.filter(
+    (process) =>
+      process.id !== active?.id &&
+      process.id !== secondary?.id &&
+      (process.status === 'running' || process.status === 'stopping'),
+  );
   const target = processes.find((process) => process.id === focusedId) ?? active;
   const select = (id: string) => {
     setFocusedId(id);
@@ -256,9 +263,8 @@ export function Terminal({ cwd, sessionId, processId, onSelectProcess, onOpenDev
                 className="flex h-7 min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-2 text-meta text-fg-muted hover:bg-hover"
               >
                 <TerminalSquare size={14} className="shrink-0" />
-                <span className="truncate">
-                  {t.processes} ({background.length})
-                </span>
+                {/* The terminal on view by its name; the others are in the menu, never a count. */}
+                <span className="truncate">{secondary ? t.title : (active?.title ?? t.title)}</span>
                 <ChevronDown size={12} className="shrink-0" />
               </Menu.Trigger>
               <Menu.Popup>

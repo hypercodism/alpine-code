@@ -48,7 +48,7 @@ function ReviewWorkspace({
   useEffect(() => {
     showDockTab(initialTab);
   }, [initialTab]);
-  const t = useMessages({ ko: { changes: '변경 사항' }, en: { changes: 'Changes' } });
+  const t = useMessages({ ko: { changes: '바뀐 파일' }, en: { changes: 'Changes' } });
   return (
     <div className="flex h-screen bg-canvas">
       <WorkspaceDock
@@ -164,7 +164,7 @@ export const FullFileAndBack: Story = {
     await userEvent.click(await screen.findByRole('button', { name: /MenuCard\.tsx/ }));
     await userEvent.click(await screen.findByRole('button', { name: /전체 파일 보기|View full file/ }));
     await expect(await screen.findByRole('tab', { name: /^(파일|Files)$/ })).toHaveAttribute('aria-selected', 'true');
-    await userEvent.click(await screen.findByRole('button', { name: /변경 사항으로 돌아가기|Back to changes/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /바뀐 파일로 돌아가기|Back to changes/ }));
     await expect(await screen.findByRole('region', { name: /MenuCard\.tsx/ })).toBeVisible();
   },
 };

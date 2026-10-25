@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
-import { expect, screen, userEvent, waitFor } from 'storybook/test';
+import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 
 import {
   MEMORY,
@@ -15,6 +15,7 @@ import {
   type SessionScriptOptions,
 } from '@/shared/server';
 
+import { BLOG_LOOKS } from './questionExample';
 import { Session } from './Session';
 
 const ID = 's-story';
@@ -852,5 +853,67 @@ export const SlashSkills: Story = {
     await userEvent.type(await screen.findByLabelText(/^(메시지|Message)$/), '/');
     await expect(await screen.findByRole('listbox')).toBeVisible();
     await expect(screen.getByRole('option', { name: /weekly-report/ })).toBeVisible();
+  },
+};
+
+/** A new blog's first answer: the agent drew three ways it could look, side by side, with its pick first. */
+const lookItems: Item[] = [
+  { id: 'd1', kind: 'user_message', text: '개발 블로그 만들어 줘' },
+  {
+    id: 'd2',
+    kind: 'agent_message',
+    agent: null,
+    text: '만들기 전에 어떤 느낌으로 할지 먼저 정하면 좋겠어요. 많이 쓰는 블로그 세 곳을 참고해서 그려 봤어요.',
+  },
+  {
+    id: 'd3',
+    kind: 'tool_call',
+    name: 'ask_user',
+    args: { question: '블로그를 어떤 느낌으로 만들까요?', options: BLOG_LOOKS },
+    status: 'done',
+    result: "Asked. End your turn now; the person's answer comes back as their next message.",
+    images: 0,
+    commandResult: null,
+    fileChanges: null,
+  },
+];
+
+export const QuestionWithPages: Story = { parameters: { server: server(lookItems) } };
+
+/** Picking one on the card sends it as my message, and the card becomes the question in one line. */
+export const QuestionPicked: Story = {
+  parameters: { server: server(lookItems) },
+  play: async () => {
+    const card = await screen.findByRole('region', { name: /AI의 질문|The AI's question/ });
+    await userEvent.click(within(card).getByRole('button', { name: /Ghost 참고/ }));
+    await userEvent.click(within(card).getByRole('button', { name: /이걸로 할게요|Go with this/ }));
+    await waitFor(() => expect(screen.queryByRole('region', { name: /AI의 질문|The AI's question/ })).toBeNull());
+    await expect(screen.getByText('Ghost 참고')).toBeVisible();
+  },
+};
+
+/** A question without pages: its options are answered with one press, the agent's pick first. */
+export const QuestionChoices: Story = {
+  parameters: {
+    server: server([
+      { id: 'q1', kind: 'user_message', text: '동네 빵집 예약 앱 만들어 줘' },
+      {
+        id: 'q2',
+        kind: 'tool_call',
+        name: 'ask_user',
+        args: {
+          question: '손님이 예약할 때 돈을 미리 받을까요?',
+          options: [
+            { label: '가게에서 받아요', detail: '예약만 받고, 돈은 빵을 찾을 때 받아요' },
+            { label: '미리 받아요', detail: '예약할 때 카드로 받아요. 안 오는 손님이 줄어요' },
+          ],
+        },
+        status: 'done',
+        result: "Asked. End your turn now; the person's answer comes back as their next message.",
+        images: 0,
+        commandResult: null,
+        fileChanges: null,
+      },
+    ]),
   },
 };

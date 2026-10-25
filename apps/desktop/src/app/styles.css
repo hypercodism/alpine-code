@@ -176,3 +176,11 @@
     stroke-dashoffset: -12;
   }
 }
+
+/* The app view's phone: a rounded body around a rounded screen, as on the map's filmstrip. */
+@utility app-phone-frame {
+  border-radius: 44px;
+}
+@utility app-phone-screen {
+  border-radius: 34px;
+}

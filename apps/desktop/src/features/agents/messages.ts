@@ -5,6 +5,9 @@ import { defineMessages } from '@/shared/i18n';
 export const agentsMessages = defineMessages({
   ko: {
     screen: '에이전트 설정',
+    loading: '에이전트를 불러오는 중…',
+    loadFailed: '에이전트를 불러오지 못했어요',
+    retry: '다시 시도',
     library: '라이브러리',
     // strip
     strip: '에이전트',
@@ -29,17 +32,17 @@ export const agentsMessages = defineMessages({
     duplicate: '복제하기',
     delete: '지우기…',
     copyName: (name: string) => `${name} 복사본`,
-    startSession: '이 에이전트로 새 세션',
+    startSession: '이 에이전트로 새 프로젝트',
     deleteTitle: (name: string) => `${josa(name, '을/를')} 지울까요?`,
     deleteBody:
-      '이 에이전트로 일하던 세션은 다음 메시지부터 기본 에이전트로 이어가요. 라이브러리의 도구는 그대로 남아요.',
+      '이 에이전트로 일하던 대화는 다음 메시지부터 기본 에이전트로 이어가요. 라이브러리의 도구는 그대로 남아요.',
     cancel: '취소',
     confirmDelete: '지우기',
     // working line
     working: '지금 일하는 중',
     workingMore: (n: number) => `외 ${n}개`,
-    workingNote: '바꾼 내용은 그 세션의 다음 메시지부터 적용돼요',
-    untitledSession: '제목 없는 세션',
+    workingNote: '바꾼 내용은 그 대화의 다음 메시지부터 적용돼요',
+    untitledSession: '제목 없는 대화',
     // rows
     modelLabel: '모델',
     modelNote: '생각하고 판단해요',
@@ -66,13 +69,6 @@ export const agentsMessages = defineMessages({
     skillToastAdded: (label: string) => `${josa(label, '을/를')} 추가했어요 · 모든 에이전트가 다음 메시지부터 써요`,
     skillToastOn: (label: string, name: string) => `${josa(name, '이/가')} 이제 ${josa(label, '을/를')} 써요`,
     skillToastOff: (label: string, name: string) => `${josa(label, '을/를')} ${name}에서 뺐어요`,
-    mcpLabel: 'MCP',
-    mcpNote: '바깥 서비스의 도구',
-    mcpSoon: '노션, 캘린더 같은 서비스의 도구를 써요',
-    subLabel: '서브에이전트',
-    subNote: '일을 맡길 다른 에이전트',
-    subSoon: '다른 에이전트에게 일을 맡기고 결과를 받아요',
-    soon: '준비 중',
     // toast
     toastAdded: (label: string, name: string) => `${josa(label, '을/를')} ${name}에 추가했어요`,
     toastRemoved: (label: string, name: string) => `${josa(label, '을/를')} ${name}에서 뺐어요`,
@@ -102,6 +98,9 @@ export const agentsMessages = defineMessages({
   },
   en: {
     screen: 'Agent settings',
+    loading: 'Loading agents…',
+    loadFailed: "Couldn't load the agents",
+    retry: 'Try again',
     library: 'Library',
     strip: 'Agents',
     newAgent: 'New agent',
@@ -124,7 +123,7 @@ export const agentsMessages = defineMessages({
     duplicate: 'Duplicate',
     delete: 'Delete…',
     copyName: (name: string) => `${name} copy`,
-    startSession: 'New session with this agent',
+    startSession: 'New project with this agent',
     deleteTitle: (name: string) => `Delete ${name}?`,
     deleteBody:
       'Sessions that worked with this agent carry on with the default agent from their next message. The tools in the library stay.',
@@ -159,13 +158,6 @@ export const agentsMessages = defineMessages({
     skillToastAdded: (label: string) => `Added ${label} · every agent uses it from the next message`,
     skillToastOn: (label: string, name: string) => `${name} now uses ${label}`,
     skillToastOff: (label: string, name: string) => `Removed ${label} from ${name}`,
-    mcpLabel: 'MCP',
-    mcpNote: 'Tools from outside services',
-    mcpSoon: 'Use the tools of services like Notion and Calendar',
-    subLabel: 'Subagents',
-    subNote: 'Other agents to hand work to',
-    subSoon: 'Hand work to another agent and get the result back',
-    soon: 'Coming soon',
     toastAdded: (label: string, name: string) => `Added ${label} to ${name}`,
     toastRemoved: (label: string, name: string) => `Removed ${label} from ${name}`,
     undo: 'Undo',

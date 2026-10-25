@@ -1,3 +1,5 @@
+import type { Device } from './planLook';
+
 /**
  * The product map read person first: who uses the product, the journeys each of them takes, the steps of a journey
  * (the map's cards) and, hanging off every step, its promises ("when this happens, this must happen") as branches.
@@ -73,16 +75,43 @@ export interface TreeCard {
   decision?: string;
   /** The conversation last started on this card. */
   sessionId?: string | null;
-  /** What it looks like: a capture of the running app, or until one is taken, a sketch the AI drew from the code. */
+  /**
+   * What it looks like: a capture of the running app, or until one is taken, a sketch the AI drew from the code, or
+   * for a product being planned the screen the AI drew for it.
+   */
   screen?: CardScreen;
+  /** A planned step that exists only if an open question goes one way: drawn dashed until it is answered. */
+  tentative?: boolean;
+  /** How far it is made: planned, being built now, or built (implemented; not the same as checked). */
+  phase?: 'planned' | 'building' | 'built' | null;
+  /** For a built screen: its address inside the running app (`/reservations`), so the app view can open it. */
+  path?: string | null;
+  /** Product questions answered on this card, oldest first: by the person, or by the AI on its own. */
+  picks?: CardPick[];
+}
+
+/** The journey holding the cards no journey holds yet, while the AI is still placing them. */
+export const UNPLACED = 'unplaced';
+
+export interface CardPick {
+  question: string;
+  options: string[];
+  answer: string;
+  by: 'person' | 'ai';
 }
 
 export interface CardScreen {
-  /** An image the page can show (a data or asset URL). */
+  /** An image the page can show (a data or asset URL); for `planned`, the screen's HTML. */
   src: string;
-  kind: 'shot' | 'sketch';
+  /**
+   * `shot`: captured from the running app. `sketch`: an SVG the AI drew from the code. `planned`: the HTML the AI drew
+   * while planning, drawn with the theme tokens so a look restyles it.
+   */
+  kind: 'shot' | 'sketch' | 'planned';
   /** When it was captured or drawn. */
   at?: string | null;
+  /** For `planned`: the device of the first journey the card is in, which sets the width it is drawn at. */
+  device?: Device | null;
 }
 
 /** A card that shows something to a person, or already has a picture of it, gets room for its screen. */
@@ -107,6 +136,8 @@ export interface Journey {
   steps: string[];
   /** How the steps lead to one another: branches (several ways on), merges and loops back, each with its condition. */
   edges?: { from: string; to: string; label: string }[];
+  /** What the person uses it on; empty on maps made before devices, read as a phone. */
+  device?: Device | null;
 }
 
 export interface Person {

@@ -1,6 +1,7 @@
-import { ArrowUp } from 'lucide-react';
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { ArrowUp, X } from 'lucide-react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 
+import { useConnectPrompt, useNoModel } from '@/shared/components/connect';
 import { useMessages } from '@/shared/i18n';
 
 import { messages } from './messages';
@@ -9,28 +10,47 @@ const reducedMotion = () => globalThis.matchMedia?.('(prefers-reduced-motion: re
 
 /**
  * The map's own input, floating at the bottom of the canvas: what I ask the map (draw it, add a side of the product,
- * regroup) goes from here. With no map yet an empty message just draws it.
+ * regroup) goes from here. With no map yet an empty message just draws it. With no model connected, sending opens
+ * the connect sheet instead, as every input does, and the words stay.
  */
 export function MapAsk({
   empty,
   disabled,
+  placeholder,
   onSend,
+  about = null,
+  onClearAbout,
   agent,
 }: {
   /** No map yet: the placeholder invites drawing one, and sending with no words draws it. */
   empty: boolean;
   disabled: boolean;
+  /** In place of the usual invitation, e.g. that words wait while the AI works. */
+  placeholder?: string;
   /** Resolves true once the AI has the request; the words fly off as a bubble then. */
   onSend: (text: string, from: DOMRect | null) => Promise<boolean>;
+  /** The card the words are about, from its 부탁하기; they go as a request about it. */
+  about?: string | null;
+  onClearAbout?: () => void;
   /** Who does the map's work (an agent chip), under the words as in every input. */
   agent?: ReactNode;
 }) {
   const t = useMessages(messages);
   const [text, setText] = useState('');
   const form = useRef<HTMLFormElement>(null);
+  const box = useRef<HTMLTextAreaElement>(null);
+  // A card's 부탁하기 brings me here: the words are about it. Its card closes first, then the input takes the keys.
+  useEffect(() => {
+    if (!about) return;
+    const later = setTimeout(() => box.current?.focus(), 50);
+    return () => clearTimeout(later);
+  }, [about]);
   const canSend = !disabled && (empty || !!text.trim());
+  const ask = useConnectPrompt((state) => state.ask);
+  const unconnected = useNoModel();
   const send = async () => {
     if (!canSend) return;
+    if (unconnected) return ask();
     const words = text.trim();
     if (await onSend(words, form.current?.getBoundingClientRect() ?? null)) setText('');
   };
@@ -44,11 +64,26 @@ export function MapAsk({
       }}
       className="pointer-events-auto flex w-full flex-col gap-1 rounded-2xl border border-line bg-canvas-raised p-2 pl-4 shadow-overlay"
     >
+      {about && (
+        <p className="-ml-2 flex items-center gap-1 self-start rounded-full bg-canvas-sunken py-0.5 pr-1 pl-2.5 text-meta text-fg-muted">
+          {t.askAbout(about)}
+          <button
+            type="button"
+            aria-label={t.askAboutClear}
+            title={t.askAboutClear}
+            onClick={onClearAbout}
+            className="flex size-5 cursor-pointer items-center justify-center rounded-full hover:bg-hover"
+          >
+            <X size={12} aria-hidden />
+          </button>
+        </p>
+      )}
       <textarea
+        ref={box}
         value={text}
         rows={1}
         aria-label={t.mapAskLabel}
-        placeholder={empty ? t.mapAskFirst : t.mapAskMore}
+        placeholder={placeholder ?? (empty ? t.mapAskFirst : t.mapAskMore)}
         onChange={(event) => setText(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -59,7 +94,7 @@ export function MapAsk({
         className="max-h-32 min-h-8 resize-none bg-transparent py-1.5 text-reading outline-none"
       />
       <div className="flex items-center gap-2">
-        <span className="-ml-2 flex min-w-0 grow items-center gap-1">{agent}</span>
+        <span className="-ml-2 flex min-w-0 grow flex-wrap items-center gap-1">{agent}</span>
         <button
           type="submit"
           disabled={!canSend}

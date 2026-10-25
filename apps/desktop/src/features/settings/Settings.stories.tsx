@@ -74,7 +74,7 @@ export const GeneralAuto: Story = {
   },
   play: async () => {
     await expect(
-      await screen.findByRole('button', { name: /확인 모델 바꾸기|Change the checking model/ }),
+      await screen.findByRole('button', { name: /승인 검토 모델 바꾸기|Change the checking model/ }),
     ).toBeVisible();
   },
 };
@@ -95,7 +95,7 @@ export const ConnectionsReviewModel: Story = {
   args: { tab: 'connection' },
   parameters: { server: setUpScript() },
   play: async () => {
-    const picker = await screen.findByLabelText(/^(작업 승인 검토 모델|Action approval model)$/);
+    const picker = await screen.findByLabelText(/^(승인 검토 모델|Action approval model)$/);
     await expect(picker).toHaveDisplayValue(/대화에서 사용 중인 모델과 동일|Same as the chat's current model/);
   },
 };
@@ -136,7 +136,7 @@ export const AddProvider: Story = {
   args: { tab: 'connection' },
   parameters: { server: firstRunScript() },
   play: async () => {
-    await userEvent.click(await screen.findByRole('button', { name: /공급자 추가|Add provider/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /연결 추가|Add provider/ }));
     const dialog = await screen.findByRole('dialog');
     await expect(within(dialog).getByRole('button', { name: /ChatGPT/ })).toBeVisible();
     await userEvent.click(within(dialog).getByRole('button', { name: /API 키|API key/ }));

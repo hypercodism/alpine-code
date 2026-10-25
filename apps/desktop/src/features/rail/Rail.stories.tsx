@@ -53,14 +53,14 @@ export const WaitingElsewhere: Story = {
   },
 };
 
-/** The project dialog: 새로 만들기 first, then getting a repository, then a folder already on the computer. */
+/** The project dialog: 새 프로젝트 first, then getting a repository, then a folder already on the computer. */
 export const AddingAProject: Story = {
   parameters: { server: chatScript() },
   play: async () => {
     await userEvent.click(await screen.findByRole('button', { name: /^(프로젝트 추가|Add a project)$/ }));
     const dialog = await screen.findByRole('dialog');
     expect(dialog.querySelectorAll('button')).toHaveLength(3);
-    expect(dialog.querySelector('button')).toHaveTextContent(/새로 만들기|Make a new project/);
+    expect(dialog.querySelector('button')).toHaveTextContent(/새 프로젝트|New project/);
   },
 };
 

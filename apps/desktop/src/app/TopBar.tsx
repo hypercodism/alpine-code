@@ -1,6 +1,7 @@
+import { Button, Dialog } from '@alpine/ui/primitives';
 import { Link, useMatch, useNavigate, useRouter } from '@tanstack/react-router';
 import { ArrowLeft, ArrowRight, GitBranch, PanelLeft } from 'lucide-react';
-import { type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import { DockToggle } from '@/features/dock/Dock';
 import { PublishButton } from '@/features/publish/PublishButton';
@@ -8,27 +9,28 @@ import { useCurrentProject } from '@/features/rail/currentProject';
 import { useWorkResult } from '@/features/work-result/useWorkResult';
 import { StatusWord } from '@/shared/components/status';
 import { useMessages } from '@/shared/i18n';
-import { restartToUpdate, useUpdateReady } from '@/shared/platform';
+import { restartToUpdate, useUpdateCheck, useUpdateReady } from '@/shared/platform';
 import { useCloudEnabled, useProjectGit, useProjects, useSession } from '@/shared/server';
 
 import { menuMessages, messages } from './messages';
+import { useWorkRunning } from './useWorkRunning';
 
 const iconButton =
   'inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-fg-muted hover:bg-hover hover:text-fg';
 
 /**
- * The one line over the whole window: room for the traffic lights, the sidebar button, back and forward, then for a
- * session where it runs (project, branch) and its state (on the product map, the project), at the far end the dock button, and after it the update button once a new version is ready. The bar and its
- * empty parts drag the window; the buttons never do. On a new session the project is named only while the rail, which
- * names it otherwise, is hidden.
+ * The line over the pages away from the map (a conversation, settings, agents, the memory): room for the traffic
+ * lights, the sidebar button, back and forward, then for a session where it runs (project, branch) and its state, else
+ * the project's name leading back to its map; at the far end the dock button, and after it the update button once a
+ * new version is ready. The bar and its empty parts drag the window; the buttons never do. The map and 새 프로젝트 have
+ * their own bar (ShellTopBar).
  */
 export function TopBar({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail: () => void }) {
   const t = useMessages(messages);
   const router = useRouter();
   const match = useMatch({ from: '/session/$sessionId', shouldThrow: false });
-  const board = useMatch({ from: '/board', shouldThrow: false });
   const memory = useMatch({ from: '/memory', shouldThrow: false });
-  const start = useMatch({ from: '/', shouldThrow: false });
+  const current = useCurrentProject();
   return (
     <div data-tauri-drag-region className="flex h-11.5 shrink-0 items-center gap-1 bg-canvas-sunken pr-3 pl-20">
       <button
@@ -48,34 +50,72 @@ export function TopBar({ railOpen, onToggleRail }: { railOpen: boolean; onToggle
       </button>
       {match ? (
         <SessionPart sessionId={match.params.sessionId} />
-      ) : board ? (
-        <BoardPart project={board.search.project} sessionId={board.search.session ?? null} />
-      ) : memory ? (
-        <ProjectName project={memory.search.project} />
-      ) : start && !railOpen ? (
-        <NewSessionPart />
       ) : (
-        <span data-tauri-drag-region className="grow self-stretch" />
+        // Settings, agents and the memory are away from the map: the project's name leads back to it.
+        <ProjectName project={memory?.search.project ?? current ?? undefined} />
       )}
       <UpdateButton />
     </div>
   );
 }
 
-/** Once a newer version has downloaded: restart into it now (it installs on quit otherwise). */
-function UpdateButton() {
+/**
+ * Once a newer version has downloaded: restart into it now (it installs on quit otherwise). Restarting stops the AI's
+ * work, so while it works this asks first; a restart that fails says so instead of doing nothing. While "업데이트
+ * 확인…" checks or downloads, it says so here at once.
+ */
+export function UpdateButton() {
   const t = useMessages(menuMessages);
   const version = useUpdateReady();
-  if (!version) return null;
+  const phase = useUpdateCheck((state) => state.phase);
+  const working = useWorkRunning();
+  const [asking, setAsking] = useState(false);
+  const [failed, setFailed] = useState(false);
+  if (!version)
+    return (
+      phase && (
+        <span role="status" className="ml-1 inline-flex shrink-0 items-center gap-1.5 text-meta text-fg-muted">
+          <span
+            aria-hidden="true"
+            className="size-1.5 animate-pulse rounded-full bg-interactive motion-reduce:animate-none"
+          />
+          {phase === 'checking' ? t.checkingUpdate : t.downloadingUpdate}
+        </span>
+      )
+    );
+  const restart = () => {
+    setAsking(false);
+    setFailed(false);
+    restartToUpdate().catch(() => setFailed(true));
+  };
   return (
-    <button
-      type="button"
-      title={t.updateReadyTitle(version)}
-      onClick={() => void restartToUpdate()}
-      className="ml-1 shrink-0 cursor-pointer rounded-full bg-interactive px-3 py-1 text-meta font-medium text-on-fill hover:bg-interactive-hover"
-    >
-      {t.restartToUpdate}
-    </button>
+    <>
+      {failed && (
+        <span role="alert" className="ml-2 min-w-0 truncate text-meta text-danger">
+          {t.restartFailed}
+        </span>
+      )}
+      <button
+        type="button"
+        title={t.updateReadyTitle(version)}
+        onClick={() => (working ? setAsking(true) : restart())}
+        className="ml-1 shrink-0 cursor-pointer rounded-full bg-interactive px-3 py-1 text-meta font-medium text-on-fill hover:bg-interactive-hover"
+      >
+        {t.restartToUpdate}
+      </button>
+      <Dialog.Root open={asking} onOpenChange={setAsking}>
+        <Dialog.Popup size="sm" role="alertdialog">
+          <div className="flex flex-col gap-2">
+            <Dialog.Title>{t.workingTitle}</Dialog.Title>
+            <Dialog.Description>{t.workingBody}</Dialog.Description>
+          </div>
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <Dialog.Close render={<Button variant="primary" />}>{t.later}</Dialog.Close>
+            <Button onClick={restart}>{t.restartAnyway}</Button>
+          </div>
+        </Dialog.Popup>
+      </Dialog.Root>
+    </>
   );
 }
 
@@ -112,9 +152,10 @@ function SessionPart({ sessionId }: { sessionId: string }) {
         {info && <StatusWord status={info.status} className="ml-1" />}
       </Drag>
       {info && (
+        // The project's map, as from the rail: with its own conversation, not this one.
         <Link
           to="/board"
-          search={{ project: info.cwd, session: sessionId }}
+          search={{ project: info.cwd }}
           className="mr-2 rounded-md px-2 py-1 text-body text-interactive hover:bg-hover"
         >
           {t.productMap}
@@ -135,56 +176,27 @@ function SessionPart({ sessionId }: { sessionId: string }) {
   );
 }
 
-/** The project of the product map, and the dock button counting the changed files of the attached session. */
-function BoardPart({ project, sessionId }: { project?: string; sessionId: string | null }) {
-  const projects = useProjects();
-  const result = useWorkResult(sessionId, project);
-  const listed = projects.data?.projects.find((p) => p.path === project);
-  const name = project && (listed?.name ?? project.split('/').pop());
-  // The board renders no dock for a project that is missing or archived, so the toggle would open nothing.
-  const shown = !!listed && !listed.archived;
-  return (
-    <>
-      <Drag className="ml-3 gap-2">
-        {name && (
-          <span className="truncate text-body font-medium" title={project}>
-            {name}
-          </span>
-        )}
-      </Drag>
-      {shown && <DockToggle files={result?.files.length} />}
-    </>
-  );
-}
-
-/** The project a new session starts in. */
-function NewSessionPart() {
-  const projects = useProjects().data;
-  const current = useCurrentProject();
-  const name =
-    [...(projects?.projects ?? []), ...(projects?.clones ?? [])].find((p) => p.path === current)?.name ?? null;
-  return (
-    <Drag className="ml-3 gap-2">
-      {name && (
-        <span className="truncate text-body font-medium" title={current ?? undefined}>
-          {name}
-        </span>
-      )}
-    </Drag>
-  );
-}
-
-/** The project name, on a page with no dock (the memory). */
+/**
+ * The project name with ←, on a page with no dock (settings, agents, the memory); pressed, it goes back to the
+ * project's map. With no project yet, nothing.
+ */
 function ProjectName({ project }: { project?: string }) {
+  const t = useMessages(messages);
   const projects = useProjects();
   const listed = projects.data?.projects.find((p) => p.path === project);
   const name = project && (listed?.name ?? project.split('/').pop());
   return (
     <Drag className="ml-3 gap-2">
       {name && (
-        <span className="truncate text-body font-medium" title={project}>
-          {name}
-        </span>
+        <Link
+          to="/board"
+          search={{ project }}
+          title={t.openMapOf(name)}
+          className="inline-flex min-w-0 items-center gap-1 rounded-md px-1 text-body font-medium hover:bg-hover"
+        >
+          <ArrowLeft size={14} strokeWidth={1.6} aria-hidden="true" className="shrink-0 text-fg-muted" />
+          <span className="truncate">{name}</span>
+        </Link>
       )}
     </Drag>
   );

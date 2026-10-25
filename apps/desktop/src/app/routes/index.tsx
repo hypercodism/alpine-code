@@ -1,70 +1,76 @@
-import type { CloneInfo, ProjectInfo } from '@alpine/protocol';
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import type { CloneInfo } from '@alpine/protocol';
+import { createFileRoute, Navigate, useNavigate } from '@tanstack/react-router';
+import { useState } from 'react';
 
-import { NewSession } from '@/features/new-session/NewSession';
-import { NoProject } from '@/features/new-session/NoProject';
-import { useCurrentProject } from '@/features/rail/currentProject';
-import { useCloudEnabled, useProjects } from '@/shared/server';
+import { StartTopBar } from '@/app/ShellTopBar';
+import { NewProject } from '@/features/new-session/NewProject';
+import { Receiving } from '@/features/new-session/Receiving';
+import { CloneDialog } from '@/shared/components/project-add';
+import { useCancelClone, useProjects } from '@/shared/server';
 
 /**
- * `?project=` picks the project; without it, the one the rail shows (the one shown last, else the most recently used).
- * `?agent=` is the agent to start with. `?new=1` is 새로 만들기: no project, the agent only picks a setup for the idea
- * (the screen shows even when there are no projects at all). A project still being cloned (or whose clone failed) is
- * shown from its clone until it arrives.
+ * 새 프로젝트: the one place a new product starts (map-first 39). `?folder=` is an empty folder to make it in (a map's
+ * 여기서 새로 만들기); `?agent=` the agent to start with. `?project=` is a project being added: while it is still being
+ * received its progress shows here, and once it is there its map opens, since an existing project is its map.
  */
 export const Route = createFileRoute('/')({
-  validateSearch: (search: Record<string, unknown>): { project?: string; agent?: string; new?: 1 } => ({
+  validateSearch: (search: Record<string, unknown>): { project?: string; agent?: string; folder?: string } => ({
     ...(typeof search.project === 'string' ? { project: search.project } : {}),
     ...(typeof search.agent === 'string' ? { agent: search.agent } : {}),
-    ...(isOn(search.new) ? { new: 1 as const } : {}),
+    ...(typeof search.folder === 'string' ? { folder: search.folder } : {}),
   }),
-  component: NewSessionRoute,
+  component: NewProjectRoute,
 });
 
-/** `?new=1` parses as the number 1; `true` and the text spellings are taken too. */
-const isOn = (value: unknown) => value === 1 || value === '1' || value === true || value === 'true';
-
-function NewSessionRoute() {
-  const { agent, new: wanted } = Route.useSearch();
-  const cloud = useCloudEnabled();
-  const making = wanted && cloud; // a stale `?new=1` means nothing without Alpine Cloud
-  const chosen = useCurrentProject() ?? undefined;
-  const navigate = useNavigate();
-  const projects = useProjects();
-  const shown = projects.data?.projects.filter((p) => !p.archived) ?? [];
-  const clone = shown.some((p) => p.path === chosen) ? undefined : cloneAt(projects.data?.clones ?? [], chosen);
-  const project = clone ? fromClone(clone) : (shown.find((p) => p.path === chosen) ?? shown[0]);
-  const choose = (path: string | null) =>
-    void navigate({ to: '/', search: { ...(path ? { project: path } : {}), ...(agent ? { agent } : {}) } });
-  const makeNew = () => void navigate({ to: '/', search: { new: 1, ...(agent ? { agent } : {}) } });
-
+function NewProjectRoute() {
   return (
-    <>
-      {making || project ? (
-        <NewSession
-          project={making ? null : (project ?? null)}
-          clone={making ? undefined : clone}
-          agent={agent}
-          onProjectChange={choose}
-          onNewProject={makeNew}
-          onStarted={(sessionId) => void navigate({ to: '/session/$sessionId', params: { sessionId } })}
-        />
-      ) : projects.isSuccess ? (
-        <NoProject onProjectChange={choose} onNewProject={makeNew} />
-      ) : (
-        <main className="flex min-w-120 grow flex-col bg-canvas" />
-      )}
-    </>
+    <div className="flex min-w-0 grow flex-col">
+      <StartTopBar />
+      <div className="mx-2 mb-2 flex min-h-0 grow overflow-hidden rounded-xl border border-line bg-canvas">
+        <NewProjectPage />
+      </div>
+    </div>
   );
 }
 
-/** The clone going to `path`; one still receiving wins over a failed one being tried again. */
-function cloneAt(clones: CloneInfo[], path: string | undefined): CloneInfo | undefined {
-  const at = clones.filter((c) => c.path === path);
-  return at.find((c) => c.state === 'receiving') ?? at[0];
+function NewProjectPage() {
+  const { agent, folder, project } = Route.useSearch();
+  const navigate = useNavigate();
+  const projects = useProjects();
+  const cancelClone = useCancelClone();
+  const [retrying, setRetrying] = useState<string | null>(null);
+  const arrived = projects.data?.projects.some((p) => p.path === project && !p.archived);
+  const clone = project && !arrived ? cloneAt(projects.data?.clones ?? [], project) : undefined;
+  const openMap = (path: string) => void navigate({ to: '/board', search: { project: path } });
+
+  // Replacing this stop, so ← goes back to the screen before the project was opened instead of bouncing here.
+  if (project && arrived) return <Navigate to="/board" search={{ project }} replace />;
+  if (clone)
+    return (
+      <main className="flex min-w-120 grow flex-col items-center justify-center bg-canvas p-6">
+        <Receiving
+          clone={clone}
+          onCancel={() => cancelClone.mutate(clone.id, { onSuccess: () => void navigate({ to: '/' }) })}
+          onDismiss={() => cancelClone.mutate(clone.id, { onSuccess: () => void navigate({ to: '/' }) })}
+          onRetry={() => setRetrying(clone.address)}
+        />
+        <CloneDialog
+          open={retrying !== null}
+          address={retrying ?? undefined}
+          onOpenChange={(open) => !open && setRetrying(null)}
+          onDone={(path) => {
+            setRetrying(null);
+            cancelClone.mutate(clone.id); // the failed one makes way for the new try
+            void navigate({ to: '/', search: { project: path } });
+          }}
+        />
+      </main>
+    );
+  return <NewProject key={folder ?? ''} folder={folder ?? null} agent={agent} onPlanning={openMap} />;
 }
 
-/** The project a clone becomes, to show before it is there. */
-function fromClone(clone: CloneInfo): ProjectInfo {
-  return { path: clone.path, name: clone.name, branch: null, lastUsedAt: '', archived: false, lastAgent: null };
+/** The clone going to `path`; one still receiving wins over a failed one being tried again. */
+function cloneAt(clones: CloneInfo[], path: string): CloneInfo | undefined {
+  const at = clones.filter((c) => c.path === path);
+  return at.find((c) => c.state === 'receiving') ?? at[0];
 }

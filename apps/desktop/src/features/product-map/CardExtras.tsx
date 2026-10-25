@@ -16,14 +16,18 @@ import { messages } from './messages';
  */
 export function CardAsk({
   locked,
+  askLocked = locked,
   onAsk,
   onRecheck,
 }: {
   /** Another run is going, or the map cannot be written. */
   locked: boolean;
+  /** Asking cannot go now; by default whenever `locked` (a map can also keep words until the AI is free). */
+  askLocked?: boolean;
   /** Resolves true once the AI has the request. */
   onAsk: (request: string) => Promise<boolean>;
-  onRecheck: () => void;
+  /** Absent on a plan not built yet: there is no code to check. */
+  onRecheck?: () => void;
 }) {
   const t = useMessages(messages);
   const [text, setText] = useState('');
@@ -56,13 +60,15 @@ export function CardAsk({
           />
         </label>
         <div className="flex gap-2">
-          <Button type="submit" variant="primary" disabled={locked || !text.trim()}>
+          <Button type="submit" variant="primary" disabled={askLocked || !text.trim()}>
             <Send size={14} aria-hidden />
             {t.askSend}
           </Button>
-          <Button disabled={locked} onClick={onRecheck}>
-            {t.askRecheck}
-          </Button>
+          {onRecheck && (
+            <Button disabled={locked} onClick={onRecheck}>
+              {t.askRecheck}
+            </Button>
+          )}
         </div>
       </form>
     </div>
@@ -243,7 +249,7 @@ export function PromiseMore({
   only: string;
   readOnly: boolean;
   editLocked: boolean;
-  onRecheck: () => void;
+  onRecheck?: () => void;
   onNotARule: (conditionId: string) => void;
 }) {
   const images = useFlowNode(cwd, node.id, board.revision).data;

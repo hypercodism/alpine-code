@@ -46,14 +46,19 @@ BUILTINS = [
 ]
 
 
-def test_the_list_has_the_built_in_tools_then_the_memorys(tmp_path):
+def test_the_list_has_the_built_in_tools_then_asking_then_the_memorys(tmp_path):
     listed = call("tools/list", cwd=str(tmp_path))["result"]
     assert [(t["tool"]["name"], t["origin"], t["optional"]) for t in listed["tools"]] == [
         *((name, "builtin", True) for name in BUILTINS),
+        ("ask_user", "builtin", False),
         ("propose_memory", "memory", False),
     ]
     assert listed["tools"][0]["tool"]["ask"] == "never"
-    assert [t["tool"]["name"] for t in call("tools/list")["result"]["tools"]] == [*BUILTINS, "propose_memory"]
+    assert [t["tool"]["name"] for t in call("tools/list")["result"]["tools"]] == [
+        *BUILTINS,
+        "ask_user",
+        "propose_memory",
+    ]
 
 
 def test_the_default_agent_cannot_be_deleted():

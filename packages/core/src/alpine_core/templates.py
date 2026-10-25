@@ -6,8 +6,9 @@ publishes it. Nothing in it depends on Alpine, so a project is an ordinary folde
 
 The templates folder is the one setting below (``templates_dir``): ``$ALPINE_TEMPLATES``, else the local
 ``~/Developments/alpine-templates`` while it exists, else a copy fetched from the public ``alpine-templates``
-repository into ``~/.alpine-code/templates/<commit>``. Until that repository exists (``TEMPLATES_REPO`` is ``None``)
-nothing is fetched.
+repository (``TEMPLATES_REPO``) into ``~/.alpine-code/templates/<commit>``. A normal install has neither local folder,
+so the first new project fetches the copy (``ensure_templates``); once it is a day old, a new project uses it as it is
+while a newer one is fetched behind it.
 """
 
 from __future__ import annotations
@@ -18,6 +19,8 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
+import time
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -27,9 +30,19 @@ from .home import home_dir
 #: Overrides where the templates are.
 TEMPLATES_ENV = "ALPINE_TEMPLATES"
 
-#: The public repository the templates are fetched from when no local folder has them. ``None`` until the user
-#: creates it; with ``None`` nothing is fetched.
-TEMPLATES_REPO: str | None = None
+#: The public repository the templates are fetched from when no local folder has them. ``None`` fetches nothing.
+TEMPLATES_REPO: str | None = "https://github.com/hypercodism/alpine-templates.git"
+
+#: Seconds a fetched copy is used before the next new project fetches the repository again (behind it).
+_FRESH_FOR = 24 * 60 * 60
+
+#: Seconds after a fetch behind a copy failed before the next new project tries again.
+_RETRY_AFTER = 60 * 60
+
+#: The fetch under way behind a copy that is in use, and when the last one started.
+_refresh: threading.Thread | None = None
+_refresh_started = 0.0
+_refresh_lock = threading.Lock()
 
 #: The templates the app knows, in the order it shows them. Only those in the templates folder can be made.
 KNOWN = ("blank", "web-lite", "web-pro", "mobile")
@@ -55,29 +68,100 @@ class TemplateNotFound(Exception):
     """The templates folder has no template with that id."""
 
 
+class TemplatesUnavailable(Exception):
+    """There are no templates and none could be fetched. ``reason`` says why, for the app to say what to do:
+    ``no_git_tools`` (git, which fetches them, cannot run), ``unreachable`` (the fetch failed: no network, GitHub
+    down), ``not_found`` (no repository to fetch, it is not there, or it has no templates)."""
+
+    def __init__(self, reason: str, message: str) -> None:
+        super().__init__(message)
+        self.reason = reason
+
+
 def templates_dir() -> Path:
     """``$ALPINE_TEMPLATES``, else ``~/Developments/alpine-templates`` while it exists, else the newest fetched copy
     (``~/.alpine-code/templates/<commit>``). With none of them, the local path above: nothing is there, and
     ``available_templates`` says so."""
+    return _local_templates() or fetched_templates() or Path.home() / "Developments" / "alpine-templates"
+
+
+def _local_templates() -> Path | None:
+    """The folder a developer keeps the templates in, which is never fetched over: ``$ALPINE_TEMPLATES``, else
+    ``~/Developments/alpine-templates`` while it exists."""
     if os.environ.get(TEMPLATES_ENV):
         return Path(os.environ[TEMPLATES_ENV]).expanduser()
     local = Path.home() / "Developments" / "alpine-templates"
-    if local.is_dir():
-        return local
-    return fetched_templates() or local
+    return local if local.is_dir() else None
+
+
+def ensure_templates() -> list[str]:
+    """The templates a new project can start from. With no local folder and no copy yet, they are fetched first, which
+    the person waits for. A copy older than a day is used as it is, and a newer one is fetched behind it
+    (``_refresh_behind``): a slow or failing network never holds up a copy that is there.
+
+    Raises:
+        TemplatesUnavailable: There are none, and none could be fetched.
+    """
+    local = _local_templates()
+    if local is not None:
+        found = available_templates(local)
+        if not found:
+            raise TemplatesUnavailable("not_found", f"No templates in {local}")
+        return found
+    copy = fetched_templates()
+    kept = available_templates(copy) if copy is not None else []
+    if kept:
+        if time.time() - copy.stat().st_mtime >= _FRESH_FOR:
+            _refresh_behind()
+        return kept
+    try:
+        folder = fetch_templates()
+    except OSError as e:
+        # GitHub answers a repository that is not there as one that needs signing in.
+        missing = any(words in str(e) for words in ("not found", "not appear to be a git", "could not read Username"))
+        raise TemplatesUnavailable("not_found" if missing else "unreachable", str(e)) from e
+    if folder is None:  # nothing to fetch from, or no git to fetch with
+        if TEMPLATES_REPO is None:
+            raise TemplatesUnavailable("not_found", "There is no templates repository to fetch")
+        raise TemplatesUnavailable("no_git_tools", "git is needed to fetch the templates")
+    found = available_templates(folder)
+    if not found:
+        raise TemplatesUnavailable("not_found", "The templates repository has no templates")
+    return found
+
+
+def _refresh_behind() -> None:
+    """Fetches the templates again in a thread, while the copy there serves. One at a time, and not again within
+    ``_RETRY_AFTER`` of the last try, so an offline machine does not try on every new project. A failure leaves the
+    copy as it is: it is tried again later."""
+    global _refresh, _refresh_started
+    with _refresh_lock:
+        if (_refresh is not None and _refresh.is_alive()) or time.time() - _refresh_started < _RETRY_AFTER:
+            return
+        _refresh_started = time.time()
+        _refresh = threading.Thread(target=_fetch_quietly, name="templates-refresh", daemon=True)
+        _refresh.start()
+
+
+def _fetch_quietly() -> None:
+    try:
+        fetch_templates()
+    except OSError:
+        pass
 
 
 def fetched_templates() -> Path | None:
-    """The newest copy ``fetch_templates`` made, or ``None``."""
+    """The newest copy ``fetch_templates`` made, or ``None``. A fetch still under way is not one."""
     root = home_dir() / "templates"
-    copies = [p for p in root.glob("*") if p.is_dir()] if root.is_dir() else []
+    copies = [p for p in root.glob("*") if p.is_dir() and not p.name.startswith("fetch-")] if root.is_dir() else []
     return max(copies, key=lambda p: p.stat().st_mtime, default=None)
 
 
 def fetch_templates(repo: str | None = None) -> Path | None:
     """Fetches the public templates repository into ``~/.alpine-code/templates/<commit>`` (the latest commit, no
-    history) and returns the folder; the copy already there when it is the latest. ``None`` while there is no
-    repository address (``TEMPLATES_REPO``) or git cannot run.
+    history) and returns the folder; the copy already there when it is the latest. Only the newest is used from then
+    on; the one before it is kept until the next fetch, since a project may be being made from it, and older ones are
+    removed. ``None`` while there is no repository address (``TEMPLATES_REPO``) or git cannot run.
 
     Raises:
         OSError: git failed.
@@ -94,21 +178,33 @@ def fetch_templates(repo: str | None = None) -> Path | None:
         shutil.rmtree(scratch / ".git", ignore_errors=True)
         folder = root / commit
         if folder.is_dir():
-            return folder
-        scratch.rename(folder)
+            os.utime(folder)  # fresh again: it is the latest
+        else:
+            scratch.rename(folder)
+        # The copy that was newest until now may be what a new project is copying from at this moment, so it stays
+        # until the next fetch; only those older than it go.
+        others = [p for p in root.glob("*") if p != folder and p.is_dir() and not p.name.startswith("fetch-")]
+        for old in sorted(others, key=lambda p: p.stat().st_mtime, reverse=True)[1:]:
+            shutil.rmtree(old, ignore_errors=True)
         return folder
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
 
 
 def _git(cwd: Path, *args: str) -> str:
+    # The repository is public: git must never stop to ask for a password, which nobody would see.
+    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "LC_ALL": "C"}
     try:
-        done = subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True, timeout=_GIT_TIMEOUT)
+        done = subprocess.run(
+            ["git", "-C", str(cwd), *args], capture_output=True, text=True, env=env, timeout=_GIT_TIMEOUT
+        )
     except subprocess.TimeoutExpired as e:
         raise OSError(f"git {args[0]} took too long") from e
     if done.returncode != 0:
         lines = (done.stderr or done.stdout).strip().splitlines()
-        raise OSError(f"git {args[0]} failed: {lines[-1] if lines else done.returncode}")
+        # git's first ``fatal:`` line says what went wrong; the lines after it are advice.
+        said = next((line for line in lines if line.startswith("fatal:")), lines[-1] if lines else done.returncode)
+        raise OSError(f"git {args[0]} failed: {said}")
     return done.stdout
 
 
@@ -154,6 +250,43 @@ def create_project(template: str, parent: Path, name: str, taken: Iterable[Path]
             _commit_template(folder, template)
     except BaseException:
         shutil.rmtree(folder, ignore_errors=True)
+        raise
+    return folder
+
+
+class FolderNotEmpty(Exception):
+    """A project is started only in an empty folder; one with files in it is a project to open."""
+
+
+#: What a folder may hold and still count as empty: Finder's file, and git's own folder (an empty repository cloned
+#: from GitHub, or made with ``git init``), which the template's first commit then goes into.
+EMPTY_ANYWAY = frozenset({".DS_Store", ".git"})
+
+
+def start_in(template: str, folder: Path) -> Path:
+    """Copies the template into ``folder``, which the person made and which must be empty (``EMPTY_ANYWAY`` aside),
+    and makes it a git repository with the template as its first commit, as ``create_project`` does. Returns the
+    folder, resolved.
+
+    Raises:
+        TemplateNotFound: The templates folder has no such template.
+        FolderNotEmpty: ``folder`` is missing, not a folder, or has files in it.
+        OSError: The folder could not be written, or git failed. What was copied is taken out again.
+    """
+    source = templates_dir() / template
+    if template in ("", ".", "..") or Path(template).name != template or not source.is_dir():
+        raise TemplateNotFound(template)
+    folder = Path(folder).expanduser().resolve()
+    if not folder.is_dir() or any(entry.name not in EMPTY_ANYWAY for entry in folder.iterdir()):
+        raise FolderNotEmpty(str(folder))
+    try:
+        shutil.copytree(source, folder, symlinks=True, dirs_exist_ok=True, ignore=shutil.ignore_patterns(*_NOT_COPIED))
+        if git_tools_ready():
+            _commit_template(folder, template)
+    except BaseException:
+        for entry in folder.iterdir():
+            if entry.name not in EMPTY_ANYWAY:
+                shutil.rmtree(entry) if entry.is_dir() and not entry.is_symlink() else entry.unlink()
         raise
     return folder
 

@@ -13,6 +13,8 @@ export interface DockTab {
   label: string;
   /** Shown instead of the label in the row of icons; the label becomes its tooltip and accessible name. */
   icon?: LucideIcon;
+  /** A place used most (the conversation, the app, the files): its label shows beside its icon, not only on hover. */
+  named?: boolean;
   /** Listed under ⋮ (더보기) instead of in the row: places I open now and then. */
   more?: boolean;
   /** A thin line after this tab, setting it apart from the ones that follow. */
@@ -146,12 +148,13 @@ export function Dock({
                 {row.map((tab) => {
                   const selected = tab.id === active?.id;
                   const Icon = tab.icon;
+                  const iconOnly = !!Icon && !tab.named;
                   const button = (
                     <button
                       id={`dock-tab-${tab.id}`}
                       type="button"
                       role="tab"
-                      aria-label={Icon ? tab.label : undefined}
+                      aria-label={iconOnly ? tab.label : undefined}
                       aria-selected={selected}
                       // Only the selected tab's panel is rendered, so only it has something to point at.
                       aria-controls={selected ? `dock-panel-${tab.id}` : undefined}
@@ -159,16 +162,17 @@ export function Dock({
                       onClick={() => choose(tab.id)}
                       className={clsx(
                         'inline-flex h-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-lead whitespace-nowrap',
-                        Icon ? 'w-8' : 'px-2.5',
+                        iconOnly ? 'w-8' : Icon ? 'gap-1.5 px-2 text-body' : 'px-2.5',
                         selected ? 'bg-hover text-fg' : 'text-fg-muted hover:bg-hover hover:text-fg',
                       )}
                     >
-                      {Icon ? <Icon size={17} strokeWidth={1.6} aria-hidden="true" /> : tab.label}
+                      {Icon && <Icon size={17} strokeWidth={1.6} aria-hidden="true" />}
+                      {!iconOnly && tab.label}
                     </button>
                   );
                   return (
                     <span key={tab.id} className="flex items-center">
-                      {Icon ? <Tooltip label={tab.label}>{button}</Tooltip> : button}
+                      {iconOnly ? <Tooltip label={tab.label}>{button}</Tooltip> : button}
                       {tab.divider && <span aria-hidden className="mx-1.5 h-4.5 w-px bg-line" />}
                     </span>
                   );

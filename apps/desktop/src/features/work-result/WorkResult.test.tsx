@@ -51,9 +51,9 @@ it('keeps files without a recorded diff in changes and supports reviewing all fi
   );
   fireEvent.click(screen.getByRole('button', { name: 'old.txt' }));
   expect(screen.getByRole('region', { name: 'old.txt 바뀐 내용' }).textContent).toContain(
-    '기록된 텍스트 diff가 없어요',
+    '바뀐 내용을 보여 줄 수 없어요',
   );
-  expect(screen.getByText('이 세션에서 기록한 변경 · 마지막 실행 기준')).toBeTruthy();
+  expect(screen.getByText('이 대화에서 바꾼 것')).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: '모두 보기' }));
   expect(screen.getByRole('region', { name: 'new.txt 바뀐 내용' }).textContent).toContain('+new');
   fireEvent.click(screen.getByRole('button', { name: '모두 접기' }));

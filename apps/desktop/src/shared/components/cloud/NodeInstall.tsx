@@ -9,6 +9,8 @@ import { messages } from './messages';
 
 export interface NodeInstallProps {
   open: boolean;
+  /** What waits for it, which the dialog names: making a web app (the default) or putting one online. */
+  purpose?: 'make' | 'publish';
   /** Node.js is installed: whatever needed it can go on. */
   onReady: () => void;
   /** 나중에: the person does not want it now. */
@@ -17,10 +19,10 @@ export interface NodeInstallProps {
 
 /**
  * Making or publishing a web app needs Node.js 22.12 or newer, and most people have none (docs/alpine-cloud-api.md
- * 6.3). This offers Alpine's own copy before 만들기: about 50 MB from nodejs.org, kept in Alpine's folder, no
+ * 6.3). This offers Alpine's own copy before 만들기 or 올리기, and says which one goes on after it: about 50 MB from nodejs.org, kept in Alpine's folder, no
  * password asked. The download shows how far it got, and `onReady` fires when it is in place.
  */
-export function NodeInstall({ open, onReady, onClose }: NodeInstallProps) {
+export function NodeInstall({ open, purpose = 'make', onReady, onClose }: NodeInstallProps) {
   const t = useMessages(messages);
   const { state, install, reset } = useInstallNodeTools();
   const working = state.status === 'downloading';
@@ -40,13 +42,15 @@ export function NodeInstall({ open, onReady, onClose }: NodeInstallProps) {
         <AutoHeight>
           <div key={state.status} className="motion-step flex flex-col gap-4">
             <div className="flex flex-col gap-2">
-              <Dialog.Title>{t.nodeTitle}</Dialog.Title>
+              <Dialog.Title>{purpose === 'publish' ? t.nodeTitlePublish : t.nodeTitle}</Dialog.Title>
               <Dialog.Description>{working ? t.nodeDownloading : t.nodeLead}</Dialog.Description>
             </div>
             {working && (
               <div role="status" className="flex flex-col gap-2">
                 <ProgressBar percent={Math.round((state.progress ?? 0) * 100)} className="w-full" />
-                <p className="text-meta text-fg-muted">{t.nodeKeepOpen}</p>
+                <p className="text-meta text-fg-muted">
+                  {purpose === 'publish' ? t.nodeKeepOpenPublish : t.nodeKeepOpen}
+                </p>
               </div>
             )}
             {state.status === 'failed' && (

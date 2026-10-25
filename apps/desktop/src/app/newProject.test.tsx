@@ -1,7 +1,7 @@
 import type { ProjectInfo } from '@alpine/protocol';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRouter, RouterProvider } from '@tanstack/react-router';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useNavigation } from '@/shared/navigation';
@@ -20,20 +20,30 @@ const MADE: ProjectInfo = {
 };
 
 /**
- * The scripted server, whose list of projects gains the new project once a session exists in its folder. It starts on
- * the first project's new session, or at `path`; `known` are the projects it has to begin with.
+ * The scripted server, whose list of projects gains a new project once a session exists in its folder. It starts at
+ * `path` (새 프로젝트 by default); `known` are the projects it has to begin with. `sent` lists the requests made.
  */
-function mount(path = `/?project=${encodeURIComponent(PROJECTS[0]!.path)}`, known: ProjectInfo[] = PROJECTS) {
+function mount(path = '/', known: ProjectInfo[] = PROJECTS) {
+  const sent: { method: string; params: Record<string, unknown> }[] = [];
   const script = mergeScripts(chatScript({ newProject: { judgeMs: 0, createMs: 0 } }), {
     results: {
       'projects/list': async () => {
         const { sessions } = await connection.request('session/list', {});
-        const made = sessions.some((s) => s.cwd === MADE.path);
-        return { projects: made ? [MADE, ...known] : known, clones: [] };
+        const made = [...new Set(sessions.map((s) => s.cwd))]
+          .filter((cwd) => !known.some((p) => p.path === cwd))
+          .map((cwd) => ({ ...MADE, path: cwd, name: cwd.split('/').at(-1)! }));
+        return { projects: [...made, ...known], clones: [] };
       },
     },
   });
-  const connection = scriptedConnection(script);
+  const base = scriptedConnection(script);
+  const connection: typeof base = {
+    ...base,
+    request: (method, params) => {
+      sent.push({ method, params: params as Record<string, unknown> });
+      return base.request(method, params);
+    },
+  };
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: [path] }) });
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
@@ -44,8 +54,14 @@ function mount(path = `/?project=${encodeURIComponent(PROJECTS[0]!.path)}`, know
       </ServerProvider>
     </QueryClientProvider>,
   );
-  return { router };
+  return { router, sent };
 }
+
+const IDEA = '동네 공방 원데이 클래스를 예약받는 페이지를 만들어 줘';
+const send = async () => {
+  fireEvent.input(await screen.findByLabelText('메시지'), { target: { value: IDEA } });
+  fireEvent.click(screen.getByRole('button', { name: '보내기' }));
+};
 
 beforeEach(() => {
   localStorage.clear();
@@ -74,72 +90,36 @@ afterEach(() => {
   localStorage.clear();
 });
 
-describe('making a new project from the new session screen', () => {
-  it('ends in the new project, with the session that works on the idea open', async () => {
-    const { router } = mount();
-    fireEvent.input(await screen.findByLabelText('메시지'), {
-      target: { value: '동네 공방 원데이 클래스를 예약받는 페이지를 만들어 줘' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: '보내기' }));
-    fireEvent.click(await screen.findByRole('button', { name: '만들기' }));
-    fireEvent.click(await screen.findByRole('button', { name: '세션으로 가기' }));
-
-    await waitFor(() => expect(router.state.location.pathname).toMatch(/^\/session\/s-/));
-    // The rail is now in the new project: its new-session link goes there, and the project is the one shown.
-    const rail = await screen.findByRole('navigation', { name: '주 메뉴' });
-    await waitFor(() =>
-      expect(
-        within(rail)
-          .getByRole('link', { name: /새 세션\s*⌘N/ })
-          .getAttribute('href'),
-      ).toBe(`/?project=${encodeURIComponent(MADE.path)}`),
-    );
-    expect(within(rail).getByText('craft-booking')).toBeTruthy();
-  });
-});
-
-describe('새로 만들기 (/?new=1)', () => {
-  const IDEA = '동네 공방 원데이 클래스를 예약받는 페이지를 만들어 줘';
-  const send = async () => {
-    fireEvent.input(await screen.findByLabelText('메시지'), { target: { value: IDEA } });
-    fireEvent.click(screen.getByRole('button', { name: '보내기' }));
-  };
-
-  it('shows the new session, not the first screen, even when there are no projects at all', async () => {
-    const { router } = mount('/?new=1', []);
+describe('새 프로젝트', () => {
+  it('is the start screen, even when there are no projects at all', async () => {
+    mount('/', []);
     expect(await screen.findByRole('heading', { name: '무엇을 만들어 볼까요?' })).toBeTruthy();
-    expect(screen.queryByText('어떤 프로젝트로 시작할까요?')).toBeNull();
-    expect(screen.getByRole('button', { name: '프로젝트: 새 프로젝트' })).toBeTruthy();
-    expect(router.state.location.search).toEqual({ new: 1 });
+    expect(screen.getByRole('button', { name: '만들 곳: 새 폴더' })).toBeTruthy();
   });
 
-  it('is reached from the first screen, whose first row is 새로 만들기', async () => {
-    const { router } = mount('/', []);
-    expect(await screen.findByText('어떤 프로젝트로 시작할까요?')).toBeTruthy();
-    fireEvent.click(await screen.findByRole('button', { name: /^새로 만들기/ }));
-    await waitFor(() => expect(router.state.location.href).toBe('/?new=1'));
-    expect(await screen.findByRole('heading', { name: '무엇을 만들어 볼까요?' })).toBeTruthy();
-  });
-
-  it('is reached from the project chip, and ends in the new project with its session open', async () => {
-    const { router } = mount();
-    fireEvent.click(await screen.findByRole('button', { name: '프로젝트: alpine-code' }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: '프로젝트 추가…' }));
-    fireEvent.click(await within(await screen.findByRole('dialog')).findByRole('button', { name: /^새로 만들기/ }));
-    await waitFor(() => expect(router.state.location.href).toBe('/?new=1'));
-
+  it('makes the project in a new folder and ends on its map, where the AI plans the idea', async () => {
+    const { router, sent } = mount();
     await send();
     fireEvent.click(await screen.findByRole('button', { name: '만들기' }));
-    fireEvent.click(await screen.findByRole('button', { name: '세션으로 가기' }));
-    await waitFor(() => expect(router.state.location.pathname).toMatch(/^\/session\/s-/));
+    fireEvent.click(await screen.findByRole('button', { name: '지도로 가기' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/board'));
+    expect(router.state.location.search).toEqual({ project: MADE.path });
+    expect(sent.find((r) => r.method === 'projects/create')?.params.folder).toBeUndefined();
   });
 
-  it('is left by picking a project in the chip', async () => {
-    const { router } = mount('/?new=1');
-    fireEvent.click(await screen.findByRole('button', { name: '프로젝트: 새 프로젝트' }));
-    fireEvent.click(await screen.findByRole('menuitemradio', { name: /docs-site/ }));
-    await waitFor(() => expect(router.state.location.href).toBe(`/?project=${encodeURIComponent(PROJECTS[1]!.path)}`));
-    expect(await screen.findByRole('heading', { name: '무엇을 해 볼까요?' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '프로젝트: docs-site' })).toBeTruthy();
+  it('makes it in an empty folder the person made, when the map of that folder asked for it', async () => {
+    const mine = '/Users/me/Developments/devlog';
+    const { router, sent } = mount(`/?folder=${encodeURIComponent(mine)}`);
+    expect(await screen.findByRole('button', { name: '만들 곳: devlog' })).toBeTruthy();
+    await send();
+    fireEvent.click(await screen.findByRole('button', { name: '만들기' }));
+    fireEvent.click(await screen.findByRole('button', { name: '지도로 가기' }));
+    await waitFor(() => expect(router.state.location.search).toEqual({ project: mine }));
+    expect(sent.find((r) => r.method === 'projects/create')?.params.folder).toBe(mine);
+  });
+
+  it('opens the map of a project that is already there, rather than starting anything in it', async () => {
+    const { router } = mount(`/?project=${encodeURIComponent(PROJECTS[0]!.path)}`);
+    await waitFor(() => expect(router.state.location.pathname).toBe('/board'));
   });
 });

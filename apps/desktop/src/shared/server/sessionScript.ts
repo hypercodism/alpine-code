@@ -10,6 +10,7 @@ import type {
 } from '@alpine/protocol';
 
 import { ServerError } from './connection';
+import { PROJECTS } from './fixtures';
 import type { Judgement, TemplateId } from './newProjects';
 import { agentStore, type AgentStore } from './toolsScript';
 import type { Script, ScriptContext } from './scripted';
@@ -51,8 +52,13 @@ export interface NewProjectScript {
   judgeMs?: number;
   /** Milliseconds between the steps of creating; defaults to 700. */
   createMs?: number;
-  /** Judging fails (the model cannot be reached). */
-  judgeFails?: boolean;
+  /**
+   * Judging fails: `true` when the model cannot be reached; a reason when the setups themselves cannot be had
+   * (`unreachable`: no internet, `not_found`: nowhere to fetch them from, `no_git_tools`: no git to fetch them with).
+   */
+  judgeFails?: boolean | 'unreachable' | 'not_found' | 'no_git_tools';
+  /** Folders with files in them besides the demo projects and the projects made here; every other folder is empty. */
+  filled?: string[];
   /** Creating announces the web address too (`<folder>.alpinesite.app`), as a server does when signed in to Alpine. */
   address?: boolean;
   /** Creating fails: `folder` before the project exists, `session` after it, when the session cannot start. */
@@ -98,6 +104,32 @@ interface Live {
 class Cancelled extends Error {}
 
 const ANSWER = 'I read the README, then ran the check you asked for. ';
+
+/** The files every demo project has, by path from its folder. */
+const DEMO_FILES: Record<string, string> = {
+  'README.md': '# 데모 프로젝트\n\n브라우저에서 보는 Alpine Code의 예시 파일이에요.\n',
+  'package.json': '{\n  "name": "demo",\n  "private": true\n}\n',
+  'src/main.tsx': "import { App } from './App';\n\nApp();\n",
+  'src/App.tsx': "export function App() {\n  return 'hello';\n}\n",
+  'src/components/Button.tsx': 'export function Button() {\n  return null;\n}\n',
+};
+
+/** What is directly in `folder` ('' for the project's own folder) of DEMO_FILES: its folders first, then its files. */
+function demoEntries(folder: string) {
+  const prefix = folder ? `${folder.replace(/\/$/, '')}/` : '';
+  const folders = new Set<string>();
+  const files: string[] = [];
+  for (const file of Object.keys(DEMO_FILES)) {
+    if (!file.startsWith(prefix)) continue;
+    const [name, ...rest] = file.slice(prefix.length).split('/');
+    if (rest.length > 0) folders.add(name!);
+    else files.push(name!);
+  }
+  return [
+    ...[...folders].sort().map((name) => ({ name, path: prefix + name, kind: 'directory' as const })),
+    ...files.sort().map((name) => ({ name, path: prefix + name, kind: 'file' as const })),
+  ];
+}
 
 /**
  * A simulated server for the session methods. `session/send` runs a script of a turn:
@@ -408,11 +440,19 @@ export function sessionScript(options: SessionScriptOptions = {}): Script {
       model,
       mode,
       agent,
-    }: { cwd: string; model?: string | null; mode?: SessionInfo['mode'] | null; agent?: string | null },
+      purpose,
+    }: {
+      cwd: string;
+      model?: string | null;
+      mode?: SessionInfo['mode'] | null;
+      agent?: string | null;
+      purpose?: SessionInfo['purpose'];
+    },
   ): SessionInfo {
     const info = sessionInfo({
       id: `s-${nextSession++}`,
       cwd,
+      ...(purpose ? { purpose } : {}),
       ...(model ? { model } : {}),
       ...(mode ? { mode } : {}),
       agent: agent ?? 'default',
@@ -493,11 +533,18 @@ export function sessionScript(options: SessionScriptOptions = {}): Script {
         sendMessage(context, sessionId, text);
         return {};
       },
-      'session/cancel': ({ sessionId }) => {
+      'session/cancel': ({ sessionId }, context) => {
         const live = find(sessionId);
         if (live.run) {
           live.run.cancelled = true;
           live.run.wake?.();
+        } else if (live.state.info.status === 'running' || live.state.info.status === 'waiting') {
+          // A session set up as working, with no scripted turn behind it, stops as a real one does.
+          emit(context, live, {
+            type: 'item_completed',
+            item: { id: id(live, 'stop'), kind: 'run_stopped', reason: 'interrupted', message: null },
+          });
+          finish(context, live, 'idle');
         }
         return {};
       },
@@ -569,11 +616,43 @@ export function sessionScript(options: SessionScriptOptions = {}): Script {
       'projects/judge': async ({ text, locale, newProject }) => {
         const script = options.newProject ?? {};
         await sleep(script.judgeMs ?? 1500);
+        if (typeof script.judgeFails === 'string')
+          throw new ServerError(-32000, `git clone failed: the templates could not be fetched`, {
+            reason: script.judgeFails,
+          });
         if (script.judgeFails)
           throw new ServerError(-32000, 'The model could not be reached', { reason: 'model_failed' });
         return { judgement: standInJudgement(text, locale, pickable, newProject === true) };
       },
-      'projects/create': async ({ id, idea, template, name, agent, mode }, context) => {
+      // What is in a folder, for the new-project screen's look at a picked one and the dock's file tree: the demo
+      // projects and the projects made here have the same few files (DEMO_FILES), so do the `filled` folders; any
+      // other folder is empty. Each folder lists only what is directly in it.
+      'files/list': ({ cwd, path }) => {
+        const full =
+          PROJECTS.some((p) => p.path === cwd) ||
+          [...made].some((folder) => cwd.endsWith(`/${folder}`)) ||
+          (options.newProject?.filled ?? []).includes(cwd);
+        const entries = full ? demoEntries(path ?? '') : [];
+        return { entries, nextOffset: entries.length, hasMore: false };
+      },
+      'files/search': ({ query }) => ({
+        paths: Object.keys(DEMO_FILES).filter((file) => file.toLowerCase().includes(query.trim().toLowerCase())),
+      }),
+      'files/read': ({ cwd, path, line }) => {
+        const content = DEMO_FILES[path];
+        if (content === undefined) throw new ServerError(-32000, `No such file: ${path}`, { reason: 'not_found' });
+        const totalLines = content.split('\n').length;
+        return {
+          path: `${cwd}/${path}`,
+          relativePath: path,
+          content,
+          startLine: 1,
+          totalLines,
+          line: line ?? 1,
+          truncated: false,
+        };
+      },
+      'projects/create': async ({ id, idea, template, name, folder: chosen, agent, mode }, context) => {
         const script = options.newProject ?? {};
         const pause = () => sleep(script.createMs ?? 700);
         await pause();
@@ -586,11 +665,12 @@ export function sessionScript(options: SessionScriptOptions = {}): Script {
             .toLowerCase()
             .replace(/[^a-z0-9]+/g, '-')
             .replace(/^-+|-+$/g, '') || 'new-app';
-        let folder = base;
-        for (let n = 2; made.has(folder); n++) folder = `${base}-${n}`;
+        let folder = chosen ? (chosen.split('/').filter(Boolean).at(-1) ?? base) : base;
+        for (let n = 2; !chosen && made.has(folder); n++) folder = `${base}-${n}`;
         made.add(folder);
         const project: ProjectInfo = {
-          path: `/Users/me/AlpineCode/${folder}`,
+          // An empty folder the person made is used as it is; otherwise a new one in the clone folder.
+          path: chosen ?? `/Users/me/AlpineCode/${folder}`,
           name: folder,
           branch: 'main',
           lastUsedAt: new Date().toISOString(),
@@ -609,7 +689,8 @@ export function sessionScript(options: SessionScriptOptions = {}): Script {
         await pause();
         if (script.createFails === 'session')
           throw new ServerError(-32000, 'The session could not be started', { reason: 'other' });
-        const info = startSession(context, { cwd: project.path, agent, mode });
+        // As on the server, the idea goes to the project's map conversation, which plans it on the map.
+        const info = startSession(context, { cwd: project.path, agent, mode, purpose: 'map' });
         sendMessage(context, info.id, idea);
         context.emit({ method: 'projects/createChanged', params: { id, step: 'agent', project } });
         return { project, sessionId: info.id, address: script.address ? `${folder}.alpinesite.app` : null };

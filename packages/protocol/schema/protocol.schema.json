@@ -135,6 +135,10 @@
       "params": "DevServersStartParams",
       "result": "DevServersStartResult"
     },
+    "devServers/open": {
+      "params": "DevServersOpenParams",
+      "result": "DevServersOpenResult"
+    },
     "devServers/stop": {
       "params": "DevServersStopParams",
       "result": "DevServersStopResult"
@@ -1106,6 +1110,45 @@
         "askedBy"
       ],
       "title": "ApprovalItem",
+      "type": "object"
+    },
+    "CardDecision": {
+      "additionalProperties": false,
+      "description": "A product question about a card and the answer it got, kept on the card.",
+      "properties": {
+        "question": {
+          "maxLength": 300,
+          "minLength": 1,
+          "type": "string"
+        },
+        "options": {
+          "items": {
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 4,
+          "type": "array"
+        },
+        "answer": {
+          "maxLength": 120,
+          "minLength": 1,
+          "type": "string"
+        },
+        "by": {
+          "default": "person",
+          "enum": [
+            "person",
+            "ai"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "question",
+        "answer"
+      ],
+      "title": "CardDecision",
       "type": "object"
     },
     "ChatGPTAccountInfo": {
@@ -2850,6 +2893,47 @@
       "title": "DevServersLogsResult",
       "type": "object"
     },
+    "DevServersOpenParams": {
+      "description": "The project's app, running: the server it has, else one Alpine starts the way the project runs.",
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "sessionId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "cwd"
+      ],
+      "title": "DevServersOpenParams",
+      "type": "object"
+    },
+    "DevServersOpenResult": {
+      "properties": {
+        "server": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DevServerInfo"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "DevServersOpenResult",
+      "type": "object"
+    },
     "DevServersRestartParams": {
       "properties": {
         "id": {
@@ -3072,6 +3156,7 @@
             "unsupported",
             "other",
             "not_a_folder",
+            "not_empty",
             "invalid_config",
             "exists",
             "clone_failed",
@@ -3220,6 +3305,19 @@
           ],
           "type": "string"
         },
+        "path": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "pattern": "^/([^/\\s]\\S*)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "tags": {
           "items": {
             "maxLength": 40,
@@ -3302,6 +3400,17 @@
           },
           "maxItems": 60,
           "type": "array"
+        },
+        "decisions": {
+          "items": {
+            "$ref": "#/$defs/CardDecision"
+          },
+          "maxItems": 20,
+          "type": "array"
+        },
+        "tentative": {
+          "default": false,
+          "type": "boolean"
         }
       },
       "required": [
@@ -3957,6 +4066,21 @@
           "maxLength": 60,
           "type": "string"
         },
+        "device": {
+          "anyOf": [
+            {
+              "enum": [
+                "phone",
+                "computer"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "nodeIds": {
           "items": {
             "type": "string"
@@ -4038,6 +4162,29 @@
           },
           "type": "object"
         },
+        "screens": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "look": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MapLook"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "undecided": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "changes": {
           "items": {
             "$ref": "#/$defs/FlowChange"
@@ -4105,6 +4252,30 @@
             "$ref": "#/$defs/UnmappedPart"
           },
           "type": "array"
+        },
+        "planned": {
+          "default": false,
+          "type": "boolean"
+        },
+        "build": {
+          "default": "none",
+          "enum": [
+            "none",
+            "running",
+            "ended"
+          ],
+          "type": "string"
+        },
+        "buildSession": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -4143,6 +4314,19 @@
             "data"
           ],
           "type": "string"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "pattern": "^/([^/\\s]\\S*)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "tags": {
           "items": {
@@ -4226,6 +4410,17 @@
           },
           "maxItems": 60,
           "type": "array"
+        },
+        "decisions": {
+          "items": {
+            "$ref": "#/$defs/CardDecision"
+          },
+          "maxItems": 20,
+          "type": "array"
+        },
+        "tentative": {
+          "default": false,
+          "type": "boolean"
         },
         "priority": {
           "anyOf": [
@@ -4328,6 +4523,9 @@
         },
         "action": {
           "enum": [
+            "plan",
+            "build",
+            "request",
             "discover",
             "extend",
             "change",
@@ -5265,9 +5463,78 @@
           },
           "maxItems": 100,
           "type": "array"
+        },
+        "undecided": {
+          "items": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 50,
+          "type": "array"
         }
       },
       "title": "MapFile",
+      "type": "object"
+    },
+    "MapLook": {
+      "additionalProperties": false,
+      "description": "``.alpine-code/map/look.json``: the look the planned screens wear, as the values behind the theme tokens they\ndraw with (``bg-page``, ``text-ink``, ``font-display``...). Picking a look restyles every screen at once.",
+      "properties": {
+        "page": {
+          "maxLength": 200,
+          "type": "string"
+        },
+        "surface": {
+          "maxLength": 200,
+          "type": "string"
+        },
+        "ink": {
+          "maxLength": 200,
+          "type": "string"
+        },
+        "muted": {
+          "maxLength": 200,
+          "type": "string"
+        },
+        "line": {
+          "maxLength": 200,
+          "type": "string"
+        },
+        "accent": {
+          "maxLength": 200,
+          "type": "string"
+        },
+        "onAccent": {
+          "maxLength": 200,
+          "type": "string"
+        },
+        "display": {
+          "maxLength": 200,
+          "type": "string"
+        },
+        "body": {
+          "maxLength": 200,
+          "type": "string"
+        },
+        "radius": {
+          "maxLength": 200,
+          "type": "string"
+        }
+      },
+      "required": [
+        "page",
+        "surface",
+        "ink",
+        "muted",
+        "line",
+        "accent",
+        "onAccent",
+        "display",
+        "body",
+        "radius"
+      ],
+      "title": "MapLook",
       "type": "object"
     },
     "MapProblem": {
@@ -6144,6 +6411,21 @@
           "maxLength": 60,
           "type": "string"
         },
+        "device": {
+          "anyOf": [
+            {
+              "enum": [
+                "phone",
+                "computer"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "nodeIds": {
           "items": {
             "type": "string"
@@ -6408,7 +6690,7 @@
       "type": "object"
     },
     "ProjectsCreateParams": {
-      "description": "Makes a project from a template and starts the agent on the idea.\n\nThe template is copied into ``<clone folder>/<name>`` (``<name>-2``, ``<name>-3``... when taken, as for clones),\nthe folder becomes a git repository with the template as its first commit, and joins the projects. Then a session\nstarts there and gets ``idea`` as its first message. Each step is announced through ``projects/createChanged``\nas it finishes; the request answers after the last one. Fails with ``not_found`` when the server has no such\ntemplate, ``invalid_config`` when config.toml cannot be read. When the session cannot start, the project stays\nmade and on the rail, and the error is the session's.",
+      "description": "Makes a project from a template and starts the agent on the idea.\n\nThe template is copied into ``<clone folder>/<name>`` (``<name>-2``, ``<name>-3``... when taken, as for clones),\nthe folder becomes a git repository with the template as its first commit, and joins the projects. Then the\nproject's map conversation starts there and gets ``idea`` as the plan of its map (``flow/prepare`` ``plan``), so\nthe product is planned on the map before it is built. Each step is announced through ``projects/createChanged``\nas it finishes; the request answers after the last one. Fails with ``not_found`` when the server has no such\ntemplate, ``invalid_config`` when config.toml cannot be read. When the session cannot start, the project stays\nmade and on the rail, and the error is the session's.",
       "properties": {
         "id": {
           "type": "string"
@@ -6428,6 +6710,17 @@
         },
         "name": {
           "type": "string"
+        },
+        "folder": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "agent": {
           "anyOf": [
@@ -7934,7 +8227,10 @@
         "purpose": {
           "anyOf": [
             {
-              "const": "map",
+              "enum": [
+                "map",
+                "build"
+              ],
               "type": "string"
             },
             {
@@ -8135,7 +8431,10 @@
         "purpose": {
           "anyOf": [
             {
-              "const": "map",
+              "enum": [
+                "map",
+                "build"
+              ],
               "type": "string"
             },
             {
@@ -8861,7 +9160,8 @@
             "alpine",
             "agents",
             "claude",
-            "codex"
+            "codex",
+            "builtin"
           ],
           "type": "string"
         },

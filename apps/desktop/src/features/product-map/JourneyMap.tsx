@@ -4,7 +4,8 @@ import { useCallback, useRef, type ReactNode } from 'react';
 import { useMessages } from '@/shared/i18n';
 import { useEditFlow, useServer, useSetActor, useSetFlow } from '@/shared/server';
 
-import { FlowTree, type StepParts } from './FlowTree';
+import { Filmstrip } from './Filmstrip';
+import type { StepParts } from './FlowTree';
 import { flowTreeMessages } from './flowTreeMessages';
 import { usePacedMap } from './pacedMap';
 import type { TreeMap } from './flowTreeModel';
@@ -15,7 +16,7 @@ export type JourneyStart = (
 ) => Promise<boolean>;
 
 /**
- * The person-first tree on the project's real map. Reading comes from `flow/get`; what the person asks for goes the
+ * The project's real map as a filmstrip of its screens. Reading comes from `flow/get`; what the person asks for goes the
  * way the map already sends it: checks, fixes and new journeys start an AI session (`flow/prepare`), promises are
  * added or removed with `flow/edit`, and the person's own calls on a card are written with `flow/set`.
  */
@@ -31,6 +32,14 @@ export function JourneyMap({
   reveal = null,
   stepParts,
   promiseExtras,
+  look,
+  touching,
+  asked,
+  onPlan,
+  waitNote,
+  planned = false,
+  making = null,
+  onChangePick,
 }: {
   cwd: string;
   /** `board` read person first (`toTreeMap`). */
@@ -47,6 +56,23 @@ export function JourneyMap({
   reveal?: { cardId: string; seq: number } | null;
   stepParts?: (cardId: string) => StepParts;
   promiseExtras?: (cardId: string, promiseId: string) => ReactNode;
+  /** A planned product: the look its screens wear, the cards the AI works on now, the card a question is about. */
+  look?: string;
+  touching?: ReadonlySet<string>;
+  asked?: string | null;
+  /**
+   * A plan not built yet: there is no code to check or find steps in, so nothing is checked and new journeys, steps
+   * and people are words to the plan's conversation.
+   */
+  onPlan?: (words: string) => void;
+  /** Why asks from the open details cannot start now. */
+  waitNote?: string | null;
+  /** A product that began as a plan. */
+  planned?: boolean;
+  /** The card the build works on now. */
+  making?: string | null;
+  /** Opens what the AI decided on a card, to answer it again. */
+  onChangePick?: (cardId: string) => void;
 }) {
   const t = useMessages(flowTreeMessages);
   const edit = useEditFlow();
@@ -64,16 +90,28 @@ export function JourneyMap({
   const nodeOf = (id: string) => board.document?.nodes?.find((node) => node.id === id) ?? null;
 
   return (
-    <FlowTree
+    <Filmstrip
       map={map}
+      planned={planned}
+      making={making}
+      onChangePick={onChangePick}
       drawing={drawing}
       lit={lit}
       reveal={reveal}
       stepParts={stepParts}
       promiseExtras={promiseExtras}
+      look={look}
+      touching={touching}
+      asked={asked}
       seenAt={seenAt ?? undefined}
       readSource={readSource}
-      onCheck={(targets) => void start('verify', { nodeIds: [...new Set(targets.map((target) => target.cardId))] })}
+      planning={!!onPlan}
+      waitNote={waitNote}
+      onCheck={
+        onPlan
+          ? undefined
+          : (targets) => void start('verify', { nodeIds: [...new Set(targets.map((target) => target.cardId))] })
+      }
       onFix={(targets) => {
         const cardId = targets[0]?.cardId;
         const card = cardId ? map.cards[cardId] : undefined;
@@ -108,12 +146,20 @@ export function JourneyMap({
         if (last?.text)
           edit.mutate({ cwd, nodeId: last.cardId, field: 'promise', conditionId: null, value: last.text });
       }}
-      onAddJourney={(_, title, goal) => void start('extend', { request: t.addJourneyRequest(title, goal) })}
+      onAddJourney={(_, title, goal) =>
+        onPlan
+          ? onPlan(t.planJourneyRequest(title, goal))
+          : void start('extend', { request: t.addJourneyRequest(title, goal) })
+      }
       onFindSteps={(journeyId) => {
         const journey = map.people.flatMap((person) => person.journeys).find((item) => item.id === journeyId);
-        void start('extend', { flowId: journeyId, request: t.findStepsRequest(journey?.title.ko ?? journeyId) });
+        const title = journey?.title.ko ?? journeyId;
+        if (onPlan) onPlan(t.planStepsRequest(title));
+        else void start('extend', { flowId: journeyId, request: t.findStepsRequest(title) });
       }}
-      onAddPerson={(name) => void start('reshape', { request: t.addPersonRequest(name) })}
+      onAddPerson={(name) =>
+        onPlan ? onPlan(t.planPersonRequest(name)) : void start('reshape', { request: t.addPersonRequest(name) })
+      }
       // A map from a newer Alpine is read only: no decisions to write (the decision chips are not shown).
       onDecide={readOnly ? undefined : (cardId, field, value) => decide.mutate({ cwd, nodeId: cardId, field, value })}
       onOpenSession={onSession}

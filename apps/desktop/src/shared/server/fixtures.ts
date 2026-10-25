@@ -1,5 +1,6 @@
 import type {
   CloneInfo,
+  CloudStatus,
   ConnectionInfo,
   ConnectionsListResult,
   ProjectInfo,
@@ -10,7 +11,7 @@ import type {
 import { cloudScript, type CloudScriptOptions } from './cloudScript';
 import { ServerError } from './connection';
 import { memoryScript } from './memoryScript';
-import { mergeScripts, type Script } from './scripted';
+import { mergeScripts, type Script, type ScriptContext } from './scripted';
 import { sessionInfo, sessionScript, type SessionScriptOptions } from './sessionScript';
 import { skillsScript } from './skillsScript';
 import { agentStore, toolsScript, type AgentStore } from './toolsScript';
@@ -251,7 +252,11 @@ export function statefulScript(start: ScriptState): Script {
         projects: projects.map((p) => ({ ...p, lastAgent: start.agents?.lastAgent.get(p.path) ?? p.lastAgent })),
         clones,
       }),
+      // As on the server, only a folder opens: a file (by its extension, `photo.png`) or a folder that went to the
+      // Trash is refused.
       'projects/open': ({ path }) => {
+        if (/\.[a-z0-9]{1,5}$/i.test(path.split('/').pop() ?? '') || path.includes('/.Trash/'))
+          throw new ServerError(-32000, `Not a folder: ${path}`, { reason: 'not_a_folder' });
         const opened = project(path);
         projects = [opened, ...projects.filter((p) => p.path !== path)];
         return { project: opened };
@@ -400,15 +405,50 @@ const GITHUB_REPOS = [
 export const firstRunScript = (chatgpt: ScriptState['chatgpt'] = 'connected', cloud: CloudScriptOptions = {}) =>
   mergeScripts(statefulScript({ connections: NOTHING_CONNECTED, projects: [], chatgpt }), cloudScript(cloud));
 
-/** Everything set up: three connections and three projects. */
-export const setUpScript = (agents: AgentStore = agentStore()) =>
+/** Everything set up: three connections and three projects. Signing in to Alpine adds a fourth, as on the server. */
+export const setUpScript = (agents: AgentStore = agentStore(), cloud: CloudScriptOptions = {}) =>
   mergeScripts(
-    statefulScript({ connections: CONNECTED, projects: PROJECTS, agents }),
-    cloudScript(),
+    withAlpineConnection(
+      mergeScripts(statefulScript({ connections: CONNECTED, projects: PROJECTS, agents }), cloudScript(cloud)),
+    ),
     toolsScript(agents),
     memoryScript(),
     skillsScript(),
   );
+
+/** The `alpine` connection the server adds on an Alpine sign-in. It pays with the account's credits: no key. */
+export const ALPINE_CONNECTION: ConnectionInfo = {
+  name: 'alpine',
+  provider: 'alpine',
+  baseUrl: 'https://gateway.alpinecode.app/v1',
+  billing: 'credits',
+  hasKey: true,
+};
+
+/**
+ * As on the server, signing in to Alpine adds the `alpine` connection and signing out takes it away. `script` holds
+ * both the connections (`statefulScript`) and the account (`cloudScript`).
+ */
+function withAlpineConnection(script: Script): Script {
+  const results = script.results ?? {};
+  const answer = async <T>(result: unknown, params: unknown, context: ScriptContext): Promise<T> =>
+    (typeof result === 'function' ? await result(params, context) : result) as T;
+  return {
+    ...script,
+    results: {
+      ...results,
+      'connections/list': async (params, context) => {
+        const listed = await answer<ConnectionsListResult>(results['connections/list'], params, context);
+        const cloud = await answer<CloudStatus>(results['cloud/status'], {}, context);
+        return cloud.signedIn ? { ...listed, connections: [...listed.connections, ALPINE_CONNECTION] } : listed;
+      },
+      'connections/models': (params, context) =>
+        params.connection === 'alpine'
+          ? { models: ['alpine-auto', 'glm-5.2', 'kimi-k3'] }
+          : answer(results['connections/models'], params, context),
+    },
+  };
+}
 
 /** Three earlier sessions, one of them at work, for a rail that is not empty. */
 export const SESSIONS = [

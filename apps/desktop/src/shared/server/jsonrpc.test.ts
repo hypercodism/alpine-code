@@ -1,17 +1,20 @@
 import { describe, expect, it } from 'vitest';
 
-import { ServerError } from './connection';
+import { SERVER_EXITED, SERVER_EXITED_CODE, ServerError } from './connection';
 import { jsonRpcConnection } from './jsonrpc';
 
 function fakeTransport() {
   const sent: string[] = [];
   let deliver: (line: string) => void = () => {};
+  let exit: () => void = () => {};
   return {
     sent,
     receive: (message: object) => deliver(JSON.stringify(message)),
+    exit: () => exit(),
     transport: {
       send: async (line: string) => void sent.push(line),
       onLine: (listener: (line: string) => void) => void (deliver = listener),
+      onExit: (listener: () => void) => void (exit = listener),
     },
   };
 }
@@ -67,5 +70,19 @@ describe('jsonRpcConnection', () => {
     connection.subscribe((notification) => seen.push(notification.method));
     fake.receive({ jsonrpc: '2.0', method: 'session/event', params: { seq: 1 } });
     expect(seen).toEqual(['session/event']);
+  });
+
+  it('fails what waits and what comes after once the server has exited, and says so once', async () => {
+    const fake = fakeTransport();
+    const connection = jsonRpcConnection(fake.transport);
+    const seen: string[] = [];
+    connection.subscribe((notification) => seen.push(notification.method));
+    const waiting = connection.request('session/list', {});
+    fake.exit();
+    fake.exit();
+    await expect(waiting).rejects.toMatchObject({ code: SERVER_EXITED_CODE });
+    await expect(connection.request('session/list', {})).rejects.toMatchObject({ code: SERVER_EXITED_CODE });
+    expect(fake.sent).toHaveLength(1);
+    expect(seen).toEqual([SERVER_EXITED]);
   });
 });

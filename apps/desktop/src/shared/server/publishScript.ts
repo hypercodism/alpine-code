@@ -20,7 +20,11 @@ export type PublishScenario =
   /** The build command fails; its last lines come with the error. */
   | 'build_failed'
   /** The checks pass, then the database change fails and the old version keeps serving. */
-  | 'run_failed';
+  | 'run_failed'
+  /** The API refuses: the free plan's limit is reached. */
+  | 'needs_pro'
+  /** The API refuses: the app is too old. */
+  | 'needs_update';
 
 export interface PublishScriptOptions {
   publish?: PublishScenario;
@@ -130,6 +134,9 @@ const CHECKS: Record<PublishScenario, Check[]> = {
     { id: 'secret', state: 'ok', findings: [] },
     { id: 'open-api', state: 'ok', findings: [] },
   ],
+  // Refused before any check runs.
+  needs_pro: [],
+  needs_update: [],
 };
 
 const DROP = {
@@ -198,6 +205,10 @@ export function publishResults(options: PublishScriptOptions, env: Env): NonNull
         context.emit({ method: 'publish/changed', params: { id, phase, progress, checks, message: null } });
       say('build', 0);
       await sleep(ms);
+      if (scenario === 'needs_pro')
+        throw new ServerError(-32000, 'The free plan limit is reached.', { reason: 'limit_reached' });
+      if (scenario === 'needs_update')
+        throw new ServerError(-32000, 'This app version is too old.', { reason: 'update_required' });
       if (scenario === 'build_failed')
         throw new ServerError(-32000, `Build failed.\n${BUILD_TAIL}`, { reason: 'build_failed' });
       say('build', 1);

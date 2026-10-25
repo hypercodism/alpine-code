@@ -1,6 +1,7 @@
 import { Collapse } from '@alpine/ui/primitives';
 import type { MemoryEvidence, MemoryInfo } from '@alpine/protocol';
 import { Button, LinkButton } from '@alpine/ui/primitives';
+import { useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { useState } from 'react';
 
@@ -22,20 +23,38 @@ export function Memory({ project }: { project: string | null }) {
   const words = useMemoryWords();
   const memory = useMemory(project);
   const list = memory.data;
+  const navigate = useNavigate();
 
   return (
     <div className="mx-auto flex w-full max-w-175 flex-col gap-6 px-6 pt-5 pb-10">
-      <header className="flex flex-col gap-1">
+      <header className="flex flex-col items-start gap-1">
+        {project && (
+          <LinkButton
+            className="-ml-0.5 min-h-5 px-0.5"
+            onClick={() => void navigate({ to: '/board', search: { project } })}
+          >
+            {t.toMap}
+          </LinkButton>
+        )}
         <h1 className="text-title">{t.title}</h1>
         {project && <p className="text-body text-fg-muted">{t.lead(project.split('/').pop() || project)}</p>}
       </header>
       {!project ? (
         <p className="text-body text-fg-muted">{t.noProject}</p>
       ) : memory.isError ? (
-        <p role="alert" className="text-body text-danger">
-          {t.loadFailed}
+        <div className="flex flex-col items-start gap-3">
+          <p role="alert" className="text-body text-danger">
+            {t.loadFailed}
+          </p>
+          <Button disabled={memory.isFetching} onClick={() => void memory.refetch()}>
+            {t.retry}
+          </Button>
+        </div>
+      ) : !list ? (
+        <p role="status" className="text-body text-fg-muted">
+          {t.loading}
         </p>
-      ) : !list ? null : list.pending.length === 0 && list.memories.length === 0 ? (
+      ) : list.pending.length === 0 && list.memories.length === 0 ? (
         <div className="flex flex-col gap-1">
           <p className="text-body">{t.empty}</p>
           <p className="text-body text-fg-muted">{t.emptyLead}</p>

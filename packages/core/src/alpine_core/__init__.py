@@ -8,6 +8,7 @@ or core submodules directly.
 from .agents import DEFAULT_ID as DEFAULT_AGENT
 from .agents import LOOKS, AgentConfig, AgentList, free_character
 from .approval import ApprovalRequest, Approver, AsyncApprover, BlockingApprover, Decision
+from .ask import ASK_USER, Asking
 from .catalog import hidden_models, load_catalog
 from .cloning import (
     Clone,
@@ -95,7 +96,7 @@ from .session import Session, Snapshot, delete_session, list_sessions
 from .skill_fetch import Found as FoundSkills
 from .skill_fetch import SearchHit, SkillFetcher, parse_source
 from .skill_fetch import search as search_skills
-from .skills import Skill, SkillError, SkillLibrary, skill_text, slug
+from .skills import Skill, SkillError, SkillLibrary, builtin_skill, skill_content, skill_text, slug
 from .storage import (
     Activity,
     ActivityKind,
@@ -106,7 +107,15 @@ from .storage import (
     Storage,
     file_storage,
 )
-from .templates import TemplateNotFound, available_templates, create_project, safe_name, templates_dir
+from .templates import (
+    FolderNotEmpty,
+    TemplateNotFound,
+    available_templates,
+    create_project,
+    safe_name,
+    start_in,
+    templates_dir,
+)
 from .tool_sources import (
     Builtins,
     Offered,
@@ -123,6 +132,8 @@ from .tool_sources import (
 from .tools import BUILTIN, Workspace
 
 __all__ = [
+    "ASK_USER",
+    "Asking",
     "FoundSkills",
     "SearchHit",
     "Skill",
@@ -131,6 +142,8 @@ __all__ = [
     "SkillLibrary",
     "parse_source",
     "search_skills",
+    "builtin_skill",
+    "skill_content",
     "skill_text",
     "slug",
     "Session",
@@ -167,6 +180,8 @@ __all__ = [
     "WorkOnProject",
     "judge",
     "TemplateNotFound",
+    "FolderNotEmpty",
+    "start_in",
     "available_templates",
     "create_project",
     "safe_name",

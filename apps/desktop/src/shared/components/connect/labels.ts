@@ -5,11 +5,13 @@ import type { messages } from './messages';
 type Words = (typeof messages)['ko'];
 
 /**
- * How a saved connection is named on screen: 'Anthropic API 키', 'GLM Coding Plan', '로컬 서버 · localhost:11434',
+ * How a saved connection is named on screen: 'Anthropic API 키', 'GLM Coding Plan', 'Alpine', '로컬 서버 · localhost:11434',
  * '호환 서버 · llm.example.com'.
  */
 export function connectionLabel(connection: ConnectionInfo, providers: ProviderInfo[], t: Words): string {
   if (connection.account) return t.chatgptConnection(connection.account.email);
+  // Alpine signs in instead of taking a key, so the server does not list it among the providers.
+  if (connection.provider === 'alpine') return 'Alpine';
   const provider = providers.find((p) => p.id === connection.provider);
   if (!provider) {
     const address = (connection.baseUrl ?? '').replace(/^https?:\/\//, '').replace(/\/v1\/?$/, '');

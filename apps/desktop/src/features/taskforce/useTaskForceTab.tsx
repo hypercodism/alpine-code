@@ -13,11 +13,11 @@ export const TASKFORCE_TAB = 'taskforce';
  * The dock's TF tab for a session that has a TF (its latest one), or `null`. `renderRecord` draws what one agent did
  * (the session's way of drawing items, which the app hands in).
  */
-export function useTaskForceTab(sessionId: string, renderRecord: (items: Item[]) => ReactNode) {
+export function useTaskForceTab(sessionId: string | null, renderRecord: (items: Item[]) => ReactNode) {
   const t = useMessages(taskForceMessages);
   const session = useSession(sessionId);
   const item = session.data ? latestTaskForce(session.data.items) : null;
-  if (!item || item.status === 'declined') return null;
+  if (!sessionId || !item || item.status === 'declined') return null;
   return {
     id: TASKFORCE_TAB,
     label: t.name,

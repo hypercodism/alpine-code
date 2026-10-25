@@ -149,14 +149,14 @@ function setup(delayStart = false, inspectId?: string) {
 it('automatically opens one shell, types directly into the same PTY across navigation and resumes from its previous output offset', async () => {
   const app = setup();
   const first = app.mount();
-  const input = await screen.findByRole('textbox', { name: 'Terminal input: Shell 1' });
+  const input = await screen.findByRole('textbox', { name: 'Terminal input: Terminal 1' });
   fireEvent.input(input, { target: { value: 'cd src; export VALUE=kept\r' } });
   await waitFor(() => expect(app.inputs).toHaveLength(1));
   expect(app.processes.get('shell-1')?.sessionId).toBe('chat-1');
   first.unmount();
   const readCount = app.reads.length;
   app.mount();
-  const resumed = await screen.findByRole('textbox', { name: 'Terminal input: Shell 1' });
+  const resumed = await screen.findByRole('textbox', { name: 'Terminal input: Terminal 1' });
   fireEvent.input(resumed, { target: { value: 'pwd; echo "$VALUE"\r' } });
   await waitFor(() => expect(app.inputs).toHaveLength(2));
   await waitFor(() => expect(app.reads.length).toBeGreaterThan(readCount));
@@ -168,10 +168,10 @@ it('automatically opens one shell, types directly into the same PTY across navig
 it('splits independent terminal instances, routes their input separately, and closes only the chosen terminal', async () => {
   const app = setup();
   app.mount();
-  await screen.findByRole('textbox', { name: 'Terminal input: Shell 1' });
+  await screen.findByRole('textbox', { name: 'Terminal input: Terminal 1' });
   fireEvent.click(screen.getByRole('button', { name: 'Split terminal' }));
-  const second = await screen.findByRole('textbox', { name: 'Terminal input: Shell 2' });
-  const first = screen.getByRole('textbox', { name: 'Terminal input: Shell 1' });
+  const second = await screen.findByRole('textbox', { name: 'Terminal input: Terminal 2' });
+  const first = screen.getByRole('textbox', { name: 'Terminal input: Terminal 1' });
   fireEvent.input(first, { target: { value: 'first\r' } });
   fireEvent.input(second, { target: { value: 'second\r' } });
   await waitFor(() => expect(app.inputs).toHaveLength(2));
@@ -179,29 +179,29 @@ it('splits independent terminal instances, routes their input separately, and cl
     { processId: 'shell-1', data: 'first\r' },
     { processId: 'shell-2', data: 'second\r' },
   ]);
-  expect(screen.queryByRole('button', { name: 'Other terminals' })).toBeNull();
-  fireEvent.click(screen.getByRole('button', { name: 'Shell 1' }));
+  expect(screen.queryByRole('button', { name: 'Switch terminal' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Terminal 1' }));
   await waitFor(() => expect(document.activeElement).toBe(first));
   expect(screen.getAllByRole('textbox')).toEqual([first, second]);
-  fireEvent.click(screen.getByRole('button', { name: 'Shell 2' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Terminal 2' }));
   await waitFor(() => expect(document.activeElement).toBe(second));
   expect(screen.getAllByRole('textbox')).toEqual([first, second]);
   fireEvent.click(screen.getByRole('button', { name: 'Kill terminal' }));
-  await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Terminal input: Shell 2' })).toBeNull());
-  expect(screen.getByRole('textbox', { name: 'Terminal input: Shell 1' })).toBeTruthy();
+  await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Terminal input: Terminal 2' })).toBeNull());
+  expect(screen.getByRole('textbox', { name: 'Terminal input: Terminal 1' })).toBeTruthy();
   expect(app.processes.size).toBe(1);
 });
 
 it('removes a shell on exit, promotes its split, and removes the final shell without retaining a completed pane', async () => {
   const app = setup();
   app.mount();
-  const first = await screen.findByRole('textbox', { name: 'Terminal input: Shell 1' });
+  const first = await screen.findByRole('textbox', { name: 'Terminal input: Terminal 1' });
   fireEvent.click(screen.getByRole('button', { name: 'Split terminal' }));
-  const second = await screen.findByRole('textbox', { name: 'Terminal input: Shell 2' });
+  const second = await screen.findByRole('textbox', { name: 'Terminal input: Terminal 2' });
   fireEvent.input(first, { target: { value: 'exit\r' } });
-  await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Terminal input: Shell 1' })).toBeNull());
+  await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Terminal input: Terminal 1' })).toBeNull());
   expect(app.processes.has('shell-1')).toBe(false);
-  expect(screen.getByRole('textbox', { name: 'Terminal input: Shell 2' })).toBe(second);
+  expect(screen.getByRole('textbox', { name: 'Terminal input: Terminal 2' })).toBe(second);
   await waitFor(() => expect(document.activeElement).toBe(second));
   fireEvent.input(second, { target: { value: 'exit\r' } });
   await waitFor(() => expect(screen.queryByRole('textbox')).toBeNull());
@@ -212,7 +212,7 @@ it('removes a shell on exit, promotes its split, and removes the final shell wit
 it('retains completed ordinary commands for reviewing their output', async () => {
   const app = setup();
   app.mount();
-  const input = await screen.findByRole('textbox', { name: 'Terminal input: Shell 1' });
+  const input = await screen.findByRole('textbox', { name: 'Terminal input: Terminal 1' });
   app.processes.set('shell-1', { ...app.processes.get('shell-1')!, kind: 'command' });
   fireEvent.input(input, { target: { value: 'exit\r' } });
   await screen.findByText('Finished (0)');
@@ -223,19 +223,19 @@ it('retains completed ordinary commands for reviewing their output', async () =>
 it('offers switching only when another terminal is hidden and preserves the other split', async () => {
   const app = setup();
   app.mount();
-  const first = await screen.findByRole('textbox', { name: 'Terminal input: Shell 1' });
+  const first = await screen.findByRole('textbox', { name: 'Terminal input: Terminal 1' });
   fireEvent.click(screen.getByRole('button', { name: 'Split terminal' }));
-  const second = await screen.findByRole('textbox', { name: 'Terminal input: Shell 2' });
+  const second = await screen.findByRole('textbox', { name: 'Terminal input: Terminal 2' });
   await waitFor(() => expect(document.activeElement).toBe(second));
-  expect(screen.queryByRole('button', { name: 'Other terminals' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Switch terminal' })).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'New terminal' }));
-  await screen.findByRole('textbox', { name: 'Terminal input: Shell 3' });
-  fireEvent.click(screen.getByRole('button', { name: 'Other terminals' }));
-  expect(await screen.findByRole('menuitem', { name: 'Shell 2' })).toBeTruthy();
-  expect(screen.queryByRole('menuitem', { name: 'Shell 1' })).toBeNull();
-  fireEvent.click(screen.getByRole('menuitem', { name: 'Shell 2' }));
-  await screen.findByRole('textbox', { name: 'Terminal input: Shell 2' });
-  expect(screen.getByRole('textbox', { name: 'Terminal input: Shell 1' })).toBe(first);
+  await screen.findByRole('textbox', { name: 'Terminal input: Terminal 3' });
+  fireEvent.click(screen.getByRole('button', { name: 'Switch terminal' }));
+  expect(await screen.findByRole('menuitem', { name: 'Terminal 2' })).toBeTruthy();
+  expect(screen.queryByRole('menuitem', { name: 'Terminal 1' })).toBeNull();
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Terminal 2' }));
+  await screen.findByRole('textbox', { name: 'Terminal input: Terminal 2' });
+  expect(screen.getByRole('textbox', { name: 'Terminal input: Terminal 1' })).toBe(first);
   expect(app.processes.size).toBe(3);
 });
 
@@ -252,7 +252,7 @@ it('shares an in-flight default launch when the terminal tab is reopened before 
   );
   expect(app.launchRequests).toHaveLength(1);
   app.releaseStart();
-  await screen.findByRole('textbox', { name: 'Terminal input: Shell 1' });
+  await screen.findByRole('textbox', { name: 'Terminal input: Terminal 1' });
   expect(app.starts).toHaveLength(1);
 });
 
@@ -273,20 +273,20 @@ it('creates a usable default shell when the registry contains only agent command
     outputSize: 0,
   });
   app.mount();
-  await screen.findByRole('textbox', { name: 'Terminal input: Shell 1' });
+  await screen.findByRole('textbox', { name: 'Terminal input: Terminal 1' });
   expect(app.starts).toHaveLength(1);
 });
 
 it('creates a new default shell on a later tab opening after the last shell was exited', async () => {
   const app = setup();
   const first = app.mount();
-  const input = await screen.findByRole('textbox', { name: 'Terminal input: Shell 1' });
+  const input = await screen.findByRole('textbox', { name: 'Terminal input: Terminal 1' });
   fireEvent.input(input, { target: { value: 'exit\r' } });
   await waitFor(() => expect(screen.queryByRole('textbox')).toBeNull());
   expect(app.starts).toHaveLength(1);
   first.unmount();
   app.mount();
-  await screen.findByRole('textbox', { name: 'Terminal input: Shell 1' });
+  await screen.findByRole('textbox', { name: 'Terminal input: Terminal 1' });
   expect(app.starts).toHaveLength(2);
 });
 
@@ -310,4 +310,34 @@ it('keeps explicitly requested command output without creating a shell over it',
   await screen.findByRole('textbox', { name: 'Terminal input: Agent tests' });
   await screen.findByText('Finished (0)');
   expect(app.launchRequests).toHaveLength(0);
+});
+
+it('names the terminal on view and switches only between running ones, never showing a count', async () => {
+  const app = setup();
+  for (let n = 0; n < 53; n += 1)
+    app.processes.set(`agent-${n}`, {
+      id: `agent-${n}`,
+      command: 'pnpm test',
+      title: `pnpm test ${n}`,
+      kind: 'command',
+      cwd: '/project',
+      pty: false,
+      pid: 100 + n,
+      status: 'exited',
+      exitCode: 0,
+      cancelled: false,
+      createdAt: n,
+      outputSize: 0,
+    });
+  app.mount();
+  await screen.findByRole('textbox', { name: 'Terminal input: Terminal 1' });
+  expect(screen.queryByRole('button', { name: 'Switch terminal' })).toBeNull();
+  expect(screen.queryByText(/\(\d+\)/)).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'New terminal' }));
+  await screen.findByRole('textbox', { name: 'Terminal input: Terminal 2' });
+  const switcher = screen.getByRole('button', { name: 'Switch terminal' });
+  expect(switcher.textContent).toBe('Terminal 2');
+  fireEvent.click(switcher);
+  expect(await screen.findByRole('menuitem', { name: 'Terminal 1' })).toBeTruthy();
+  expect(screen.getAllByRole('menuitem')).toHaveLength(1);
 });

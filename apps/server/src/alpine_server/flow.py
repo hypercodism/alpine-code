@@ -11,6 +11,7 @@ from uuid import uuid4
 
 from pydantic import ValidationError
 
+from alpine_core import builtin_skill, skill_content
 from alpine_protocol import (
     FeatureFile,
     FlowActorParams,
@@ -70,6 +71,8 @@ from .map_io import (
 from .methods import APP_ERROR, MethodError
 
 _MAX_PREVIEW = 6 * 1024 * 1024
+_MAX_SCREEN = 200 * 1024
+_MAX_SCREENS = 4 * 1024 * 1024
 _STALE_SYNC = 24 * 3600
 # Per project, in this process: the last head and live sessions seen, and whether replays are due.
 _seen: dict[str, dict] = {}
@@ -258,6 +261,15 @@ def _result(root: Path, layout: Layout) -> FlowGetResult:
         if node.sketch and node.id not in previews and (loaded := image(root, node.sketch, budget, sketch=True)):
             sketches[node.id], size = loaded
             budget -= size
+    screens: dict[str, str] = {}
+    budget = _MAX_SCREENS
+    for card_id, relative in layout.screens.items():
+        try:
+            html = read_bytes(inside(root, relative), min(_MAX_SCREEN, budget)).decode("utf-8", errors="replace")
+        except (OSError, ValueError, MethodError):
+            continue  # a screen too large or unreadable shows as none
+        screens[card_id] = html
+        budget -= len(html.encode())
     changes = map_state.history(root, layout, extra, write=writable)
     result = FlowGetResult(
         revision=_revision(root, layout),
@@ -266,6 +278,9 @@ def _result(root: Path, layout: Layout) -> FlowGetResult:
         read_only=layout.read_only,
         previews=previews,
         sketches=sketches,
+        screens=screens,
+        look=layout.look,
+        undecided=list(layout.map.undecided),
         changes=changes,
         states=states,
         provenance=_shown_provenance(labels, cards, witness, layout),
@@ -277,6 +292,9 @@ def _result(root: Path, layout: Layout) -> FlowGetResult:
         removed_cards=map_state.removed_cards(root, layout.features),
         review=_review(root, layout, sessions),
         unmapped=list(layout.map.unmapped),
+        planned=bool(project.get("planned")),
+        build=_build_state(project, sessions),
+        build_session=project.get("buildSession") or None,
     )
     result = _with_etag(result)
     if writable:
@@ -294,6 +312,34 @@ def _result(root: Path, layout: Layout) -> FlowGetResult:
             except OSError:
                 _overview_etag.pop(str(root), None)
     return result
+
+
+def _build_state(project: dict, sessions: list) -> str:
+    """Whether the plan's last build is still working: its session is live, or has not been updated since it began
+    (it is about to get the request). A build that went quiet for a day counts as ended."""
+    pending = project.get("buildSession")
+    if not pending:
+        return "none"
+    info = next((s for s in sessions if s.id == pending), None)
+    started = parse_time(project.get("buildStarted"))
+    if info is None or (started and time.time() - started > _STALE_SYNC):
+        return "ended"
+    if map_state.is_live(info) or (parse_time(info.updated_at) or 0) <= (started or 0):
+        return "running"
+    return "ended"
+
+
+def planning_files(cwd: Path) -> list[Path]:
+    """The map's folder while its product is being planned (the map began as a plan and no build has started): the
+    map conversation writes there without asking, since the map is the plan, not code."""
+    try:
+        root = folder(str(cwd))
+        project = map_state.load_project(root)
+        if not project.get("planned") or project.get("buildSession"):
+            return []
+        return [inside(root, MAP_DIR)]
+    except (OSError, ValueError, MethodError):
+        return []
 
 
 def _with_etag(result: FlowGetResult) -> FlowGetResult:
@@ -764,13 +810,13 @@ def prepare_flow(params: FlowPrepareParams) -> FlowPrepareResult:
             raise MethodError(APP_ERROR, "Select a feature first", "invalid_flow")
         if params.action == "verify" and node is None and not (flow or params.node_ids):
             raise MethodError(APP_ERROR, "Select a feature or flow first", "invalid_flow")
-        if params.action in ("change", "extend", "reshape") and not params.request.strip():
+        if params.action in ("plan", "request", "change", "extend", "reshape") and not params.request.strip():
             raise MethodError(APP_ERROR, "Describe the change", "invalid_flow")
         selected = node.id if node else None
         linked = [node.id] if node else []
         if params.action == "verify":
             linked = list(dict.fromkeys([*linked, *params.node_ids]))
-        if params.action in ("discover", "extend") and not inside(root, MAP_FILE).exists():
+        if params.action in ("plan", "discover", "extend") and not inside(root, MAP_FILE).exists():
             atomic(lpath(root, MAP_FILE), dump(MapFile().model_dump(mode="json", by_alias=True)))
         if params.action == "extend":
             selected = f"feature-{uuid4().hex[:12]}"
@@ -802,6 +848,13 @@ def prepare_flow(params: FlowPrepareParams) -> FlowPrepareResult:
             map_state.save_card(root, node_id, state)
         if params.action == "reshape":
             _snapshot_for_review(root, params.session_id)
+        if params.action in ("plan", "build"):
+            project = map_state.load_project(root)
+            if params.action == "plan":
+                project["planned"] = True
+            else:
+                project["buildSession"], project["buildStarted"] = params.session_id, iso(precise=True)
+            map_state.save_project(root, project)
         if params.action in ("discover", "sync"):
             project = map_state.load_project(root)
             # Precise: the session was created moments before; a start cut to the second would read as before its
@@ -878,6 +931,8 @@ For screens, capture a real screenshot if a tool allows and store its project-re
 you may draw it from the code as a plain SVG wireframe (boxes, lines and the screen's visible texts; no photos, no
 realistic styling) saved under .alpine-code/map/sketches/ and store its project-relative path in `sketch`; the app
 labels it as drawn. Never put a drawing in `preview`, and capture a real screenshot once a tool allows.
+When you know where a screen lives in the running app, write it in the card's `path`: the address inside the app
+(`/reservations`), a path only, so the app can open that screen.
 When trying a card needs something a person would not know (a test account, keys, seed data, a command, a running
 server), write it in `howToTry` in plain words.
 Phase: built means implemented, NOT verified; new branches start planned; use building while actually working.
@@ -889,6 +944,9 @@ the product's own words (손님, 사장님, 다른 화면을 만드는 개발자
 or not (an agent, a scheduled job, another program); flows of the same actor share the exact same words. The person
 works on this grouping with you and may rename or regroup actors in the app: build on what they wrote, and change
 it when the product gives a reason.
+Give each flow a `device`: phone when its user is on a phone (an app or a mobile web page), computer when they sit at
+a computer (admin pages, desk work, a desktop app, a terminal); read it from the code (mobile layouts, native app
+folders, wide admin tables) and leave it out when nothing tells.
 - When the trigger, the goal or the door differs, make separate flows (a team lead deciding what to do today and a
   member finishing a task are two flows, even on the same screens; working in the desktop app and in the terminal
   are two flows, even when both speak the same protocol).
@@ -956,7 +1014,57 @@ test first). On a large map, work one flow or topic at a time. List files nobody
 generated files) in map.json `exclude` so they do not count as changes the map misses; never exclude tests.
 """
 
+_TALK = """\
+Talk to the person in their language (the one their request is written in), about screens, promises and choices: they
+see the map and the app, not their files, so never mention files, JSON, paths or code words to them (not "map.json",
+not "look.json", not a screenshot's file name, not a check's id, not "dev server": say the app is open). That holds
+for every message, the short ones while you work too, and the last one.
+"""
+
+_RECHECK = """\
+Before you end, check again every promise of each card that lists a file you changed in this session (in its sources
+or a check's dependsOn), and record those checks, not only the promises you set out to fix: Alpine asks for them to be
+checked again once those files change, and a change should leave the map checked, not waiting. A promise you cannot
+check gets a blocked check that says why.
+"""
+
 _NO_CHECKS = "Do not record checks: checking promises is a separate step the user starts from the map.\n"
+
+_BUILD = """\
+Build the whole planned product now. The map is the contract: its promises are what done means. The person watches
+the map while you build, so let it move with your work, one card at a time, never all at the end: before you start a
+screen's code, set its card's phase to building and list in its `sources` the files you will write for it (each one
+written or opened in this session); the moment it works, write its `path` (the address inside the running app that
+shows that screen, such as `/reservations`, a path only, so the app can open it), capture its `preview` (a real
+screenshot, project-relative, never under .alpine-code/), look at it as the design skill below says, fix what fails,
+and set it built. Then the next card. Choose your own order: with every journey in hand, design the data and
+structure for all of them first.
+When a product question comes up that the map does not answer, do not stop: take the pick you would recommend, record
+it on the card as a decision with "by": "ai" (with the options you weighed), and go on. Stop to ask with ask_user only
+when no sensible default exists.
+Check every promise you built and record the checks, as below. A promise is done only when a recorded check says so.
+Whatever the person needs to try a screen themselves (where to sign in, a password you set, a test card) goes into
+that card's `howToTry` in plain words ("사장님 비밀번호: bakery1234"), never only in your message.
+Finish with one short line: what was built, how many promises were checked, and what you decided on your own.
+"""
+
+#: The skill sent with every planning request, so the model does not have to think of loading it.
+PLANNING_SKILL = "product-planning"
+#: The skill sent with every planning and building request: how the product should look is decided in both.
+DESIGN_SKILL = "product-design"
+
+_PLAN = """\
+The product does not exist yet: plan it with the person on this map before anything is built, as the planning skill
+below says, and give it a look of its own as the design skill below says. Draw the first map now, then ask what is
+left with ask_user, one question per turn. Write cards with phase planned, kind screen for screens, conditions for the
+promises you assume, no sources and no checks. Give each flow a `device` (phone or computer) and draw a computer
+journey's screens at desktop width. Do not write product code, install anything or start servers until the person
+says to build.
+"""
+
+
+def _skills(*names: str) -> str:
+    return "".join(skill_content(builtin_skill(name)) + "\n" for name in names)
 
 
 def _scope_line(include: list[str]) -> str:
@@ -1001,6 +1109,12 @@ def _sync_brief(root: Path, board: FlowGetResult) -> str:
 def _prompt(params: FlowPrepareParams, selected: str | None, board: FlowGetResult) -> str:
     batch = bool(params.node_ids) and not params.node_id
     task = {
+        "plan": "Plan a new product on the map from the person's words. Do not build it yet.",
+        "build": "Build the planned product on the map, in your own order, and check its promises.",
+        "request": (
+            "Do what the person asks in the product, then keep the map true: change, add or remove the cards, "
+            "promises and journeys your work touched, and check the promises it changed."
+        ),
         "discover": "Map what is ALREADY implemented. Do not implement new product features.",
         "extend": "Implement the new branch attached to the selected feature, preserving existing behavior.",
         "change": "Modify the selected feature as requested, preserving surrounding flows.",
@@ -1032,12 +1146,16 @@ def _prompt(params: FlowPrepareParams, selected: str | None, board: FlowGetResul
         if shown:
             extra += "Sources never opened by the sessions that wrote these cards (open them, or remove them):\n"
             extra += "".join(f"- {cid}: {', '.join(unread[cid][:10])}\n" for cid in shown[:20])
-    if params.action == "discover":
+    if params.action == "plan":
+        body = _PLAN + _skills(PLANNING_SKILL, DESIGN_SKILL)
+    elif params.action == "build":
+        body = _BUILD + _CHECKS.replace("SESSION", params.session_id) + _skills(DESIGN_SKILL)
+    elif params.action == "discover":
         body = _CARDS + _DISCOVER + _CHECKS.replace("SESSION", params.session_id)
     elif params.action in ("sync", "reshape"):
         body = _CARDS + _NO_CHECKS
     else:
-        body = _CARDS + _CHECKS.replace("SESSION", params.session_id)
+        body = _CARDS + _CHECKS.replace("SESSION", params.session_id) + _RECHECK
     return f"""{request}
 
 <alpine-product-map-context>
@@ -1045,8 +1163,8 @@ Work on this project's living product map.
 Task: {task}
 User request: {params.request}
 Selected node: {selected or "none"}; flow: {params.flow_id or "none"}; session: {params.session_id}.
-{extra}{_FILES}{body}If execution is interrupted, leave the map truthful. Finish with what was implemented, actually
-checked, and still unknown.
+{extra}{_FILES}{body}{_TALK}If execution is interrupted, leave the map truthful. Finish with what was implemented,
+actually checked, and still unknown.
 </alpine-product-map-context>
 """.rstrip()
 

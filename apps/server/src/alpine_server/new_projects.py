@@ -2,7 +2,8 @@
 
 Three steps, each announced as ``projects/createChanged`` when it is done: the template becomes a folder (committed, on
 the rail); when signed in to Alpine and the template can be published, its app is made and the web address is announced
-(``address``; a failure skips this step and the project is made anyway); then a session starts in it and gets the idea.
+(``address``; a failure skips this step and the project is made anyway); then the project's map conversation starts and
+gets the idea as a ``plan`` of the map, so the product is planned on its map before it is built.
 The request answers after the last step. Copying, git and the app's creation run in a thread.
 
 The folder is picked by ``create_project``, which claims it with ``mkdir``, so two creations that run at once never get
@@ -21,12 +22,13 @@ from typing import Any
 
 from alpine_core import (
     ConfigError,
+    FolderNotEmpty,
     ProjectList,
     Settings,
     TemplateNotFound,
-    available_templates,
     create_project,
     safe_name,
+    start_in,
 )
 from alpine_core.cloud import (
     AlpineTokens,
@@ -39,7 +41,10 @@ from alpine_core.cloud import (
     links,
     read_description,
 )
+from alpine_core.templates import EMPTY_ANYWAY, TemplatesUnavailable, ensure_templates
 from alpine_protocol import (
+    FlowGetParams,
+    FlowPrepareParams,
     ProjectsCreateChangedParams,
     ProjectsCreateParams,
     ProjectsCreateResult,
@@ -47,6 +52,7 @@ from alpine_protocol import (
     SessionSendParams,
 )
 
+from .flow import get_flow, prepare_flow
 from .methods import APP_ERROR, INVALID_PARAMS, MethodError, project_info
 from .sessions import SessionManager
 
@@ -72,13 +78,22 @@ class NewProjects:
             self._creating.discard(params.id)
 
     async def _create(self, params: ProjectsCreateParams) -> ProjectsCreateResult:
-        if params.template not in await asyncio.to_thread(available_templates):
-            raise MethodError(APP_ERROR, f"No template named {params.template!r}", "not_found")
-        parent = _settings().clone_folder
         try:
-            folder = await asyncio.to_thread(create_project, params.template, parent, safe_name(params.name))
+            templates = await asyncio.to_thread(ensure_templates)
+        except TemplatesUnavailable as e:
+            raise MethodError(APP_ERROR, str(e), e.reason) from e
+        if params.template not in templates:
+            raise MethodError(APP_ERROR, f"No template named {params.template!r}", "not_found")
+        try:
+            if params.folder:
+                folder = await asyncio.to_thread(start_in, params.template, Path(params.folder))
+            else:
+                parent = _settings().clone_folder
+                folder = await asyncio.to_thread(create_project, params.template, parent, safe_name(params.name))
         except TemplateNotFound as e:  # taken away since the check above
             raise MethodError(APP_ERROR, f"No template named {params.template!r}", "not_found") from e
+        except FolderNotEmpty as e:
+            raise MethodError(APP_ERROR, f"Not an empty folder: {e}", "not_empty") from e
         except OSError as e:
             raise MethodError(APP_ERROR, f"The project could not be made: {e}", "other") from e
         # Until the app hears about the folder it believes nothing was made, so if putting it on the rail fails
@@ -89,7 +104,7 @@ class NewProjects:
         try:
             project = await asyncio.to_thread(project_info, ProjectList.default().open(folder))
         except BaseException as e:
-            await asyncio.to_thread(_discard, folder)
+            await asyncio.to_thread(_discard, folder, bool(params.folder))
             if isinstance(e, Exception):
                 raise MethodError(APP_ERROR, f"The project could not be made: {e}", "other") from e
             raise
@@ -100,11 +115,23 @@ class NewProjects:
             self._notify(ProjectsCreateChangedParams(id=params.id, step="address", project=project, address=address))
 
         # From here on the project stays whatever happens: a session that cannot start answers with its own error.
-        started = await self._sessions.new(SessionNewParams(cwd=str(folder), agent=params.agent, mode=params.mode))
+        started = await self._sessions.new(
+            SessionNewParams(cwd=str(folder), agent=params.agent, mode=params.mode, purpose="map")
+        )
         session_id = started.info.id
-        await self._sessions.send(SessionSendParams(session_id=session_id, text=params.idea))
+        prompt = await asyncio.to_thread(_plan, folder, params.idea, session_id)
+        await self._sessions.send(SessionSendParams(session_id=session_id, text=prompt))
         self._notify(ProjectsCreateChangedParams(id=params.id, step="agent", project=project))
         return ProjectsCreateResult(project=project, session_id=session_id, address=address)
+
+
+def _plan(folder: Path, idea: str, session_id: str) -> str:
+    """Starts the project's map as the plan of ``idea``; returns the request for the map conversation."""
+    cwd = str(folder)
+    revision = get_flow(FlowGetParams(cwd=cwd)).revision
+    return prepare_flow(
+        FlowPrepareParams(cwd=cwd, revision=revision, action="plan", request=idea, session_id=session_id)
+    ).prompt
 
 
 def _make_app(folder: Path) -> str | None:
@@ -130,13 +157,19 @@ def _make_app(folder: Path) -> str | None:
         return None
 
 
-def _discard(folder: Path) -> None:
-    """Takes back a folder that was made and not announced: off the rail if it got on, and off the disk."""
+def _discard(folder: Path, theirs: bool = False) -> None:
+    """Takes back a folder that was made and not announced: off the rail if it got on, and off the disk. A folder the
+    person made (``theirs``) stays, as empty as it was."""
     try:
         ProjectList.default().delete(folder)
     except Exception:  # the list is what failed, or it was never written
         pass
-    shutil.rmtree(folder, ignore_errors=True)
+    if not theirs:
+        shutil.rmtree(folder, ignore_errors=True)
+        return
+    for entry in folder.iterdir() if folder.is_dir() else []:
+        if entry.name not in EMPTY_ANYWAY:
+            shutil.rmtree(entry, ignore_errors=True) if entry.is_dir() and not entry.is_symlink() else entry.unlink()
 
 
 def _settings() -> Settings:

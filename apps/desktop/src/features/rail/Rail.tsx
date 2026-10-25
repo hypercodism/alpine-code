@@ -6,12 +6,13 @@ import { Archive, Bot, ChevronRight, Ellipsis, Pin, Plus, Search, Settings, Squa
 import { useState } from 'react';
 
 import { ProgressBar, ProjectAddDialog, projectAddMessages } from '@/shared/components/project-add';
-import { useMessages } from '@/shared/i18n';
+import { StatusWord } from '@/shared/components/status';
+import { useFormat, useMessages } from '@/shared/i18n';
 import { isUnread, useNavigation, visibleSessions, type RailView } from '@/shared/navigation';
 import { revealInFinder } from '@/shared/platform';
 import {
   useArchiveProject,
-  useCloudEnabled,
+  useAsking,
   useOpenProject,
   useProjects,
   useSessions,
@@ -19,6 +20,7 @@ import {
 } from '@/shared/server';
 
 import { useCurrentProject } from './currentProject';
+import { projectState, type ProjectState } from './projectState';
 import { DeleteProjectDialog } from './DeleteProjectDialog';
 import { DeleteSessionDialog } from './DeleteSessionDialog';
 import { messages } from './messages';
@@ -36,13 +38,15 @@ export function Rail({ open = true }: { open?: boolean }) {
   const added = useMessages(projectAddMessages);
   const projects = useProjects();
   const sessionsQuery = useSessions();
-  // A project's map conversation is asked from the map itself, never from this list.
-  const sessions = (sessionsQuery.data ?? []).filter((session) => session.purpose !== 'map');
+  const everything = sessionsQuery.data ?? [];
+  // The map's own conversations are asked from the map, never from this list. Until 기록 (map-first stage 5) keeps
+  // them, a build shows here as a record of what was made, and so does a map conversation the map let go of; both open
+  // on the map.
+  const sessions = everything.filter((s) => !s.purpose || s.purpose === 'build' || (s.purpose === 'map' && s.archived));
   const current = useCurrentProject();
   const sessionMatch = useMatch({ from: '/session/$sessionId', shouldThrow: false });
   const currentId = sessionMatch?.params.sessionId;
   const navigate = useNavigate();
-  const cloud = useCloudEnabled();
   const width = usePanelWidth({ storageKey: 'alpine.rail.width', initial: 288, min: 240, max: 400 });
   const prefs = useNavigation();
   const [view, setView] = useState<RailView>('all');
@@ -58,18 +62,25 @@ export function Rail({ open = true }: { open?: boolean }) {
   const go = useGoToProject();
   const known = projects.data?.projects ?? [];
   const activePaths = new Set(known.filter((p) => !p.archived).map((p) => p.path));
-  const available = sessions.filter((s) => activePaths.has(s.cwd) && !s.archived);
+  // The map's work counts too: a map waiting on a question or a build running is the project's state.
+  const available = everything.filter((s) => activePaths.has(s.cwd) && !s.archived);
+  // A map's answers are read on the map, which never marks them seen; only a conversation opened on its own is unread.
+  const unseen = (s: SessionInfo) => !s.purpose && isUnread(s, prefs.seen, prefs.since);
+  // A question the AI asked ends its turn, so the session is idle; it still waits for me.
+  const asking = useAsking((state) => state.ids);
+  const needsMe = (s: SessionInfo) =>
+    s.status === 'waiting' || s.status === 'failed' || (s.status === 'idle' && asking.has(s.id));
   const counts = {
-    attention: available.filter((s) => s.status === 'waiting' || s.status === 'failed').length,
+    attention: available.filter(needsMe).length,
     running: available.filter((s) => s.status === 'running').length,
-    unread: available.filter((s) => isUnread(s, prefs.seen, prefs.since)).length,
+    unread: available.filter(unseen).length,
   };
   const matches = (s: SessionInfo, project: ProjectInfo) => {
     if (view === 'archived') return project.archived || !!s.archived;
     if (project.archived || (s.archived && s.id !== currentId)) return false;
-    if (view === 'attention') return s.status === 'waiting' || s.status === 'failed';
+    if (view === 'attention') return needsMe(s);
     if (view === 'running') return s.status === 'running';
-    if (view === 'unread') return isUnread(s, prefs.seen, prefs.since);
+    if (view === 'unread') return unseen(s);
     return true;
   };
   const ordered = [...known].sort((a, b) => {
@@ -79,8 +90,18 @@ export function Rail({ open = true }: { open?: boolean }) {
   const listed = ordered.filter((p) =>
     view === 'all'
       ? !p.archived
-      : (view === 'archived' && p.archived) || sessions.some((s) => s.cwd === p.path && matches(s, p)),
+      : (view === 'archived' && p.archived) ||
+        (view === 'archived' ? sessions : everything).some((s) => s.cwd === p.path && matches(s, p)),
   );
+  const busy = (path: string) =>
+    everything.some((s) => s.cwd === path && !s.archived && (s.status === 'running' || s.status === 'waiting'));
+  // Leaving a project that went off the rail: the next one's map, or 새 프로젝트 when none is left.
+  const leave = (path: string) => {
+    if (current !== path) return;
+    const next = known.find((p) => !p.archived && p.path !== path);
+    if (next) go(next.path);
+    else void navigate({ to: '/' });
+  };
   const error = archiveProject.error ?? openProject.error ?? updateSession.error;
   const pending = archiveProject.isPending || openProject.isPending || updateSession.isPending;
   const archiveSession = (session: SessionInfo) =>
@@ -91,9 +112,13 @@ export function Rail({ open = true }: { open?: boolean }) {
           setUndo({ kind: 'session', id: session.id, archived: !!session.archived });
           setNotice(session.archived ? t.restoredNotice : t.archivedNotice);
           if (currentId === session.id && !session.archived) {
-            const next = sessions.find((s) => s.cwd === session.cwd && s.id !== session.id && !s.archived);
+            // Only a conversation of its own: a build record or an old map conversation opens on the map, which the
+            // project's map is anyway.
+            const next = sessions.find(
+              (s) => s.cwd === session.cwd && s.id !== session.id && !s.archived && !s.purpose,
+            );
             if (next) void navigate({ to: '/session/$sessionId', params: { sessionId: next.id } });
-            else void navigate({ to: '/', search: { project: session.cwd } });
+            else go(session.cwd);
           }
         },
       },
@@ -103,11 +128,7 @@ export function Rail({ open = true }: { open?: boolean }) {
       onSuccess: () => {
         setUndo({ kind: 'project', path: project.path });
         setNotice(t.archivedNotice);
-        if (current === project.path) {
-          const next = known.find((p) => !p.archived && p.path !== project.path);
-          if (next) go(next.path);
-          else void navigate({ to: '/' });
-        }
+        leave(project.path);
       },
     });
   const restore = (project: ProjectInfo) =>
@@ -148,11 +169,10 @@ export function Rail({ open = true }: { open?: boolean }) {
           </button>
           <Link
             to="/"
-            search={current ? { project: current } : {}}
             className="flex min-h-9 items-center gap-2 rounded-lg bg-interactive px-3 text-body font-medium text-on-fill outline-none hover:bg-interactive-hover focus-visible:ring-2 focus-visible:ring-interactive"
           >
             <SquarePen size={16} aria-hidden="true" />
-            <span className="grow">{t.newSession}</span>
+            <span className="grow">{t.newProject}</span>
             <kbd className="text-meta">⌘N</kbd>
           </Link>
           <div role="group" className="flex flex-wrap gap-1" aria-label={t.filter}>
@@ -256,15 +276,17 @@ export function Rail({ open = true }: { open?: boolean }) {
                 onDeleteSession={setDeletingSession}
                 onArchiveSession={archiveSession}
                 pending={pending}
-                busy={sessions.some(
-                  (s) => s.cwd === project.path && (s.status === 'running' || s.status === 'waiting'),
+                busy={busy(project.path)}
+                state={projectState(
+                  everything.filter((s) => s.cwd === project.path && !s.archived),
+                  asking,
                 )}
               />
             );
           })}
           {projects.isSuccess && sessionsQuery.isSuccess && listed.length === 0 && (
             <div className="flex flex-col items-start gap-2 px-2 py-3">
-              <p className="text-body text-fg-muted">{t.emptyView}</p>
+              <p className="text-body text-fg-muted">{known.length === 0 ? t.noProjects : t.emptyView}</p>
               {view !== 'all' && (
                 <button
                   type="button"
@@ -343,9 +365,9 @@ export function Rail({ open = true }: { open?: boolean }) {
           open={adding}
           onOpenChange={setAdding}
           onDone={(path) => void navigate({ to: '/', search: { project: path } })}
-          onNew={cloud ? () => void navigate({ to: '/', search: { new: 1 } }) : undefined}
+          onNew={() => void navigate({ to: '/' })}
         />
-        <DeleteProjectDialog project={deleting} onClose={() => setDeleting(null)} />
+        <DeleteProjectDialog project={deleting} onClose={() => setDeleting(null)} onDeleted={leave} />
         <DeleteSessionDialog session={deletingSession} onClose={() => setDeletingSession(null)} />
       </nav>
     </div>
@@ -373,6 +395,7 @@ function ProjectGroup({
   onArchiveSession,
   pending,
   busy,
+  state,
 }: {
   project: ProjectInfo;
   sessions: SessionInfo[];
@@ -393,22 +416,22 @@ function ProjectGroup({
   onArchiveSession: (session: SessionInfo) => void;
   pending: boolean;
   busy: boolean;
+  state: ProjectState;
 }) {
   const t = useMessages(messages);
-  const open = filtered || expanded;
+  // A project has nothing to unfold once its own conversations are on its map (map-first 1: the rail lists projects).
+  const unfolds = sessions.length > 0;
+  const open = unfolds && (filtered || expanded);
   const seen = useNavigation((s) => s.seen);
   const since = useNavigation((s) => s.since);
-  const unreadIds = sessions.filter((s) => isUnread(s, seen, since)).map((s) => s.id);
+  const unreadIds = sessions.filter((s) => !s.purpose && isUnread(s, seen, since)).map((s) => s.id);
   const listed = visibleSessions(sessions, currentId, all || filtered, unreadIds);
   const hidden = sessions.length - listed.length;
-  const important = sessions.filter((s) => s.status === 'waiting' || s.status === 'failed');
-  const running = sessions.filter((s) => s.status === 'running').length;
   const items = (
     <>
       {!project.archived && (
         <>
           <Menu.Item onClick={onPin}>{pinned ? t.unpin : t.pin}</Menu.Item>
-          <Menu.Item render={<Link to="/" search={{ project: project.path }} />}>{t.newSession}</Menu.Item>
           <Menu.Item render={<Link to="/memory" search={{ project: project.path }} />}>{t.openMemory}</Menu.Item>
         </>
       )}
@@ -422,7 +445,12 @@ function ProjectGroup({
         {project.archived ? t.restore : t.archive}
       </Menu.Item>
       <Menu.Separator />
-      <Menu.Item className="text-danger" onClick={onDelete}>
+      <Menu.Item
+        className="text-danger"
+        disabled={!project.archived && busy}
+        title={busy ? t.busyDelete : undefined}
+        onClick={onDelete}
+      >
         {t.delete}
       </Menu.Item>
     </>
@@ -434,16 +462,24 @@ function ProjectGroup({
           render={<div />}
           className={clsx('group flex items-center gap-0.5 rounded-md pr-1', current && 'bg-hover')}
         >
-          <button
-            type="button"
-            onClick={onToggle}
-            aria-expanded={open}
-            aria-label={open ? t.collapseProject(project.name) : t.expandProject(project.name)}
-            className={iconButton}
-            disabled={filtered}
-          >
-            <ChevronRight size={16} aria-hidden="true" className={clsx('transition-transform', open && 'rotate-90')} />
-          </button>
+          {unfolds ? (
+            <button
+              type="button"
+              onClick={onToggle}
+              aria-expanded={open}
+              aria-label={open ? t.collapseProject(project.name) : t.expandProject(project.name)}
+              className={iconButton}
+              disabled={filtered}
+            >
+              <ChevronRight
+                size={16}
+                aria-hidden="true"
+                className={clsx('transition-transform', open && 'rotate-90')}
+              />
+            </button>
+          ) : (
+            <span aria-hidden="true" className="size-7 shrink-0" />
+          )}
           <button
             type="button"
             onClick={project.archived ? undefined : onGo}
@@ -455,17 +491,17 @@ function ProjectGroup({
           >
             <span className="min-w-0 truncate">{project.name}</span>
             {pinned && <Pin size={12} className="shrink-0 text-interactive" aria-label={t.pinned} />}
+            {state && (
+              <span
+                className={clsx(
+                  'ml-auto shrink-0 pl-1 text-meta font-normal whitespace-nowrap',
+                  state === 'attention' || state === 'asking' ? 'text-attention' : 'text-fg-muted',
+                )}
+              >
+                {t[state]}
+              </span>
+            )}
           </button>
-          {!project.archived && (
-            <Link
-              to="/"
-              search={{ project: project.path }}
-              aria-label={t.newInProject(project.name)}
-              className={iconButton}
-            >
-              <Plus size={14} aria-hidden="true" />
-            </Link>
-          )}
           <Menu.Root>
             <Menu.Trigger aria-label={t.projectMenu(project.name)} className={iconButton}>
               <Ellipsis size={16} aria-hidden="true" />
@@ -475,20 +511,6 @@ function ProjectGroup({
         </ContextMenu.Trigger>
         <ContextMenu.Popup aria-label={t.projectMenu(project.name)}>{items}</ContextMenu.Popup>
       </ContextMenu.Root>
-      {!open && (important.length > 0 || running > 0) && (
-        <div className="ml-7 flex flex-wrap gap-x-2 text-meta">
-          {important.length > 0 && (
-            <span className="text-attention">
-              {t.attention} {important.length}
-            </span>
-          )}
-          {running > 0 && (
-            <span className="text-fg-muted">
-              {t.running} {running}
-            </span>
-          )}
-        </div>
-      )}
       {project.archived && (
         <button
           type="button"
@@ -501,9 +523,13 @@ function ProjectGroup({
       )}
       <Collapse open={open}>
         <div className="ml-3.5 flex flex-col gap-0.5 border-l border-line pl-2">
-          {listed.map((session) => (
-            <SessionRow key={session.id} session={session} onDelete={onDeleteSession} onArchive={onArchiveSession} />
-          ))}
+          {listed.map((session) =>
+            session.purpose ? (
+              <MapRecordRow key={session.id} session={session} />
+            ) : (
+              <SessionRow key={session.id} session={session} onDelete={onDeleteSession} onArchive={onArchiveSession} />
+            ),
+          )}
           {!filtered && (hidden > 0 || all) && (
             <button
               type="button"
@@ -516,6 +542,31 @@ function ProjectGroup({
         </div>
       </Collapse>
     </div>
+  );
+}
+
+/** A build, or a map conversation the map let go of: opens on the map, beside it in the summary. */
+function MapRecordRow({ session }: { session: SessionInfo }) {
+  const t = useMessages(messages);
+  const format = useFormat();
+  const label = session.purpose === 'build' ? t.buildRecord : t.oldMapTalk;
+  return (
+    <Link
+      to="/board"
+      search={{ project: session.cwd, session: session.id }}
+      // Its own title is the model's, often English: the row says when it began instead.
+      title={t.recordStarted(label, format.date(new Date(session.createdAt)))}
+      className="flex min-h-10 w-full cursor-pointer flex-col gap-0.5 rounded-lg py-1.5 pr-8 pl-2 text-left text-body text-fg-muted outline-none hover:bg-hover focus-visible:ring-2 focus-visible:ring-interactive data-[status=active]:bg-selected data-[status=active]:text-fg"
+    >
+      <span className="min-w-0 truncate">{label}</span>
+      <span className="flex min-w-0 items-center gap-2 text-meta">
+        {session.status !== 'idle' ? (
+          <StatusWord status={session.status} />
+        ) : (
+          <span className="shrink-0 text-fg-faint">{format.since(new Date(session.updatedAt))}</span>
+        )}
+      </span>
+    </Link>
   );
 }
 

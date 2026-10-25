@@ -5,7 +5,7 @@ import socket
 import sys
 from pathlib import Path
 
-from alpine_core.dev_servers import DevelopmentServerManager, listener
+from alpine_core.dev_servers import DevelopmentServerManager, how_to_run, listener
 from alpine_core.processes import process_manager
 
 
@@ -149,3 +149,156 @@ def test_discovers_agent_launched_server_and_can_stop_it(tmp_path: Path):
             await outside.wait()
             await process_manager().shutdown()
     asyncio.run(check())
+
+
+def test_how_to_run_follows_the_project(tmp_path: Path):
+    assert how_to_run(tmp_path) is None
+    (tmp_path / "index.html").write_text("<h1>hi</h1>")
+    command, port = how_to_run(tmp_path)
+    assert "http.server {port}" in command and port == 8000
+    (tmp_path / "package.json").write_text('{"scripts": {"dev": "vite", "build": "vite build"}}')
+    assert how_to_run(tmp_path) == ("npm install && npm run dev", 5173)
+    (tmp_path / "node_modules").mkdir()
+    (tmp_path / "pnpm-lock.yaml").write_text("")
+    assert how_to_run(tmp_path) == ("pnpm run dev", 5173)
+    (tmp_path / "package.json").write_text('{"scripts": {"start": "next start"}}')
+    assert how_to_run(tmp_path) == ("pnpm run start", 3000)
+    (tmp_path / "package.json").write_text("not json")
+    assert how_to_run(tmp_path)[1] == 8000
+
+
+def test_open_starts_the_project_once_and_shows_what_runs(tmp_path: Path):
+    async def check():
+        manager = DevelopmentServerManager()
+        assert await manager.open(str(tmp_path)) == {"server": None}
+        (tmp_path / "index.html").write_text("<h1>hi</h1>")
+        # The first port to try is in use by someone else: the next free one is taken.
+        busy = socket.socket()
+        try:
+            busy.bind(("127.0.0.1", 8000))
+            busy.listen()
+        except OSError:
+            pass  # Something here already listens on it.
+        try:
+            opened = (await manager.open(str(tmp_path)))["server"]
+            assert opened["port"] != 8000
+            await ready(opened["port"])
+            again = (await manager.open(str(tmp_path)))["server"]
+            assert again["id"] == opened["id"] and again["status"] == "running"
+            assert again["url"] == f"http://localhost:{opened['port']}"
+        finally:
+            busy.close()
+            await process_manager().shutdown()
+    asyncio.run(check())
+
+
+def test_open_again_after_stop_finds_the_port_the_app_took_back(tmp_path: Path, monkeypatch):
+    # Like Vite: ignores PORT, takes the first free port from its own, and prints the port in bold.
+    first = free_port()
+    source = (
+        "import http.server\n"
+        f"port = {first}\n"
+        "while True:\n"
+        "    try:\n"
+        "        server = http.server.HTTPServer(('127.0.0.1', port), http.server.SimpleHTTPRequestHandler)\n"
+        "        break\n"
+        "    except OSError:\n"
+        "        port += 1\n"
+        "print(f'  Local:   \\x1b[36mhttp://localhost:\\x1b[1m{port}\\x1b[22m/\\x1b[39m', flush=True)\n"
+        "server.serve_forever()\n"
+    )
+    (tmp_path / "vite_like.py").write_text(source)
+    run = f"{shlex.quote(sys.executable)} -u vite_like.py"
+    monkeypatch.setattr("alpine_core.dev_servers.how_to_run", lambda project: (run, first))
+
+    async def running(manager: DevelopmentServerManager, id: str) -> dict:
+        for _ in range(100):
+            current = await manager.servers[id].snapshot()
+            if current["status"] == "running":
+                return current
+            await asyncio.sleep(0.03)
+        raise AssertionError("Server did not run")
+
+    async def check():
+        manager = DevelopmentServerManager()
+        try:
+            opened = (await manager.open(str(tmp_path)))["server"]
+            assert (await running(manager, opened["id"]))["port"] == first
+            await manager.stop(opened["id"])
+            for _ in range(100):
+                if not await listener(first):
+                    break
+                await asyncio.sleep(0.03)
+            again = (await manager.open(str(tmp_path)))["server"]
+            assert again["id"] != opened["id"]
+            current = await running(manager, again["id"])
+            assert current["url"] == f"http://localhost:{first}"
+        finally:
+            await process_manager().shutdown()
+    asyncio.run(check())
+
+
+
+def test_port_reaches_every_step_of_the_command(tmp_path: Path):
+    # Like ``npm install && npm run start`` on a first open: the server is the second step and listens on PORT.
+    (tmp_path / "serve.py").write_text(
+        "import http.server, os\n"
+        "http.server.HTTPServer(('127.0.0.1', int(os.environ['PORT'])), http.server.SimpleHTTPRequestHandler)"
+        ".serve_forever()\n"
+    )
+
+    async def check():
+        manager = DevelopmentServerManager()
+        port = free_port()
+        try:
+            await manager.start(str(tmp_path), f"true && {shlex.quote(sys.executable)} -u serve.py", port)
+            await ready(port)
+        finally:
+            await process_manager().shutdown()
+    asyncio.run(check())
+
+
+def test_a_server_that_never_listens_fails_instead_of_starting_for_ever(tmp_path: Path, monkeypatch):
+    # Like a dev script that ignores PORT and says nothing: once quiet for QUIET_LIMIT it is stopped and failed, so the
+    # preview can offer the AI's fix. Output keeps it starting, and so does work without output (npm's first install
+    # prints nothing when its output is not a terminal).
+    from alpine_core import dev_servers
+
+    monkeypatch.setattr(dev_servers, "QUIET_LIMIT", 0.6)
+
+    async def check():
+        manager = DevelopmentServerManager()
+        port = free_port()
+        quiet = f"{shlex.quote(sys.executable)} -u -c 'import time; time.sleep(60)'"
+        talking = (
+            f"{shlex.quote(sys.executable)} -u -c "
+            "'import time\nfor i in range(60):\n    print(i, flush=True); time.sleep(0.2)'"
+        )
+        silent = (
+            f"{shlex.quote(sys.executable)} -u -c "
+            "'import time\nend = time.time() + 60\nwhile time.time() < end: sum(range(1000))'"
+        )
+        try:
+            given_up = (await manager.start(str(tmp_path), quiet, port))["server"]
+            busy = (await manager.start(str(tmp_path), talking, free_port()))["server"]
+            installing = (await manager.start(str(tmp_path), silent, free_port()))["server"]
+            for _ in range(60):
+                listed = {s["id"]: s for s in await manager.list(str(tmp_path))}
+                if listed[given_up["id"]]["status"] == "failed":
+                    break
+                await asyncio.sleep(0.1)
+            assert listed[given_up["id"]]["status"] == "failed"
+            assert process_manager().get(given_up["process_id"]).snapshot()["status"] != "running"
+            assert listed[busy["id"]]["status"] == "starting"
+            assert listed[installing["id"]]["status"] == "starting"
+        finally:
+            await process_manager().shutdown()
+    asyncio.run(check())
+
+
+def test_cpu_time_is_read_as_ps_prints_it():
+    from alpine_core.dev_servers import _cpu_seconds
+
+    assert _cpu_seconds("0:01.50") == 1.5
+    assert _cpu_seconds("01:02:03") == 3723
+    assert _cpu_seconds("1-00:00:01") == 86401

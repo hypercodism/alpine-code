@@ -16,10 +16,12 @@ export function CompactionLine({ item }: { item: CompactionItem }) {
   const t = useMessages(messages);
   const format = useFormat();
   const [open, setOpen] = useState(false);
-  const line = t.compaction(format.number(item.beforeTokens), format.number(item.afterTokens));
+  // The sizes are for whoever wants them, on hover: the line itself only says the conversation was tidied.
+  const line = t.compaction;
+  const sizes = t.compactionSizes(format.number(item.beforeTokens), format.number(item.afterTokens));
   if (!item.cleared && !item.summary)
     return (
-      <div className="flex items-center gap-3 text-meta text-fg-muted">
+      <div title={sizes} className="flex items-center gap-3 text-meta text-fg-muted">
         <span className="h-px grow bg-line-subtle" />
         {line}
         <span className="h-px grow bg-line-subtle" />
@@ -30,6 +32,7 @@ export function CompactionLine({ item }: { item: CompactionItem }) {
       <button
         type="button"
         aria-expanded={open}
+        title={sizes}
         onClick={() => setOpen(!open)}
         className="group flex cursor-pointer items-center gap-3 text-meta text-fg-muted hover:text-fg"
       >

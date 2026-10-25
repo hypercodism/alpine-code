@@ -46,6 +46,16 @@ function RadioItem({ className, ...props }: WithClass<typeof BaseMenu.RadioItem>
   return <BaseMenu.RadioItem className={clsx(row, 'data-checked:bg-selected', className)} {...props} />;
 }
 
+/** An item that opens a further menu beside it (on hover, a click or the right arrow). */
+function SubmenuTrigger({ className, ...props }: WithClass<typeof BaseMenu.SubmenuTrigger>) {
+  return <BaseMenu.SubmenuTrigger className={clsx(row, 'data-popup-open:bg-hover', className)} {...props} />;
+}
+
+/** A labelled part of a menu ("지도"): its label is a quiet line over its items. */
+function GroupLabel({ className, ...props }: WithClass<typeof BaseMenu.GroupLabel>) {
+  return <BaseMenu.GroupLabel className={clsx('px-2 pt-1.5 pb-1 text-meta text-fg-faint', className)} {...props} />;
+}
+
 function Separator({ className, ...props }: WithClass<typeof BaseMenu.Separator>) {
   return <BaseMenu.Separator className={clsx('my-1 border-t border-line-subtle', className)} {...props} />;
 }
@@ -58,7 +68,11 @@ export const Menu = {
   Item,
   RadioGroup: BaseMenu.RadioGroup,
   RadioItem,
+  Group: BaseMenu.Group,
+  GroupLabel,
   Separator,
+  SubmenuRoot: BaseMenu.SubmenuRoot,
+  SubmenuTrigger,
 };
 
 /** A menu that opens where the pointer right-clicks. */

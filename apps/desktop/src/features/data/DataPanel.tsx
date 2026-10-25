@@ -178,7 +178,8 @@ function Source({
       writes={editing}
       reads={live ? (reads.data?.reads ?? []) : undefined}
       onRetry={() => void tablesQuery.refetch()}
-      onRestorePoints={onRestorePoints}
+      // Restore points are the published app's: data and code go back together, so only the live data has them.
+      onRestorePoints={live ? onRestorePoints : undefined}
       onExport={onExport}
     />
   );

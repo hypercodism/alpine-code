@@ -1,5 +1,5 @@
 import type { ConnectionInfo, ConnectionsListResult } from '@alpine/protocol';
-import { Dialog, Input } from '@alpine/ui/primitives';
+import { Button, Dialog, Input } from '@alpine/ui/primitives';
 import { useState } from 'react';
 
 import { connectionLabel, connectMessages } from '@/shared/components/connect';
@@ -10,7 +10,7 @@ import { messages } from './messages';
 
 /**
  * Which of a connection's models the picker shows. A router lists hundreds, so by default only each family's newest
- * is on (the server decides with the models.dev catalog); every switch here is kept for good.
+ * is on (the server decides with the models.dev catalog); every switch here is kept at once, so 완료 only closes.
  */
 export function ModelsDialog({
   connection,
@@ -98,6 +98,10 @@ export function ModelsDialog({
                 {(list.error ?? show.error)?.message}
               </p>
             )}
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-meta text-fg-muted">{t.modelsSaved}</p>
+              <Dialog.Close render={<Button variant="primary" />}>{t.modelsDone}</Dialog.Close>
+            </div>
           </>
         )}
       </Dialog.Popup>

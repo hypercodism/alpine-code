@@ -149,6 +149,16 @@ def test_edits_follow_the_mode(policy):
     assert evaluate(policy, "edit", {"path": "../outside/notes.txt"}).allowed
 
 
+def test_files_in_an_editable_folder_change_without_asking_while_it_is_editable(policy):
+    plan = policy.workspace.root / ".alpine-code/map"
+    folders = [plan]
+    policy.policy.editable = lambda: folders
+    assert evaluate(policy, "write", {"path": ".alpine-code/map/screens/home.html"}).allowed
+    assert not evaluate(policy, "edit", {"path": "src/app.py"}).allowed  # the rest still follows the mode
+    folders.clear()  # the build started: the map asks again like everything else
+    assert not evaluate(policy, "write", {"path": ".alpine-code/map/screens/home.html"}).allowed
+
+
 def test_bash_remembers_command_prefixes(policy):
     verdict = evaluate(policy, "bash", {"command": "git status -s && uv run pytest -q tests"})
     assert not verdict.allowed
