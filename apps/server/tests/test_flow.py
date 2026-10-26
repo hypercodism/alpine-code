@@ -2264,10 +2264,10 @@ def test_a_situation_the_person_does_not_want_goes_with_its_promises(proj):
 
 
 def test_a_map_file_alpine_could_not_show_is_refused_as_it_is_written(proj):
-    from alpine_core.tools import Workspace
-    from alpine_core.tools.write import Write
     from alpineagents import ToolError
 
+    from alpine_core.tools import Workspace
+    from alpine_core.tools.write import Write
     from alpine_server import map_files  # noqa: F401  (registers the check)
 
     write_map(proj)
@@ -2275,11 +2275,14 @@ def test_a_map_file_alpine_could_not_show_is_refused_as_it_is_written(proj):
 
     def write(path, content):
         return writer.write.invoke({"path": path, "content": content}, None)
+
     card = {
         "id": "order",
         "title": "Order",
         "conditions": [{"id": "c1", "expectation": "주문이 들어간다"}],
-        "checks": [{"id": "k2", "conditionId": "gone", "result": "passed", "summary": "s", "command": "x", "output": "ok"}],
+        "checks": [
+            {"id": "k2", "conditionId": "gone", "result": "passed", "summary": "s", "command": "x", "output": "ok"}
+        ],
     }
     target = proj / BASE / "features/order.json"
     before = target.read_text()

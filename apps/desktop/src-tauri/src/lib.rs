@@ -2,6 +2,7 @@
 //! built by the frontend (`src/app/useAppMenu.ts`) so it follows the app's language and routes.
 //! Screens and the protocol live in the frontend (`../src`); this crate does not read protocol messages.
 
+mod capture;
 mod quit;
 mod server;
 mod update;
@@ -35,6 +36,7 @@ pub fn run() {
         .on_window_event(quit::on_window_event)
         .invoke_handler(tauri::generate_handler![
             server::server_send,
+            capture::capture_screen,
             quit::quit_guard,
             quit::quit,
             update::update_ready,

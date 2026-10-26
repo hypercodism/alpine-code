@@ -42,6 +42,7 @@ def test_every_protocol_method_has_a_handler():
     from alpine_server.node_tools import NodeTools
     from alpine_server.process_control import HANDLERS as PROCESS_HANDLERS
     from alpine_server.publish import PublishMethods
+    from alpine_server.screens import ScreenCaptures
     from alpine_server.sessions import SessionManager
     from alpine_server.stdio import HANDLERS
     from alpine_server.terminals import HANDLERS as TERMINAL_HANDLERS
@@ -59,6 +60,7 @@ def test_every_protocol_method_has_a_handler():
         | NodeTools(lambda params: None).handlers()
         | PublishMethods(lambda params: None, DevelopmentServers().manager).handlers()
         | DataMethods().handlers()
+        | {"screens/captured": ScreenCaptures(lambda params: None).captured}
         | TERMINAL_HANDLERS
         | PROCESS_HANDLERS
     )

@@ -5037,6 +5037,58 @@ export interface Response {
   error?: ErrorObject | null;
 }
 /**
+ * What a screen says and shows, read from the page itself.
+ *
+ * This interface was referenced by `AlpineProtocol`'s JSON-Schema
+ * via the `definition` "ScreenRead".
+ */
+export interface ScreenRead {
+  screen?: string | null;
+  title?: string;
+  text?: string;
+  targets?: ScreenTarget[];
+  promises?: string[];
+  errors?: string[];
+  href?: string;
+}
+/**
+ * This interface was referenced by `AlpineProtocol`'s JSON-Schema
+ * via the `definition` "ScreenTarget".
+ */
+export interface ScreenTarget {
+  to: string;
+  label?: string;
+}
+/**
+ * ``screens/capture`` (a notification to the app): the AI asked to see one screen of the project's running app.
+ * The app opens ``url`` out of sight at ``width`` x ``height``, then answers with ``screens/captured`` and the same
+ * ``id``: a picture of it and what it says.
+ *
+ * This interface was referenced by `AlpineProtocol`'s JSON-Schema
+ * via the `definition` "ScreensCaptureParams".
+ */
+export interface ScreensCaptureParams {
+  id: string;
+  url: string;
+  width: number;
+  height: number;
+}
+/**
+ * This interface was referenced by `AlpineProtocol`'s JSON-Schema
+ * via the `definition` "ScreensCapturedParams".
+ */
+export interface ScreensCapturedParams {
+  id: string;
+  image?: string | null;
+  read?: ScreenRead | null;
+  error?: string | null;
+}
+/**
+ * This interface was referenced by `AlpineProtocol`'s JSON-Schema
+ * via the `definition` "ScreensCapturedResult".
+ */
+export interface ScreensCapturedResult {}
+/**
  * This interface was referenced by `AlpineProtocol`'s JSON-Schema
  * via the `definition` "SessionAnswerParams".
  */
@@ -5718,6 +5770,7 @@ export interface Methods {
   'data/reads': { params: DataReadsParams; result: DataReadsResult };
   'projects/nodeTools': { params: ProjectsNodeToolsParams; result: ProjectsNodeToolsResult };
   'projects/installNodeTools': { params: ProjectsInstallNodeToolsParams; result: ProjectsInstallNodeToolsResult };
+  'screens/captured': { params: ScreensCapturedParams; result: ScreensCapturedResult };
   'devServers/list': { params: DevServersListParams; result: DevServersListResult };
   'devServers/start': { params: DevServersStartParams; result: DevServersStartResult };
   'devServers/open': { params: DevServersOpenParams; result: DevServersOpenResult };
@@ -5828,4 +5881,5 @@ export interface Notifications {
   'cloud/changed': CloudChangedParams;
   'publish/changed': PublishChangedParams;
   'projects/nodeToolsChanged': ProjectsNodeToolsChangedParams;
+  'screens/capture': ScreensCaptureParams;
 }

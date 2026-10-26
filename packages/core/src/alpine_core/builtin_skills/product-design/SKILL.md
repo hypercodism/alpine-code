@@ -141,8 +141,8 @@ right away and, when its layout differs from the screens, rework them in it.
 
 ## 10. Look, then fix
 
-After building or redrawing screens, look at them: capture each screen (the build already captures previews; a phone
-screen at 390 px wide, a computer screen at about 1280 px) and open the images. Check each against:
+After building or redrawing screens, look at them with `app_screen` (a phone screen at 390 px wide, a computer screen
+at 1280 px; it shows the whole page and what it says). Check each against:
 
 1. **Concept**: does this screen say the concept sentence? Is there anything without a job?
 2. **Direction**: same type scale, spacing, radius, accent use and image treatment as the other screens?

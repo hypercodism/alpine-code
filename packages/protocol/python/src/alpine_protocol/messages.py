@@ -10,7 +10,7 @@ from pydantic.json_schema import SkipJsonSchema
 
 from .base import Message
 from .cloud import CLOUD_METHODS, CLOUD_NOTIFICATIONS
-from .dev_servers import DEV_SERVER_METHODS
+from .dev_servers import DEV_SERVER_METHODS, SCREEN_NOTIFICATIONS
 from .files import FILE_METHODS
 from .process_control import PROCESS_METHODS
 from .terminals import TERMINAL_METHODS
@@ -2423,4 +2423,5 @@ NOTIFICATIONS: dict[str, type[Message]] = {
     "projects/createChanged": ProjectsCreateChangedParams,
     "github/signInFinished": GitHubSignInFinishedParams,
     **CLOUD_NOTIFICATIONS,
+    **SCREEN_NOTIFICATIONS,
 }

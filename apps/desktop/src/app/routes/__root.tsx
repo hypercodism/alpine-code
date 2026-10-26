@@ -5,7 +5,7 @@ import { FirstRun } from '@/features/first-run/FirstRun';
 import { useForgetFinished } from '@/features/new-session/newProjectStore';
 import { Rail } from '@/features/rail/Rail';
 import { NavigationController } from '@/features/rail/NavigationController';
-import { useCloneUpdates } from '@/shared/server';
+import { useCloneUpdates, useScreenCaptures } from '@/shared/server';
 
 import { DroppedSkillsDialog } from '../DroppedSkills';
 import { EngineStopped } from '../EngineStopped';
@@ -65,6 +65,7 @@ function Root() {
   const drawingNewSession = useRouterState({ select: (state) => state.matches.at(-1)?.routeId === '/' });
   const waiting = restoring && drawingNewSession;
   useCloneUpdates();
+  useScreenCaptures();
   useForgetFinished(onNewSession);
   const newSession = useNewSessionShortcut();
   useAppMenu(railOpen, { newSession, openFolder, toggleRail });

@@ -161,6 +161,8 @@ class SessionManager:
         #: (The web-pro dev branch, ``dev_branches.py``.)
         self.on_start: Callable[[Path], None] | None = None
         self.before_run: Callable[[Path], Awaitable[None]] | None = None
+        #: Set by the server: what the AI sees of a project's running app (``screens.AppScreens``).
+        self.screens: Callable[[Path], ToolSource] | None = None
         # The map reads sessions from disk; a running status there with no live session is a crashed process.
         map_state.live_ids = lambda: set(self._live)
 
@@ -197,6 +199,9 @@ class SessionManager:
         """Where a folder's tools come from, for its sessions and for ``tools/list``: the built-ins, asking the
         person, the project's memory, then (when Alpine Cloud is on) the live data of its published app."""
         sources: list[ToolSource] = [Builtins(Workspace(project)), Asking(), self.memories.of(project)]
+        screens = getattr(self, "screens", None)
+        if screens is not None:
+            sources.append(screens(project))
         return [*sources, LiveData(project)] if cloud_settings.enabled() else sources
 
     async def shutdown(self) -> None:

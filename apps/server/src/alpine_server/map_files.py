@@ -13,6 +13,7 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
+from alpine_core.tools._common import WRITE_CHECKS
 from alpine_protocol import (
     FeatureFile,
     FlowEdge,
@@ -25,8 +26,6 @@ from alpine_protocol import (
     ProductFlow,
     ProductMap,
 )
-
-from alpine_core.tools._common import WRITE_CHECKS
 
 from .map_io import MAP_DIR, atomic, guard, inside, lpath, read_bytes, sha
 from .methods import MethodError
@@ -73,7 +72,9 @@ _RULES = {
         "condition (replace the old check instead of adding a second)"
     ),
     "Duplicate state id": "every state (situation) of a card needs its own id",
-    "A condition names a state the card does not have": "a condition's state must be the id of one of the card's states",
+    "A condition names a state the card does not have": (
+        "a condition's state must be the id of one of the card's states"
+    ),
 }
 
 

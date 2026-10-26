@@ -36,9 +36,9 @@ Do not ask anything before the map exists. People fix a wrong picture more easil
 - **Promises**: two to four conditions per card, in plain words, that you assume ("글 목록은 최신 글이 먼저 나온다",
   "로그인하지 않아도 글을 읽을 수 있다"), plus one for each situation (with `state` set to it: "글이 없으면 첫 글을
   쓰자고 알려 준다"). They are what you will build and check later.
-- **A screen per card**: written in the project's code with its `path` (see "Writing a screen"). Install what the
-  project needs and start its dev server once, as the project's own instructions say; the map opens every screen
-  through it.
+- **A screen per card**: written in the project's code with its `path` (see "Writing a screen"). Alpine installs
+  what the project needs and runs its app for the map; do not start a dev server yourself. See a screen with
+  `app_screen`, and check the map files with `map_check`.
 - **What is left to decide**: `undecided` in map.json, each a short line in the person's words ("누가 글을 쓰나요",
   "댓글을 받을까요", "어떤 느낌으로 만들까요"). The look is always last.
 

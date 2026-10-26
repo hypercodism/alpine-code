@@ -52,12 +52,19 @@ def test_the_list_has_the_built_in_tools_then_asking_then_the_memorys(tmp_path):
         *((name, "builtin", True) for name in BUILTINS),
         ("ask_user", "builtin", False),
         ("propose_memory", "memory", False),
+        # What the AI sees of the project's running app, in every project.
+        ("app_screen", "builtin", False),
+        ("map_check", "builtin", False),
+        ("app_restart", "builtin", False),
     ]
     assert listed["tools"][0]["tool"]["ask"] == "never"
     assert [t["tool"]["name"] for t in call("tools/list")["result"]["tools"]] == [
         *BUILTINS,
         "ask_user",
         "propose_memory",
+        "app_screen",
+        "map_check",
+        "app_restart",
     ]
 
 

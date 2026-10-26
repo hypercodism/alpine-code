@@ -127,6 +127,10 @@
       "params": "ProjectsInstallNodeToolsParams",
       "result": "ProjectsInstallNodeToolsResult"
     },
+    "screens/captured": {
+      "params": "ScreensCapturedParams",
+      "result": "ScreensCapturedResult"
+    },
     "devServers/list": {
       "params": "DevServersListParams",
       "result": "DevServersListResult"
@@ -526,7 +530,8 @@
     "cloud/signInFinished": "CloudSignInFinishedParams",
     "cloud/changed": "CloudChangedParams",
     "publish/changed": "PublishChangedParams",
-    "projects/nodeToolsChanged": "ProjectsNodeToolsChangedParams"
+    "projects/nodeToolsChanged": "ProjectsNodeToolsChangedParams",
+    "screens/capture": "ScreensCaptureParams"
   },
   "$defs": {
     "Activity": {
@@ -8010,6 +8015,54 @@
       "title": "RunStoppedItem",
       "type": "object"
     },
+    "ScreenRead": {
+      "description": "What a screen says and shows, read from the page itself.",
+      "properties": {
+        "screen": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "title": {
+          "default": "",
+          "type": "string"
+        },
+        "text": {
+          "default": "",
+          "type": "string"
+        },
+        "targets": {
+          "items": {
+            "$ref": "#/$defs/ScreenTarget"
+          },
+          "type": "array"
+        },
+        "promises": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "errors": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "href": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "ScreenRead",
+      "type": "object"
+    },
     "ScreenState": {
       "additionalProperties": false,
       "description": "A situation a screen must handle besides the ordinary one (nothing to show, an error, sold out, not allowed...).\nThe running app shows it at the screen's address with ``?alpine-state=<id>`` on made-up data, so the map can show\nevery situation as a real screen.",
@@ -8040,6 +8093,101 @@
         "title"
       ],
       "title": "ScreenState",
+      "type": "object"
+    },
+    "ScreenTarget": {
+      "properties": {
+        "to": {
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "required": [
+        "to"
+      ],
+      "title": "ScreenTarget",
+      "type": "object"
+    },
+    "ScreensCaptureParams": {
+      "description": "``screens/capture`` (a notification to the app): the AI asked to see one screen of the project's running app.\nThe app opens ``url`` out of sight at ``width`` x ``height``, then answers with ``screens/captured`` and the same\n``id``: a picture of it and what it says.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "width": {
+          "maximum": 2560,
+          "minimum": 200,
+          "type": "integer"
+        },
+        "height": {
+          "maximum": 4000,
+          "minimum": 200,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "url",
+        "width",
+        "height"
+      ],
+      "title": "ScreensCaptureParams",
+      "type": "object"
+    },
+    "ScreensCapturedParams": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "image": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "read": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScreenRead"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "ScreensCapturedParams",
+      "type": "object"
+    },
+    "ScreensCapturedResult": {
+      "properties": {},
+      "title": "ScreensCapturedResult",
       "type": "object"
     },
     "ServerInfo": {
