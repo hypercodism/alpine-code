@@ -359,7 +359,7 @@ function Done({
   return (
     <section
       aria-label={t.builtTitle}
-      className="pointer-events-auto motion-step flex max-h-[45vh] flex-col gap-3 overflow-y-auto rounded-xl border border-line bg-canvas-raised p-4 shadow-overlay"
+      className="pointer-events-auto motion-step flex max-h-[40vh] flex-col gap-3 overflow-y-auto rounded-xl border border-line bg-canvas-raised p-4 shadow-overlay"
     >
       <div className="flex items-start gap-3">
         <p className="min-w-0 grow text-reading font-medium text-fg">{title}</p>

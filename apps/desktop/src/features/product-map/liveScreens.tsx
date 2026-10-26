@@ -485,7 +485,7 @@ export function LiveScreen({
   const scale = width > 0 ? width / pageWidth : 0;
   const live = !!app && near;
   return (
-    <span ref={box} className="relative block size-full overflow-hidden">
+    <span ref={box} className="relative block size-full overflow-clip">
       {(!live || !seen) && <span className="absolute inset-0">{fallback}</span>}
       {live && (
         <iframe

@@ -4,6 +4,18 @@
 /* Tailwind only scans this app by default; the primitives' classes live in packages/ui. */
 @source '../../../../packages/ui/src';
 
+/*
+ * The window never scrolls as a whole: its bar must stay where it is. Not even a script can scroll it (overflow: clip,
+ * not hidden): a card brought into view on the map, or a screen in a frame focusing a field, scrolls every ancestor
+ * that can scroll, and one that only hides its overflow then stays scrolled with no way back for the person.
+ */
+html,
+body,
+#root {
+  height: 100%;
+  overflow: clip;
+}
+
 @utility motion-rail {
   flex-shrink: 0;
   overflow: clip;

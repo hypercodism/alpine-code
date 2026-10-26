@@ -20,7 +20,7 @@ export function WaitingApprovals({ cwd }: { cwd: string }) {
   return (
     <section
       aria-label={t.waitingHere}
-      className="flex max-h-[55vh] shrink-0 flex-col gap-2 overflow-y-auto border-t border-line bg-canvas p-3"
+      className="flex max-h-[40%] min-h-0 shrink-0 flex-col gap-2 overflow-y-auto border-t border-line bg-canvas p-3"
     >
       {waiting.map((one, index) => (
         <div key={one.approval.id} className="flex flex-col gap-1.5">

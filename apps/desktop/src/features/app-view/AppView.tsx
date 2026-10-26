@@ -214,7 +214,7 @@ export function AppView({
     );
 
   return (
-    <section aria-label={t.title} className="flex min-h-0 min-w-0 grow flex-col">
+    <section aria-label={t.title} className="flex min-h-0 min-w-0 grow flex-col overflow-clip">
       <div className="flex h-10 shrink-0 items-center gap-2.5 px-6 text-meta text-fg-muted">
         <span aria-hidden="true" className="size-1.5 rounded-full bg-interactive" />
         <span role="status">{t.running}</span>
@@ -243,7 +243,7 @@ export function AppView({
               />
             </div>
           ) : (
-            <div className="flex size-full flex-col overflow-hidden rounded-xl border border-line bg-canvas-raised shadow-overlay">
+            <div className="flex size-full flex-col overflow-clip rounded-xl border border-line bg-canvas-raised shadow-overlay">
               <div className="flex h-9 shrink-0 items-center gap-2 border-b border-line-subtle bg-canvas-sunken px-3.5">
                 <span aria-hidden="true" className="size-2.5 rounded-full bg-line" />
                 <span aria-hidden="true" className="size-2.5 rounded-full bg-line" />

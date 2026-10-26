@@ -651,7 +651,7 @@ function PhoneStep({
         {look.making && <MakingTag />}
         {look.making && <SnowCap />}
         <span
-          className="relative block h-96.5 w-46.5 overflow-hidden bg-canvas-raised"
+          className="relative block h-96.5 w-46.5 overflow-clip bg-canvas-raised"
           style={{ borderRadius: PHONE_RADIUS - 6 }}
         >
           <ScreenFace card={card} device="phone" ratio={386 / 186} look={strip.look} touched={look.touched} />
@@ -709,7 +709,7 @@ function ComputerStep({
             aria-label={t.open(card.title)}
             onClick={open}
             className={clsx(
-              'relative block w-150 cursor-pointer overflow-hidden rounded-xl border bg-canvas-raised text-left transition-[border-color,box-shadow,transform] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-interactive',
+              'relative block w-150 cursor-pointer overflow-clip rounded-xl border bg-canvas-raised text-left transition-[border-color,box-shadow,transform] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-interactive',
               look.making
                 ? '-translate-y-1.5 border-brand-snow'
                 : look.touched || look.asked
@@ -729,7 +729,7 @@ function ComputerStep({
                 {card.path || strip.map.product}
               </span>
             </span>
-            <span className="relative block h-93.75 w-150 overflow-hidden">
+            <span className="relative block h-93.75 w-150 overflow-clip">
               <ScreenFace card={card} device="computer" ratio={0.625} look={strip.look} touched={look.touched} />
             </span>
           </button>

@@ -467,3 +467,21 @@ describe('a call waiting for my OK is never hidden (dogfood 2, 4, 15)', () => {
     expect(screen.queryByRole('button', { name: /확인을 기다려요 · alpine-code/ })).toBeNull();
   });
 });
+
+describe('the bar over the map stays (dogfood 17)', () => {
+  it('has no part of the window around it that can be scrolled, even by a script', async () => {
+    mount('/board' + q(app), {
+      sessions: [{ info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '지도' }) }],
+    });
+    // A card brought into view, or a screen in a frame focusing a field, scrolls every ancestor that can scroll: one
+    // that only hides its overflow then stays scrolled, taking the bar with it, with no way back.
+    const bar = (await screen.findByRole('button', { name: /^alpine-code · 다른 프로젝트로/ })).closest(
+      '[data-tauri-drag-region]',
+    )!;
+    for (let element = bar.parentElement; element && element !== document.body; element = element.parentElement)
+      expect(element.className).not.toMatch(/\boverflow-(hidden|auto|scroll|y-auto|x-auto)\b/);
+    const wall = await screen.findByRole('region', { name: '화면 필름스트립' });
+    for (let element = wall.parentElement; element && element !== document.body; element = element.parentElement)
+      expect(element.className).not.toMatch(/\boverflow-(hidden|auto|scroll|y-auto|x-auto)\b/);
+  });
+});

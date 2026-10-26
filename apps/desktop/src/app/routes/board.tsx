@@ -117,7 +117,7 @@ function BoardRoute() {
     return (
       <div className="flex min-w-0 grow flex-col">
         <StartTopBar project={chosen} />
-        <div className="mx-2 mb-2 flex min-h-0 grow overflow-hidden rounded-xl border border-line bg-canvas">
+        <div className="mx-2 mb-2 flex min-h-0 grow overflow-clip rounded-xl border border-line bg-canvas">
           {projects.data && chosen ? (
             <MissingProject
               path={chosen}
@@ -215,8 +215,10 @@ function BoardRoute() {
       onOpen={() => showDockTab('source')}
       onReturnToChanges={() => showDockTab(CHANGES_TAB)}
     >
-      <div className="flex min-w-0 grow">
-        <section className="flex min-w-0 grow flex-col">
+      {/* Neither side ever scrolls as a whole (overflow: clip): the bar over the map and the conversation's header
+          stay, whatever inside them is brought into view. */}
+      <div className="flex min-h-0 min-w-0 grow overflow-clip">
+        <section className="flex min-h-0 min-w-0 grow flex-col overflow-clip">
           <MapTopBar
             cwd={cwd}
             hasApp={hasApp}
@@ -227,7 +229,7 @@ function BoardRoute() {
               )
             }
           />
-          <div className="relative min-h-0 grow">
+          <div className="relative min-h-0 grow overflow-clip">
             {/* The map stays mounted under the app, so going back finds it where it was. */}
             <div
               className={clsx('absolute inset-0 flex min-w-0', showingApp && 'invisible')}
@@ -292,7 +294,7 @@ function BoardRoute() {
           // Named as the dock it replaces: the right side of the window, which holds the conversation.
           aria-label={t.title}
           style={{ width: width.width }}
-          className="relative flex shrink-0 flex-col border-l border-line bg-canvas"
+          className="relative flex min-h-0 shrink-0 flex-col border-l border-line bg-canvas"
         >
           <PanelResizer panel={width} edge="left" label={t.resize} />
           <header data-tauri-drag-region className="flex h-12 shrink-0 items-center gap-2 pr-3.5 pl-4">

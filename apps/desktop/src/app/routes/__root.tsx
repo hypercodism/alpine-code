@@ -77,12 +77,12 @@ function Root() {
     },
   });
   const content = (
-    <div key={page} className="motion-page flex min-h-0 min-w-0 grow">
+    <div key={page} className="motion-page flex min-h-0 min-w-0 grow overflow-clip">
       {!waiting && <Outlet />}
     </div>
   );
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-canvas-sunken">
+    <div className="flex h-screen flex-col overflow-clip bg-canvas-sunken">
       {!framed && <TopBar railOpen={railOpen} onToggleRail={toggleRail} />}
       <EngineStopped />
       {framed ? (
@@ -90,7 +90,7 @@ function Root() {
       ) : (
         <div className="flex min-h-0 grow">
           <Rail open={railOpen} />
-          <div className="mr-2 mb-2 flex min-w-0 grow overflow-hidden rounded-xl border border-line bg-canvas">
+          <div className="mr-2 mb-2 flex min-w-0 grow overflow-clip rounded-xl border border-line bg-canvas">
             {content}
           </div>
         </div>
