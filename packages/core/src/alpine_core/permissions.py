@@ -10,8 +10,10 @@ answers in the user's place what they would ask):
    remembers that directory for reading or for editing.
 2. Reading a secret env file (``.env``, ``.env.local``; not ``.env.example``) asks. Remembered per file.
 3. Inside the working directory, reading and searching never ask. Editing asks unless the mode is
-   ``accept_edits``; "don't ask again" remembers the tool.
-4. ``bash`` asks unless every command in it matches a remembered command prefix (``git status``,
+   ``accept_edits``; "don't ask again" allows every change to files in the working directory (any file tool).
+4. ``bash`` asks unless every command in it only looks (``ls``, ``cat``, ``git status``: ``shell.read_only``), runs
+   a package.json script made only of checking tools (``npm run check`` for ``tsc && eslint .``:
+   ``shell.check_only``), or matches a remembered command prefix (``git status``,
    ``uv run pytest``), it does not write files through redirection, and every path it names (arguments and
    redirection targets, following ``cd``) is inside the working directory or a directory allowed for editing, and
    is not a secret env file. "Don't ask again" remembers the prefixes of the commands it runs and allows editing in
@@ -25,6 +27,8 @@ as outside.
 
 from __future__ import annotations
 
+import json
+import shutil
 import tempfile
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
@@ -184,9 +188,12 @@ class _Evaluation:
             return self._outside(kind, target)
         if kind == "read":
             return self._read_inside(name, target)
-        if any(_inside(target, d) for d in self.editable):
+        if any(_inside(target, d) for d in self.editable) or any(_inside(target, d) for d in self.remembered.edit_dirs):
             return ALLOW
-        return ALLOW if self.mode in (Mode.ACCEPT_EDITS, Mode.AUTO) else self._by_tool(name)
+        if self.mode in (Mode.ACCEPT_EDITS, Mode.AUTO) or name in self.remembered.tools:
+            return ALLOW
+        # "Don't ask again" covers every change to the project's files, by any file tool, not this tool alone.
+        return Verdict(False, grant=Grant(f"editing files in {_short(self._root)}", edit_dirs=(self._root,)))
 
     @property
     def _root(self) -> Path:
@@ -233,11 +240,19 @@ class _Evaluation:
         analysis = shell.analyze(command)
         outside, secrets = self._bash_targets(analysis)
         unresolved = list(dict.fromkeys(analysis.unresolved_paths))
-        known = all(any(shell.matches(words, p) for p in self.remembered.bash_prefixes) for words in analysis.commands)
+        full = analysis.full or analysis.commands
+        known = all(
+            any(shell.matches(words, p) for p in self.remembered.bash_prefixes)
+            or shell.read_only(flags)
+            or self._checks(words)
+            for words, flags in zip(analysis.commands, full, strict=True)
+        )
         if known and not (analysis.opaque or analysis.writes_files or outside or secrets or unresolved):
             return ALLOW
 
         reasons = []
+        if any(_installs(words) for words in analysis.commands):
+            reasons.append(f"installs packages from the internet (free space: {_free_space(self._root)})")
         if unresolved:
             reasons.append("uses paths only known when it runs: " + ", ".join(unresolved))
         if outside:
@@ -251,6 +266,22 @@ class _Evaluation:
         if analysis.opaque or unresolved:
             return Verdict(False, reason)
         return Verdict(False, reason, self._bash_grant(analysis, outside, secrets))
+
+    def _checks(self, words: tuple[str, ...]) -> bool:
+        """``npm run check`` (or pnpm, yarn, bun) where the project's package.json makes ``check`` of checking tools
+        alone (``tsc``, ``eslint``): it reads the code and says what is wrong, so it never asks."""
+        if len(words) >= 2 and words[0] in ("npm", "pnpm", "yarn", "bun") and words[1] == "run":
+            name = words[2] if len(words) == 3 else None
+        elif len(words) == 2 and words[0] in ("pnpm", "yarn"):
+            name = words[1]
+        else:
+            return False
+        try:
+            scripts = json.loads((self._root / "package.json").read_text(encoding="utf-8")).get("scripts") or {}
+        except (OSError, ValueError, AttributeError):
+            return False
+        script = scripts.get(name) if name and isinstance(scripts, dict) else None
+        return isinstance(script, str) and shell.check_only(script)
 
     def _bash_targets(self, analysis: shell.Analysis) -> tuple[list[Path], list[Path]]:
         """The paths the script names that are outside what it may touch, and the secret files it reads."""
@@ -290,6 +321,41 @@ def kind_of(tool: Tool | None, args: dict[str, Any] | None = None) -> ToolKind:
     if hints.open_world:
         return "exec"
     return "read" if hints.read_only else "edit"
+
+
+#: Commands that fetch packages from the internet into the project, by their leading words.
+_INSTALLS = (
+    ("npm", "install"),
+    ("npm", "i"),
+    ("npm", "ci"),
+    ("npm", "add"),
+    ("pnpm", "install"),
+    ("pnpm", "i"),
+    ("pnpm", "add"),
+    ("yarn", "install"),
+    ("yarn", "add"),
+    ("bun", "install"),
+    ("bun", "add"),
+    ("pip", "install"),
+    ("pip3", "install"),
+    ("uv", "add"),
+    ("uv", "sync"),
+    ("uv", "pip", "install"),
+    ("cargo", "add"),
+)
+
+
+def _installs(words: tuple[str, ...]) -> bool:
+    return words == ("yarn",) or any(words[: len(w)] == w for w in _INSTALLS)
+
+
+def _free_space(root: Path) -> str:
+    """The free disk space where the project is, for a person deciding whether an install fits."""
+    try:
+        free = shutil.disk_usage(root).free
+    except OSError:
+        return "unknown"
+    return f"{free / 1024**3:.1f} GB"
 
 
 def is_secret(path: Path) -> bool:

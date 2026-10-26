@@ -76,7 +76,7 @@ def test_auto_runs_reads_and_edits_inside_the_folder_like_accept_edits(tmp_path)
     tools = _tools(policy.workspace)
     assert policy.evaluate("write", {"path": "a.txt", "content": "x"}, tools["write"]).allowed
     assert policy.evaluate("read", {"path": "a.txt"}, tools["read"]).allowed
-    assert not policy.evaluate("bash", {"command": "echo hi"}, tools["bash"]).allowed
+    assert not policy.evaluate("bash", {"command": "touch hi.txt"}, tools["bash"]).allowed
     outside = str(tmp_path.parent / "x.txt")
     assert not policy.evaluate("write", {"path": outside, "content": "x"}, tools["write"]).allowed
 
@@ -111,7 +111,7 @@ def test_other_modes_never_ask_the_reviewer(tmp_path):
     reviewer = Reviewer()
     decide, approver, tools = decide_(tmp_path, reviewer, Decision("allow"))
     decide.policy.mode = Mode.ACCEPT_EDITS
-    assert bash(decide, State(), tools, "echo hi") == Allowed()
+    assert bash(decide, State(), tools, "touch hi.txt") == Allowed()
     assert reviewer.requests == [] and len(approver.requests) == 1
 
 
@@ -271,7 +271,7 @@ def test_a_session_records_a_block_and_the_model_goes_on(tmp_path, monkeypatch, 
 def test_a_failure_shows_on_the_approval_item(tmp_path, monkeypatch):
     reviewer = Reviewer(RuntimeError("model offline"))
     session, _ = session_with(
-        tmp_path, monkeypatch, [tool_call("bash", command="ls"), "done"], reviewer, Decision("allow")
+        tmp_path, monkeypatch, [tool_call("bash", command="touch seen.txt"), "done"], reviewer, Decision("allow")
     )
     session.send("list")
     [item] = [i for i in session.snapshot().items if isinstance(i, ApprovalItem)]
@@ -297,7 +297,7 @@ def test_the_count_is_kept_with_the_saved_session(tmp_path, monkeypatch):
 
 def test_a_reviewer_model_that_cannot_be_made_asks_with_why(tmp_path, monkeypatch):
     monkeypatch.setattr(
-        session_module, "make_model", lambda settings: FakeModel([tool_call("bash", command="ls"), "ok"])
+        session_module, "make_model", lambda settings: FakeModel([tool_call("bash", command="touch seen.txt"), "ok"])
     )
     approver = Approver(Decision("allow"))
     settings = Settings(model="fake", mode=Mode.AUTO, review_model="nowhere/model")
@@ -305,7 +305,7 @@ def test_a_reviewer_model_that_cannot_be_made_asks_with_why(tmp_path, monkeypatc
     def make(settings):
         if settings.model == "nowhere/model":
             raise session_module.ConfigError("No connection named 'nowhere'\nhow to fix")
-        return FakeModel([tool_call("bash", command="ls"), "ok"])
+        return FakeModel([tool_call("bash", command="touch seen.txt"), "ok"])
 
     monkeypatch.setattr(session_module, "make_model", make)
     session = Session(settings, approver=approver, cwd=tmp_path)

@@ -18,7 +18,8 @@ class Bash(WorkspaceTool):
     async def bash(
         self, command: str, timeout: int = DEFAULT_TIMEOUT, background: bool = False, title: str | None = None
     ) -> str:
-        """Run a shell command in the working directory. Return JSON with stdout, stderr, exit_code,
+        """Run a shell command in the working directory. Not for reading or changing files: use read, edit and
+        write, whose changes the person sees as diffs. Return JSON with stdout, stderr, exit_code,
         timed_out and cancelled. A nonzero exit or timeout is an error result, not a successful check.
         Each call starts a fresh shell, so cd and variables do not carry over.
         With background=True, return a managed process handle immediately for servers or long jobs.
@@ -27,7 +28,7 @@ class Bash(WorkspaceTool):
 
         Args:
             command: The command to run
-            title: Short human-readable purpose in the user's language, e.g. "Run unit tests"; provide for every command
+            title: Its purpose as a person says it, in the user's language ("타입 오류를 확인할게요"); always give
             timeout: Seconds before a foreground command is killed (default 120, max 600)
             background: Keep running beyond this call; no command timeout, explicit process_stop or session stop ends it
         """

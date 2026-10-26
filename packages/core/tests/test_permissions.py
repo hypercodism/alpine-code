@@ -140,6 +140,68 @@ def test_symlink_escaping_the_workspace_counts_as_outside(policy, tmp_path):
     assert not evaluate(policy, "read", {"path": "link/notes.txt"}).allowed
 
 
+def test_dont_ask_again_on_an_edit_allows_every_change_to_the_projects_files(policy):
+    verdict = evaluate(policy, "edit", {"path": "src/a.py"})
+    assert not verdict.allowed and verdict.remember.startswith("editing files in ")
+    policy.remember(verdict.grant)
+    assert evaluate(policy, "edit", {"path": "src/a.py"}).allowed
+    assert evaluate(policy, "write", {"path": "worker/new.ts"}).allowed  # a new file, another tool
+    assert not evaluate(policy, "edit", {"path": "../outside/notes.txt"}).allowed  # not outside the project
+    assert not evaluate(policy, "bash", {"command": "echo x > a.txt"}).allowed  # nor commands that write
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "cat src/a.py; printf '\\n'; ls; cat worker/b.ts",
+        "git status -s && git diff --stat",
+        "npm ls @playwright/test playwright",
+        "ps -o pid,command; lsof -nP -iTCP:5173",
+        "find src -name '*.tsx' | head",
+        "node --version",
+    ],
+)
+def test_commands_that_only_look_inside_never_ask(policy, command):
+    assert evaluate(policy, "bash", {"command": command}).allowed, command
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "find . -delete",
+        "find . -exec rm {} \\;",
+        "sort -o out.txt a.txt",
+        "git branch gone",
+        "git -C .. status",
+        "cat a.txt > b.txt",
+        "cat ~/.ssh/id_rsa",
+        "rg --pre ./x.sh foo",
+    ],
+)
+def test_looking_commands_that_write_or_leave_still_ask(policy, command):
+    assert not evaluate(policy, "bash", {"command": command}).allowed, command
+
+
+def test_a_package_script_made_of_checking_tools_never_asks(policy):
+    root = policy.workspace.root
+    scripts = {"check": "tsc -b && eslint .", "fix": "eslint --fix .", "dev": "vite", "build": "vite build"}
+    (root / "package.json").write_text(json.dumps({"scripts": scripts}))
+    assert evaluate(policy, "bash", {"command": "npm run check"}).allowed
+    assert evaluate(policy, "bash", {"command": "pnpm check"}).allowed
+    for command in ["npm run fix", "npm run dev", "npm run build", "npm run check && rm -rf src"]:
+        assert not evaluate(policy, "bash", {"command": command}).allowed, command
+
+
+def test_an_install_says_it_downloads_and_how_much_room_is_left(policy):
+    verdict = evaluate(policy, "bash", {"command": "npm install"})
+    assert not verdict.allowed and verdict.reason.startswith("installs packages from the internet (free space: ")
+
+
+def test_an_apps_addresses_given_to_a_script_are_not_paths(policy):
+    verdict = evaluate(policy, "bash", {"command": "node scripts/capture.mjs / '/?alpine-state=empty'"})
+    assert not verdict.allowed and verdict.reason is None  # it asks, as node runs anything, but nothing is outside
+
+
 def test_edits_follow_the_mode(policy):
     assert not evaluate(policy, "edit", {"path": "a.py"}).allowed
     policy.mode = Mode.ACCEPT_EDITS
@@ -189,8 +251,7 @@ def test_analysis_sees_nested_commands():
 
 
 def test_bash_paths_outside_the_workspace_ask(policy, tmp_path):
-    policy.remember(evaluate(policy, "bash", {"command": "cat a.txt"}).grant)
-    assert evaluate(policy, "bash", {"command": "cat src/a.py"}).allowed
+    assert evaluate(policy, "bash", {"command": "cat src/a.py"}).allowed  # it only looks, inside
     for command in [
         "cat ~/.ssh/id_rsa",
         "cat /etc/hosts",
@@ -207,13 +268,11 @@ def test_bash_paths_outside_the_workspace_ask(policy, tmp_path):
 
 def test_bash_cd_is_followed(policy):
     (policy.workspace.root / "sub").mkdir()
-    policy.remember(evaluate(policy, "bash", {"command": "cd sub && cat x"}).grant)
     assert evaluate(policy, "bash", {"command": "cd sub && cat ../README.md"}).allowed
     assert not evaluate(policy, "bash", {"command": "cd sub && cat ../../x"}).allowed
 
 
 def test_bash_paths_known_only_at_run_time_ask_every_time(policy):
-    policy.remember(evaluate(policy, "bash", {"command": "cat a"}).grant)
     for command in [
         "cat $HOME/.ssh/id_rsa",
         'cat "$DIR/x"',
@@ -235,7 +294,6 @@ def test_bash_remembers_outside_directories_with_edit_access(policy, tmp_path):
 
 
 def test_bash_secret_files_ask(policy):
-    policy.remember(evaluate(policy, "bash", {"command": "cat a"}).grant)
     verdict = evaluate(policy, "bash", {"command": "cat .env"})
     assert not verdict.allowed and "secrets" in verdict.reason
     assert evaluate(policy, "bash", {"command": "cat .env.example"}).allowed

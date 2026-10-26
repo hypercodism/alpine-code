@@ -157,7 +157,7 @@ def test_deny_with_stop_stops_and_conversation_continues(tmp_path, monkeypatch):
 
 
 def test_stopping_at_one_call_cancels_the_rest_of_the_turn(tmp_path, monkeypatch):
-    replies = [[tool_call("bash", command="echo 1"), tool_call("bash", command="echo 2")], "Sure"]
+    replies = [[tool_call("bash", command="touch f1"), tool_call("bash", command="touch f2")], "Sure"]
     session, events, approver = make_session(tmp_path, monkeypatch, replies, Decision("deny", stop=True))
     assert session.send("go") is None
     assert len(approver.requests) == 1
@@ -166,7 +166,7 @@ def test_stopping_at_one_call_cancels_the_rest_of_the_turn(tmp_path, monkeypatch
 
 
 def test_allow_always_stops_asking(tmp_path, monkeypatch):
-    replies = [tool_call("bash", command="echo 1"), tool_call("bash", command="echo 2"), "Done"]
+    replies = [tool_call("bash", command="touch f1"), tool_call("bash", command="touch f2"), "Done"]
     session, _, approver = make_session(tmp_path, monkeypatch, replies, Decision("allow_always"))
     session.send("run things")
     assert len(approver.requests) == 1
@@ -174,7 +174,7 @@ def test_allow_always_stops_asking(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize(("mode", "asks"), [(Mode.ACCEPT_EDITS, 1), (Mode.YOLO, 0)])
 def test_modes(tmp_path, monkeypatch, mode, asks):
-    replies = [[tool_call("write", path="n.txt", content="hi\n"), tool_call("bash", command="cat n.txt")], "Done"]
+    replies = [[tool_call("write", path="n.txt", content="hi\n"), tool_call("bash", command="touch m.txt")], "Done"]
     session, events, approver = make_session(tmp_path, monkeypatch, replies, Decision("allow"), mode=mode)
     session.send("go")
     assert len(approver.requests) == asks
@@ -248,7 +248,7 @@ class AsyncApprover:
 
 
 def test_async_approver_is_awaited(tmp_path, monkeypatch):
-    replies = [tool_call("bash", command="echo hi"), "Done"]
+    replies = [tool_call("bash", command="touch hi.txt"), "Done"]
     monkeypatch.setattr(session_module, "make_model", lambda settings: FakeModel(replies))
     events = []
     approver = AsyncApprover(Decision("allow"))
@@ -307,7 +307,7 @@ def test_ctrl_c_in_the_approval_prompt_interrupts(tmp_path, monkeypatch):
         def approve(self, request):
             raise KeyboardInterrupt
 
-    replies = [tool_call("bash", command="echo hi"), "Sure, what next?"]
+    replies = [tool_call("bash", command="touch hi.txt"), "Sure, what next?"]
     monkeypatch.setattr(session_module, "make_model", lambda settings: FakeModel(replies))
     events = []
     session = Session(Settings(model="fake"), on_event=events.append, approver=CtrlC(), cwd=tmp_path)
@@ -317,8 +317,8 @@ def test_ctrl_c_in_the_approval_prompt_interrupts(tmp_path, monkeypatch):
 
 
 def test_allow_always_lasts_for_the_conversation(tmp_path, monkeypatch):
-    replies = [tool_call("bash", command="echo 1"), "One", tool_call("bash", command="echo 2"), "Two"]
-    replies += [tool_call("bash", command="echo 3"), "Three"]
+    replies = [tool_call("bash", command="touch f1"), "One", tool_call("bash", command="touch f2"), "Two"]
+    replies += [tool_call("bash", command="touch f3"), "Three"]
     session, _, approver = make_session(tmp_path, monkeypatch, replies, Decision("allow_always"), Decision("allow"))
     session.send("run one")
     session.send("run two")

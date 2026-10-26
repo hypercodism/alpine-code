@@ -104,7 +104,7 @@ def test_a_tool_call_with_an_approval_item(tmp_path, monkeypatch):
 
 
 def test_deny_with_stop_is_a_permission_stop(tmp_path, monkeypatch):
-    replies = [tool_call("bash", command="echo 1"), "never"]
+    replies = [tool_call("bash", command="touch f1"), "never"]
     session, _ = make(tmp_path, monkeypatch, replies, SyncApprover(Decision("deny", stop=True)))
     assert session.send("go") is None
     *_, stopped = session.snapshot().items
@@ -115,17 +115,17 @@ def test_deny_with_stop_is_a_permission_stop(tmp_path, monkeypatch):
 
 
 def test_deny_without_stop_keeps_running(tmp_path, monkeypatch):
-    replies = [tool_call("bash", command="echo 1"), "OK"]
+    replies = [tool_call("bash", command="touch f1"), "OK"]
     session, _ = make(tmp_path, monkeypatch, replies, SyncApprover(Decision("deny")))
     assert session.send("go") == "OK"
     call = next(i for i in session.snapshot().items if isinstance(i, ToolCallItem))
     assert call.status == "denied" and kinds(session)[-1] == "agent_message"
     approval = next(i for i in session.snapshot().items if isinstance(i, ApprovalItem))
-    assert approval.tool == "bash" and approval.args == {"command": "echo 1"}  # the app draws it as the call
+    assert approval.tool == "bash" and approval.args == {"command": "touch f1"}  # the app draws it as the call
 
 
 def test_deny_with_feedback_keeps_running(tmp_path, monkeypatch):
-    replies = [tool_call("bash", command="echo 1"), "OK"]
+    replies = [tool_call("bash", command="touch f1"), "OK"]
     session, _ = make(tmp_path, monkeypatch, replies, SyncApprover(Decision("deny", "no")))
     assert session.send("go") == "OK"
     approval = next(i for i in session.snapshot().items if isinstance(i, ApprovalItem))
@@ -138,7 +138,7 @@ def test_async_approver_waits_as_an_active_item_and_cancel_stops_the_run(tmp_pat
 
 async def _wait_then_cancel(tmp_path, monkeypatch):
     approver = AsyncApprover()
-    session, _ = make(tmp_path, monkeypatch, [tool_call("bash", command="echo 1"), "done"], approver)
+    session, _ = make(tmp_path, monkeypatch, [tool_call("bash", command="touch f1"), "done"], approver)
     task = asyncio.create_task(session.asend("go"))
     await approver.asked.wait()
     snap = session.snapshot()
@@ -161,7 +161,7 @@ def test_async_approver_answer_continues(tmp_path, monkeypatch):
 
 async def _wait_then_answer(tmp_path, monkeypatch):
     approver = AsyncApprover()
-    session, _ = make(tmp_path, monkeypatch, [tool_call("bash", command="echo 1"), "done"], approver)
+    session, _ = make(tmp_path, monkeypatch, [tool_call("bash", command="touch f1"), "done"], approver)
     task = asyncio.create_task(session.asend("go"))
     await approver.asked.wait()
     approver.answer.set_result(Decision("allow"))
@@ -282,7 +282,7 @@ def _activities(log):
 
 def test_activity_follows_a_run_with_a_tool_call_and_an_approval(tmp_path, monkeypatch):
     approver = SyncApprover(Decision("allow"))
-    session, log = make(tmp_path, monkeypatch, [tool_call("bash", command="echo 1"), "All done"], approver)
+    session, log = make(tmp_path, monkeypatch, [tool_call("bash", command="touch f1"), "All done"], approver)
     assert session.info.activity is None and session.info.run_started_at is None and session.info.run_usage is None
     session.send("go")
     assert _activities(log) == [
@@ -305,7 +305,7 @@ def test_activity_follows_a_run_with_a_tool_call_and_an_approval(tmp_path, monke
 
 def test_info_is_announced_after_every_model_call_with_usage_growing(tmp_path, monkeypatch):
     approver = SyncApprover(Decision("allow"))
-    session, log = make(tmp_path, monkeypatch, [tool_call("bash", command="echo 1"), "All done"], approver)
+    session, log = make(tmp_path, monkeypatch, [tool_call("bash", command="touch f1"), "All done"], approver)
     session.send("go")
     infos = [e.info for _, _, e in log if isinstance(e, InfoChanged)]
     by_requests: dict[int, list] = {}

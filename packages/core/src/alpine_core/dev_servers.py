@@ -96,11 +96,7 @@ async def project_listeners(project: str) -> list[tuple[int, int]]:
         elif line.startswith("n") and pid is not None:
             cwds[pid] = line[1:]
     root = Path(project)
-    return [
-        (port, owner)
-        for port, owner in sorted(ports.items())
-        if owner in cwds and _within(cwds[owner], root)
-    ]
+    return [(port, owner) for port, owner in sorted(ports.items()) if owner in cwds and _within(cwds[owner], root)]
 
 
 def _within(path: str, project: Path) -> bool:
@@ -118,7 +114,8 @@ async def serves_page(port: int) -> bool:
         return False
     try:
         name = f"[{host}]" if ":" in host else host
-        writer.write(f"GET / HTTP/1.1\r\nHost: {name}:{port}\r\nAccept: text/html\r\nConnection: close\r\n\r\n".encode())
+        request = f"GET / HTTP/1.1\r\nHost: {name}:{port}\r\nAccept: text/html\r\nConnection: close\r\n\r\n"
+        writer.write(request.encode())
         await writer.drain()
         head = (await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), 3)).decode("latin-1").lower()
     except (OSError, TimeoutError, asyncio.IncompleteReadError, asyncio.LimitOverrunError):

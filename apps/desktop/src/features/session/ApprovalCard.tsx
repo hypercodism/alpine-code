@@ -6,6 +6,7 @@ import { Lines } from '@/shared/components/output';
 import { useMessages } from '@/shared/i18n';
 import { useAnswerApproval } from '@/shared/server';
 
+import { approvalWordMessages, reasonWords, rememberWords } from './approvalWords';
 import { messages } from './messages';
 import { CallTitle } from './ToolCalls';
 
@@ -35,7 +36,9 @@ export function ApprovalCard({
   hint?: boolean;
 }) {
   const t = useMessages(messages);
+  const w = useMessages(approvalWordMessages);
   const answer = useAnswerApproval();
+  const always = approval.remember ? rememberWords(approval.remember, w) : null;
   const send = (decision: 'allow' | 'allow_always' | 'deny') =>
     answer.mutate({ sessionId, requestId: approval.id, decision });
   const skipOne = (agent: string) => answer.mutate({ sessionId, requestId: approval.id, decision: 'deny', agent });
@@ -99,7 +102,7 @@ export function ApprovalCard({
           {approval.reviewError && <span className="text-meta text-fg-muted"> · {approval.reviewError}</span>}
         </p>
       )}
-      {approval.reason && <p className="text-body text-fg-muted">{approval.reason}</p>}
+      {approval.reason && <p className="text-body text-fg-muted">{reasonWords(approval.reason, w)}</p>}
       {answer.isError && (
         <p role="alert" className="text-meta text-danger">
           {t.answerFailed}
@@ -109,13 +112,9 @@ export function ApprovalCard({
         <Button variant="primary" disabled={answer.isPending} onClick={() => send('allow')}>
           {asks.length > 1 ? t.allowAll : t.allow}
         </Button>
-        {approval.remember && (
-          <Button
-            disabled={answer.isPending}
-            title={t.allowAlwaysFor(approval.remember)}
-            onClick={() => send('allow_always')}
-          >
-            {t.allowAlways}
+        {always && (
+          <Button disabled={answer.isPending} title={always.detail ?? undefined} onClick={() => send('allow_always')}>
+            {always.button}
           </Button>
         )}
         <span className="grow" />
@@ -123,6 +122,7 @@ export function ApprovalCard({
           {asks.length > 1 ? t.skipAll : t.skip}
         </LinkButton>
       </div>
+      {always?.detail && <p className="text-meta text-fg-faint">{always.detail}</p>}
       {hint && <p className="text-meta text-fg-muted">{inputOnMap ? t.answerHintMap : t.answerHint}</p>}
     </section>
   );
@@ -131,8 +131,17 @@ export function ApprovalCard({
 type Call = Pick<ApprovalItem, 'title' | 'tool' | 'args' | 'preview' | 'previewKind'>;
 
 function Title({ call }: { call: Call }) {
+  // A command says first what it is for, in the AI's own words to the person; the command itself follows.
+  const purpose = call.tool === 'bash' && typeof call.args.title === 'string' ? call.args.title.trim() : '';
   // Sessions saved before approvals carried their call have only the core's title.
-  return call.tool ? <CallTitle name={call.tool} args={call.args} /> : <p className="text-body">{call.title}</p>;
+  const title = call.tool ? <CallTitle name={call.tool} args={call.args} /> : <p className="text-body">{call.title}</p>;
+  if (!purpose) return title;
+  return (
+    <div className="flex flex-col gap-0.5">
+      <p className="text-body font-medium text-fg">{purpose}</p>
+      {title}
+    </div>
+  );
 }
 
 function Preview({ call, compact = false }: { call: Call; compact?: boolean }) {
