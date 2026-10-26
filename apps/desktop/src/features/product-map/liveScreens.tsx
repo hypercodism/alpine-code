@@ -520,6 +520,17 @@ export function LiveScreen({
   );
 }
 
+/** Lines by their key, in the order first seen, with each different label once. */
+function grouped(lines: { key: string; label: string }[]): { key: string; labels: string[] }[] {
+  const byKey = new Map<string, string[]>();
+  for (const { key, label } of lines) {
+    const labels = byKey.get(key) ?? [];
+    if (label && !labels.includes(label)) labels.push(label);
+    byKey.set(key, labels);
+  }
+  return [...byKey].map(([key, labels]) => ({ key, labels }));
+}
+
 /** A promise's place on the real screen: a numbered dot at the element's corner, in the colour of how it stands. */
 export function PromisePins({
   layout,
@@ -603,19 +614,28 @@ export function LiveScreenView({
   const situations = card.states ?? [];
   const title = (id: string) => map.cards[id]?.title ?? id;
   const planned = plannedLinks(map);
-  const ways: { to: string; label: string; kind: 'ok' | 'extra' }[] = (layout?.targets ?? []).map((target) => ({
-    to: target.to,
-    label: target.label,
-    kind: planned.get(card.id)?.has(target.to) ? 'ok' : 'extra',
+  // One line per screen a button leads to, its buttons' words together; a button back to this same screen (its own
+  // logo, its menu's current item) is not a way out.
+  const ways = grouped(
+    (layout?.targets ?? [])
+      .filter((target) => target.to !== card.id)
+      .map((target) => ({ key: target.to, label: target.label })),
+  ).map(({ key, labels }) => ({
+    to: key,
+    label: labels.join(' · '),
+    kind: (planned.get(card.id)?.has(key) ? 'ok' : 'extra') as 'ok' | 'extra',
   }));
   const missing = state ? [] : missingButtons(map, card.id, layout);
-  const into = Object.entries(layouts)
-    .filter(([key]) => key.endsWith('|') && !key.startsWith(`${card.id}|`))
-    .flatMap(([key, other]) =>
-      other.targets
-        .filter((target) => target.to === card.id)
-        .map((target) => ({ from: key.slice(0, -1), label: target.label })),
-    );
+  // One line per screen that leads here, however many of its buttons do.
+  const into = grouped(
+    Object.entries(layouts)
+      .filter(([key]) => key.endsWith('|') && !key.startsWith(`${card.id}|`))
+      .flatMap(([key, other]) =>
+        other.targets
+          .filter((target) => target.to === card.id)
+          .map((target) => ({ key: key.slice(0, -1), label: target.label })),
+      ),
+  ).map(({ key, labels }) => ({ from: key, label: labels.join(' · ') }));
   const placed = new Set(layout?.promises.map((one) => one.id) ?? []);
   // A proposal is not in the code yet: there is no screen to open for it.
   const proposal = !!state && situations.find((one) => one.id === state)?.handled === false;

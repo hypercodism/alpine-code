@@ -3,13 +3,26 @@
 (function () {
   if (window.parent === window) return;
   var sent = "";
+  // A control's words as a person reads them: its own name, else its texts with a space between (a logo's
+  // <span>Basecamp</span><small>by Alpine Code</small> is "Basecamp by Alpine Code", not "Basecampby Alpine Code").
+  function label(el) {
+    var named = el.getAttribute("aria-label");
+    if (named) return named.trim().slice(0, 40);
+    var parts = [];
+    var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      var text = walker.currentNode.nodeValue.trim();
+      if (text) parts.push(text);
+    }
+    return parts.join(" ").replace(/\s+/g, " ").slice(0, 40);
+  }
   function layout() {
     var root = document.querySelector("[data-alpine-screen]");
     var targets = Array.prototype.map.call(document.querySelectorAll("[data-alpine-to]"), function (el) {
       var r = el.getBoundingClientRect();
       return {
         to: el.getAttribute("data-alpine-to"),
-        label: (el.innerText || el.getAttribute("aria-label") || "").trim().replace(/\s+/g, " ").slice(0, 40),
+        label: label(el),
         x: Math.round(r.left + scrollX), y: Math.round(r.top + scrollY), w: Math.round(r.width), h: Math.round(r.height),
       };
     }).filter(function (t) { return t.w > 0 && t.h > 0; });

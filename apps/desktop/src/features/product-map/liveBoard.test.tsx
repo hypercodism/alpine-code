@@ -6,7 +6,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LocaleProvider } from '@/shared/i18n';
 import { mergeScripts, scriptedConnection, ServerProvider, sessionInfo, sessionScript } from '@/shared/server';
 
-import { ASK_AGAIN_MS, BLANK_AFTER_MS, missingButtons, plannedLinks, situationResult, useLiveLayouts, type LiveLayout } from './liveScreens';
+import {
+  ASK_AGAIN_MS,
+  BLANK_AFTER_MS,
+  missingButtons,
+  plannedLinks,
+  situationResult,
+  useLiveLayouts,
+  type LiveLayout,
+} from './liveScreens';
 import { ProductMap } from './ProductMap';
 import { boardScript } from './testBoard';
 import { toTreeMap } from './flowTreeData';
@@ -216,6 +224,32 @@ describe('the live map', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: '보통 때' }));
     report(await frameOf('빵 고르기', dialog), layout([]));
     expect(await within(dialog).findByText('화면에서 자리를 못 찾았어요')).toBeTruthy();
+  });
+
+  it('lists each way in and out once per screen, and a link to itself is not a way out (dogfood 21)', async () => {
+    mount();
+    // 빵 고르기 has three buttons to 찾으러 올 시간 and its own logo.
+    report(
+      await frameOf('빵 고르기'),
+      layout([
+        { to: 'time', label: '다음', x: 0, y: 0, w: 1, h: 1 },
+        { to: 'time', label: '시간 고르기', x: 0, y: 0, w: 1, h: 1 },
+        { to: 'time', label: '다음', x: 0, y: 0, w: 1, h: 1 },
+        { to: 'menu', label: '빵집 by 동네', x: 0, y: 0, w: 1, h: 1 },
+      ]),
+    );
+    fireEvent.click(await screen.findByRole('button', { name: '빵 고르기 열기' }));
+    const dialog = await screen.findByRole('dialog');
+    report(
+      await frameOf('빵 고르기', dialog),
+      layout([
+        { to: 'time', label: '다음', x: 0, y: 0, w: 1, h: 1 },
+        { to: 'time', label: '시간 고르기', x: 0, y: 0, w: 1, h: 1 },
+        { to: 'menu', label: '빵집 by 동네', x: 0, y: 0, w: 1, h: 1 },
+      ]),
+    );
+    expect(await within(dialog).findByText('다음 · 시간 고르기')).toBeTruthy();
+    expect(within(dialog).queryByText(/지도에 없는 길/)).toBeNull();
   });
 
   it('goes to the screen a button leads to, from a screen in its details', async () => {
