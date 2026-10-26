@@ -1,26 +1,24 @@
 import { LinkButton } from '@alpine/ui/primitives';
 import clsx from 'clsx';
-import { Plus } from 'lucide-react';
+import { Play, Plus } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import { HtmlFrame } from '@/shared/components/html-frame';
-import { FallingSnow } from '@/shared/components/snowscape';
 import { useMessages } from '@/shared/i18n';
 
 import { filmMessages as messages } from './filmMessages';
 import { flowTreeMessages } from './flowTreeMessages';
+import { FlowPlayer } from './FlowPlayer';
+import { ScreenFace } from './screenFace';
 import { BOARD, layoutBoard, route, type BoardEdge, type BoardLayout, type BoardNode, type Point } from './boardLayout';
 import { deviceOf, devicesOf, journeyCounts, personCounts } from './filmstripModel';
 import { CardDialog, type FlowTreeProps, type Focus } from './FlowTree';
 import {
-  LiveScreen,
   missingButtons,
   plannedLinks,
   SituationCheck,
   SituationChip,
   situationResult,
   useLayout,
-  useLiveApp,
   useLiveLayouts,
   WallZoom,
 } from './liveScreens';
@@ -34,7 +32,7 @@ import {
   type TreeCard,
   type TreeMap,
 } from './flowTreeModel';
-import { screenPage, screenWidthFor, WIREFRAME, type Device } from './planLook';
+import { screenWidthFor, WIREFRAME, type Device } from './planLook';
 import { Avatar, RemovedNotice, useText, type PromiseTarget } from './treeParts';
 
 export interface FilmstripProps extends FlowTreeProps {
@@ -70,6 +68,8 @@ interface Strip {
   show: (focus: Focus) => void;
   seek: (cardId: string) => void;
   seekJourney: (journeyId: string) => void;
+  /** Plays a journey: its real screens one after another (흐름 재생). */
+  play: (journeyId: string) => void;
   onChangePick?: (cardId: string) => void;
 }
 
@@ -85,6 +85,8 @@ export function Filmstrip(props: FilmstripProps) {
   const { map } = props;
   const [focus, setFocus] = useState<Focus | null>(null);
   const [notice, setNotice] = useState(0);
+  // The journey being played (흐름 재생), over the board.
+  const [playing, setPlaying] = useState<string | null>(null);
   // What to bring into view next: a screen, or a whole journey (a step that goes through it).
   const [target, setTarget] = useState<{ cardId?: string; journeyId?: string; at: number } | null>(null);
   const wall = useRef<HTMLDivElement>(null);
@@ -161,6 +163,7 @@ export function Filmstrip(props: FilmstripProps) {
     show: setFocus,
     seek,
     seekJourney: (journeyId) => setTarget((current) => ({ journeyId, at: (current?.at ?? 0) + 1 })),
+    play: setPlaying,
     onChangePick: props.onChangePick,
   };
 
@@ -181,6 +184,19 @@ export function Filmstrip(props: FilmstripProps) {
         </WallZoom.Provider>
       </div>
       <FlowsPanel strip={strip} undecided={props.undecided ?? []} />
+      {playing && (
+        <FlowPlayer
+          map={map}
+          journeyId={playing}
+          device={device}
+          look={props.look}
+          onClose={() => setPlaying(null)}
+          onOpenCard={(personId, journeyId, cardId) => {
+            setPlaying(null);
+            open(personId, journeyId, cardId);
+          }}
+        />
+      )}
       <ZoomControls zoom={zoom} />
       <SituationCheck map={map} />
       {notice > 0 && (
@@ -424,6 +440,16 @@ function JourneyTitle({ person, journey, strip }: { person: Person; journey: Jou
         className="-ml-1.5 cursor-pointer rounded-md px-1.5 text-left text-title font-semibold transition-colors hover:bg-hover"
       >
         {text(journey.title)}
+      </button>
+      <button
+        type="button"
+        aria-label={t.playJourney(text(journey.title))}
+        title={t.playFlow}
+        onClick={() => strip.play(journey.id)}
+        className="flex h-6 cursor-pointer items-center gap-1 self-center rounded-full border border-line bg-canvas-raised px-2 text-meta text-fg-muted transition-colors hover:border-interactive hover:text-fg"
+      >
+        <Play size={10} aria-hidden className="fill-current" />
+        {t.playFlow}
       </button>
       <span className="text-meta text-fg-muted">
         {strip.planning
@@ -750,17 +776,26 @@ function FlowsPanel({ strip, undecided }: { strip: Strip; undecided: string[] })
           <div key={person.id} className="flex flex-col gap-0.5">
             <p className="text-meta text-fg-muted">{text(person.name)}</p>
             {person.journeys.map((journey) => (
-              <button
-                key={journey.id}
-                type="button"
-                onClick={() => strip.seekJourney(journey.id)}
-                className="flex cursor-pointer items-center justify-between gap-2 rounded-md px-2 py-1 text-left hover:bg-hover"
-              >
-                <span className="min-w-0 truncate">{text(journey.title)}</span>
-                <span className="shrink-0 text-meta text-fg-faint tabular-nums">
-                  {journey.steps.filter((id) => map.cards[id] && hasScreenArea(map.cards[id]!)).length}
-                </span>
-              </button>
+              <span key={journey.id} className="group flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => strip.seekJourney(journey.id)}
+                  className="flex min-w-0 grow cursor-pointer items-center justify-between gap-2 rounded-md px-2 py-1 text-left hover:bg-hover"
+                >
+                  <span className="min-w-0 truncate">{text(journey.title)}</span>
+                  <span className="shrink-0 text-meta text-fg-faint tabular-nums">
+                    {journey.steps.filter((id) => map.cards[id] && hasScreenArea(map.cards[id]!)).length}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  aria-label={t.playJourney(text(journey.title))}
+                  onClick={() => strip.play(journey.id)}
+                  className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-fg-faint hover:bg-hover hover:text-interactive"
+                >
+                  <Play size={11} aria-hidden className="fill-current" />
+                </button>
+              </span>
             ))}
           </div>
         ))}
@@ -822,68 +857,6 @@ function standing(card: TreeCard, strip: Strip) {
     dim: !!strip.lit && !strip.lit.has(card.id),
     fresh: card.id !== strip.making && strip.fresh.has(card.id),
   };
-}
-
-/**
- * What a frame shows: a capture of the running app, else the planned screen in the map's look (the look being tried,
- * while one is), else the sketch drawn from the code, else the empty frame with the screen's name.
- */
-function ScreenFace({
-  card,
-  device,
-  ratio,
-  look,
-  touched,
-}: {
-  card: TreeCard;
-  device: Device;
-  ratio: number;
-  look: string;
-  touched: boolean;
-}) {
-  const app = useLiveApp();
-  const screen = card.screen;
-  const face = !screen ? (
-    <span className="flex size-full items-center justify-center p-4 text-center text-meta text-fg-faint">
-      {card.title}
-    </span>
-  ) : screen.kind === 'planned' ? (
-    <HtmlFrame
-      html={screenPage(screen.src)}
-      title=""
-      pageWidth={screenWidthFor(screen.device ?? device)}
-      ratio={ratio}
-      theme={look}
-      inert
-    />
-  ) : (
-    <img src={screen.src} alt="" draggable={false} className="size-full object-contain object-top" />
-  );
-  return (
-    <>
-      <span
-        className={clsx('block size-full transition-[filter] duration-(--motion-panel)', touched && 'blur-[1.5px]')}
-      >
-        {app && card.path && card.kind === 'screen' ? (
-          <LiveScreen
-            cardId={card.id}
-            path={card.path}
-            device={device}
-            ratio={ratio}
-            title={card.title}
-            fallback={face}
-          />
-        ) : (
-          face
-        )}
-      </span>
-      {touched && (
-        <span aria-hidden className="motion-content absolute inset-0 bg-brand-blue/15">
-          <FallingSnow />
-        </span>
-      )}
-    </>
-  );
 }
 
 /** A screen's state as a dot and a word: what to fix, being built, real, or a drawing. */

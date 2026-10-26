@@ -18,6 +18,7 @@ import {
 import { ProductMap } from './ProductMap';
 import { boardScript } from './testBoard';
 import { toTreeMap } from './flowTreeData';
+import { STEP_MS } from './FlowPlayer';
 
 /**
  * The map shows the running app's own screens (planned ones are real code on made-up data): each frame opens the card's
@@ -294,6 +295,41 @@ describe('the live map', () => {
     await waitFor(async () => expect(Number((await frameOf('빵 고르기')).style.zoom)).toBeCloseTo(1 / 0.7));
     // The app inside still lays out at a phone's 390.
     expect((await frameOf('빵 고르기')).style.width).toBe('390px');
+  });
+
+  it('plays a journey as its real screens, the button that leads on outlined (흐름 재생)', async () => {
+    mount();
+    fireEvent.click((await screen.findAllByRole('button', { name: '빵 미리 예약하기 재생' }))[0]!);
+    const player = await screen.findByRole('dialog', { name: '흐름 재생' });
+    expect(within(player).getByRole('heading', { name: '빵 고르기' })).toBeTruthy();
+    expect(within(player).getByText(/^1\/3/)).toBeTruthy();
+    const frame = await frameOf('빵 고르기', player);
+    expect(frame.getAttribute('src')).toBe(`${RELAY}/order`);
+    report(frame, layout([{ to: 'time', label: '3개 골랐어요 · 다음', x: 20, y: 700, w: 350, h: 56 }]));
+    expect(await within(player).findByRole('img', { name: '‘3개 골랐어요 · 다음’ 버튼으로 가요' })).toBeTruthy();
+    fireEvent.click(within(player).getByRole('button', { name: '다음' }));
+    expect(await within(player).findByRole('heading', { name: '찾으러 올 시간' })).toBeTruthy();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '흐름 재생' })).toBeNull());
+  });
+
+  it('moves on by itself while it plays, and stops at the end', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      mount();
+      fireEvent.click((await screen.findAllByRole('button', { name: '빵 미리 예약하기 재생' }))[0]!);
+      const player = await screen.findByRole('dialog', { name: '흐름 재생' });
+      for (const title of ['찾으러 올 시간', '연락처 남기기']) {
+        await act(async () => {
+          vi.advanceTimersByTime(STEP_MS + 50);
+        });
+        expect(await within(player).findByRole('heading', { name: title })).toBeTruthy();
+      }
+      expect(within(player).getByText('여정이 여기서 끝나요')).toBeTruthy();
+      expect(within(player).getByRole('button', { name: '처음부터' })).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('says when the app stays blank, and restarts it fresh', async () => {

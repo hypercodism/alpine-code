@@ -1550,10 +1550,10 @@ describe('flows that call another flow (decision 19)', () => {
     await loaded();
     expect(document.querySelectorAll('svg path[marker-end]').length).toBeGreaterThan(0);
     const flows = screen.getByRole('navigation', { name: '흐름' });
-    const link = within(flows).getByRole('button', { name: new RegExp(calledTitle) });
+    const [link] = within(flows).getAllByRole('button', { name: new RegExp(`^${calledTitle}`) });
     const scrolled = vi.mocked(Element.prototype.scrollIntoView);
     scrolled.mockClear();
-    fireEvent.click(link);
+    fireEvent.click(link!);
     // It leads to that journey's row.
     await waitFor(() => expect(scrolled.mock.contexts).toContain(screen.getByRole('region', { name: calledTitle })));
   });

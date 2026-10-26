@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { BOARD, boardRanks, layoutBoard, route } from './boardLayout';
+import { flowWalk } from './FlowPlayer';
 import type { Journey, TreeCard, TreeMap } from './flowTreeModel';
 
 const card = (id: string, kind: TreeCard['kind'] = 'screen'): TreeCard => ({ id, title: id, kind, promises: [] });
@@ -157,5 +158,32 @@ describe('a screen nothing leads to', () => {
     };
     const board = layoutBoard(map, device);
     expect(board.nodes.lost!.x).toBeGreaterThan(board.nodes.time!.x);
+  });
+});
+
+describe('a journey as it is walked (흐름 재생)', () => {
+  it('plays a called journey in its place, once', () => {
+    const map: TreeMap = {
+      ...bakery,
+      people: [
+        { ...bakery.people[0]!, journeys: [journey('book', ['pick', 'flow:owner', 'done'])] },
+        { ...bakery.people[1]!, journeys: [journey('owner', ['orders', 'flow:book'])] },
+      ],
+    };
+    const steps = flowWalk(map, 'book');
+    expect(steps.map((step) => step.cardId)).toEqual(['pick', 'orders', 'done']);
+    expect(steps[1]!.person.id).toBe('owner');
+  });
+
+  it('shows a screen on the device of the journey the board draws it in, not the one walking it', () => {
+    const map: TreeMap = {
+      ...bakery,
+      people: [
+        { ...bakery.people[0]!, journeys: [journey('book', ['pick', 'time'])] },
+        { ...bakery.people[1]!, journeys: [journey('owner', ['pick', 'orders'], { device: 'computer' })] },
+      ],
+    };
+    const steps = flowWalk(map, 'owner');
+    expect(steps.map((step) => device(step.home))).toEqual(['phone', 'computer']);
   });
 });
