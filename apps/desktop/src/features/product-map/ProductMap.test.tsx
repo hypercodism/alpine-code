@@ -325,9 +325,9 @@ describe('living product map', () => {
     expect(screen.queryByRole('radio', { name: '카드 지도' })).toBeNull();
     expect(screen.queryByRole('radio', { name: '사람별 흐름' })).toBeNull();
     expect(screen.getAllByRole('region', { name: ORDER_FLOW.title })).toHaveLength(1);
-    // A step on two journeys has a screen on each.
+    // A step on two journeys is drawn once, where it is first walked; the other journey's arrow comes to it.
     await stepCard('결제');
-    expect(stepCards('결제')).toHaveLength(2);
+    expect(stepCards('결제')).toHaveLength(1);
     expect(localStorage.getItem('alpine.product-map.view')).toBeNull();
   });
   it('puts a screen picture on screen cards, a quiet note when there is none, and nothing on other cards', async () => {
@@ -1538,7 +1538,7 @@ describe("the user's own sentences (decision 16)", () => {
 });
 
 describe('flows that call another flow (decision 19)', () => {
-  it('draws the called flow as one card that leads to that flow', async () => {
+  it('draws a called flow as an arrow into its first screen, and the flows list leads to it', async () => {
     let calledTitle = '';
     mount(
       withBoard((board) => {
@@ -1548,7 +1548,9 @@ describe('flows that call another flow (decision 19)', () => {
       }),
     );
     await loaded();
-    const link = screen.getByRole('button', { name: `다른 흐름${calledTitle}` });
+    expect(document.querySelectorAll('svg path[marker-end]').length).toBeGreaterThan(0);
+    const flows = screen.getByRole('navigation', { name: '흐름' });
+    const link = within(flows).getByRole('button', { name: new RegExp(calledTitle) });
     const scrolled = vi.mocked(Element.prototype.scrollIntoView);
     scrolled.mockClear();
     fireEvent.click(link);

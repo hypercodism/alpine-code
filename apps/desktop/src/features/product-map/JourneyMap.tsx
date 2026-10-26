@@ -101,6 +101,7 @@ export function JourneyMap({
         <BlankAppNotice app={app} />
         <Filmstrip
           map={map}
+          undecided={board.undecided ?? []}
           planned={planned}
           making={making}
           onChangePick={onChangePick}

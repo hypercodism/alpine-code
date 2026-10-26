@@ -288,12 +288,12 @@ describe('the live map', () => {
     mount();
     const before = await frameOf('빵 고르기');
     expect(before.style.width).toBe('390px');
+    // The board starts a little zoomed out; the frame undoes it on itself.
+    expect(Number(before.style.zoom)).toBeCloseTo(1 / 0.85);
     fireEvent.click(screen.getByRole('button', { name: '작게' }));
-    await waitFor(async () => expect((await frameOf('빵 고르기')).style.zoom).not.toBe(''));
-    const after = await frameOf('빵 고르기');
-    // The frame undoes the wall's zoom on itself: the app inside still lays out at a phone's 390.
-    expect(after.style.width).toBe('390px');
-    expect(Number(after.style.zoom)).toBeCloseTo(1 / 0.85);
+    await waitFor(async () => expect(Number((await frameOf('빵 고르기')).style.zoom)).toBeCloseTo(1 / 0.7));
+    // The app inside still lays out at a phone's 390.
+    expect((await frameOf('빵 고르기')).style.width).toBe('390px');
   });
 
   it('says when the app stays blank, and restarts it fresh', async () => {

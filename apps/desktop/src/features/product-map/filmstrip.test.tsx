@@ -122,7 +122,7 @@ afterEach(() => {
 });
 
 describe('the filmstrip', () => {
-  it('lays a phone journey out as frames in a row and a computer journey as windows one under another', async () => {
+  it("draws a lane per person, a journey's screens numbered in walk order, at the size of its device", async () => {
     mount(blog('built'));
     const visitor = await screen.findByRole('region', { name: '방문자' });
     expect(within(visitor).getByText('휴대폰')).toBeTruthy();
@@ -134,32 +134,31 @@ describe('the filmstrip', () => {
       '글 읽기 열기',
       '댓글 달기 열기',
     ]);
-    expect(within(reading).queryByText('다음')).toBeNull();
+    // Each screen with its number over it, in the order it is walked.
+    expect(
+      within(reading)
+        .getAllByText(/^0[1-3]$/)
+        .map((number) => number.textContent),
+    ).toEqual(['01', '02', '03']);
 
     const writer = screen.getByRole('region', { name: '글쓴이' });
     expect(within(writer).getByText('컴퓨터')).toBeTruthy();
     const writing = within(writer).getByRole('region', { name: '글 써서 올리기' });
-    // A browser window per screen, with its address, and a quiet 다음 between them.
-    expect(within(writing).getAllByText('다음')).toHaveLength(2);
-    expect(within(writing).getByText('/write')).toBeTruthy();
-    // Built screens are real.
+    // Built screens are real, and a computer's screens are wider than a phone's.
     expect(within(writing).getAllByText('실제 화면')).toHaveLength(3);
-    // The words beside a window go under it when the map is too narrow for both, never past its edge.
-    const row = writing.querySelector('[data-card]')!;
-    expect(row.className).toContain('flex-wrap');
-    expect(row.querySelector('[data-caption]')!.className).toMatch(/\bflex-1\b.*\bmin-w-60\b|\bmin-w-60\b.*\bflex-1\b/);
+    const phone = Number.parseFloat(opens(reading)[0]!.style.width);
+    const computer = Number.parseFloat(opens(writing)[0]!.style.width);
+    expect(computer).toBeGreaterThan(phone);
   });
 
-  it('shows three screens of a long phone journey and a tile for the rest, which opens the row', async () => {
+  it('shows every screen of a long journey side by side, with an arrow from each to the next', async () => {
     const titles = ['첫 화면', '빵 고르기', '찾으러 올 시간', '연락처 남기기', '예약 확인', '예약 완료'];
     mount(codeMap(titles.map((title, index) => screenNode(`s${index}`, title))));
     const row = await screen.findByRole('region', { name: '빵 미리 예약하기' });
-    expect(opens(row)).toHaveLength(3);
-    const more = within(row).getByRole('button', { name: /^화면 3개 더/ });
-    for (const title of ['연락처 남기기', '예약 확인', '예약 완료']) expect(within(more).getByText(title)).toBeTruthy();
-    fireEvent.click(more);
     expect(opens(row).map((button) => button.getAttribute('aria-label'))).toEqual(titles.map((t) => `${t} 열기`));
-    expect(within(row).queryByRole('button', { name: /^화면 \d+개 더/ })).toBeNull();
+    const lefts = opens(row).map((button) => Number.parseFloat(button.closest<HTMLElement>('[data-card]')!.style.left));
+    expect(lefts).toEqual([...lefts].sort((a, b) => a - b));
+    expect(document.querySelectorAll('svg path[marker-end]').length).toBeGreaterThanOrEqual(titles.length - 1);
   });
 
   it('puts a step with nothing to see in its place as a low card, which opens like a screen', async () => {
@@ -171,13 +170,15 @@ describe('the filmstrip', () => {
       ]),
     );
     const card = await screen.findByRole('button', { name: '문자 보내기 열기' });
+    // In the strip under its journey's row of what has no screen.
+    expect(card.closest('[role="group"], section')).toBeTruthy();
     expect(within(card).getByText('화면 없음')).toBeTruthy();
     expect(card.querySelector('img, iframe')).toBeNull();
     fireEvent.click(card);
     expect(within(await screen.findByRole('dialog')).getByRole('heading', { name: '문자 보내기' })).toBeTruthy();
   });
 
-  it('follows a fork with its ways as small rows, and says a way back in one line', async () => {
+  it('draws a fork as two arrows with their words, and says a way back under its card', async () => {
     mount(
       codeMap(
         [
@@ -196,15 +197,15 @@ describe('the filmstrip', () => {
         },
       ),
     );
-    const row = await screen.findByRole('region', { name: '빵 미리 예약하기' });
-    const ways = within(row)
-      .getAllByRole('button')
-      .filter((button) => /했으면/.test(button.textContent ?? ''));
-    expect(ways.map((way) => way.textContent)).toEqual(['로그인했으면→빵 고르기', '안 했으면→로그인']);
-    expect(within(row).getByText('← 첫 화면으로')).toBeTruthy();
+    await screen.findByRole('region', { name: '빵 미리 예약하기' });
+    for (const words of ['로그인했으면', '안 했으면']) expect(screen.getByText(words)).toBeTruthy();
+    expect(document.querySelectorAll('svg path[marker-end]')).toHaveLength(3);
+    // The way back is a line under the card it leaves, which brings that screen into view.
+    const back = screen.getByRole('button', { name: '← 첫 화면으로' });
+    expect(back.getAttribute('title')).toBe('처음으로');
     vi.mocked(Element.prototype.scrollIntoView).mockClear();
-    fireEvent.click(ways[1]!);
-    await waitFor(() => expect(scrolledTo()).toContain('login'));
+    fireEvent.click(back);
+    await waitFor(() => expect(scrolledTo()).toContain('home'));
   });
 
   it('outlines the card a question is about and brings it into view, without snow on it', async () => {
