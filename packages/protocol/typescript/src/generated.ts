@@ -879,6 +879,7 @@ export interface DevServerInfo {
   command: string;
   port: number;
   url?: string | null;
+  boardUrl?: string | null;
   processId?: string | null;
   status: 'starting' | 'running' | 'stopping' | 'stopped' | 'failed';
   external?: boolean;
@@ -1123,6 +1124,217 @@ export interface FeatureFile {
   example?: string;
   howToTry?: string;
   /**
+   * @maxItems 20
+   */
+  states?:
+    | []
+    | [ScreenState]
+    | [ScreenState, ScreenState]
+    | [ScreenState, ScreenState, ScreenState]
+    | [ScreenState, ScreenState, ScreenState, ScreenState]
+    | [ScreenState, ScreenState, ScreenState, ScreenState, ScreenState]
+    | [ScreenState, ScreenState, ScreenState, ScreenState, ScreenState, ScreenState]
+    | [ScreenState, ScreenState, ScreenState, ScreenState, ScreenState, ScreenState, ScreenState]
+    | [ScreenState, ScreenState, ScreenState, ScreenState, ScreenState, ScreenState, ScreenState, ScreenState]
+    | [
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState
+      ]
+    | [
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState
+      ]
+    | [
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState
+      ]
+    | [
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState
+      ]
+    | [
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState
+      ]
+    | [
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState
+      ]
+    | [
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState
+      ]
+    | [
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState
+      ]
+    | [
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState
+      ]
+    | [
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState
+      ]
+    | [
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState
+      ]
+    | [
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState
+      ];
+  /**
    * @maxItems 60
    */
   conditions?: FlowCondition[];
@@ -1344,12 +1556,27 @@ export interface FeatureFile {
   tentative?: boolean;
 }
 /**
+ * A situation a screen must handle besides the ordinary one (nothing to show, an error, sold out, not allowed...).
+ * The running app shows it at the screen's address with ``?alpine-state=<id>`` on made-up data, so the map can show
+ * every situation as a real screen.
+ *
+ * This interface was referenced by `AlpineProtocol`'s JSON-Schema
+ * via the `definition` "ScreenState".
+ */
+export interface ScreenState {
+  id: string;
+  title: string;
+  why?: string;
+  handled?: boolean;
+}
+/**
  * This interface was referenced by `AlpineProtocol`'s JSON-Schema
  * via the `definition` "FlowCondition".
  */
 export interface FlowCondition {
   id: string;
   expectation: string;
+  state?: string | null;
 }
 /**
  * This interface was referenced by `AlpineProtocol`'s JSON-Schema
@@ -2188,7 +2415,8 @@ export interface FlowEdge {
 }
 /**
  * The user rewrites one sentence of a card in the app. Alpine writes it into the card file and records it as the
- * user's own (decision 16). An empty ``value`` removes a promise or clears ``how_to_try``.
+ * user's own (decision 16). An empty ``value`` removes a promise or clears ``how_to_try``. ``state`` only drops a
+ * situation the person does not want (``condition_id`` is its id, ``value`` empty), with its promises.
  *
  * This interface was referenced by `AlpineProtocol`'s JSON-Schema
  * via the `definition` "FlowEditParams".
@@ -2196,7 +2424,7 @@ export interface FlowEdge {
 export interface FlowEditParams {
   cwd: string;
   nodeId: string;
-  field: 'title' | 'how_to_try' | 'promise';
+  field: 'title' | 'how_to_try' | 'promise' | 'state';
   conditionId?: string | null;
   value?: string;
 }
@@ -2221,6 +2449,240 @@ export interface FlowFile {
    * @maxItems 400
    */
   edges?: FlowEdge[];
+  /**
+   * @maxItems 20
+   */
+  situations?:
+    | []
+    | [FlowSituation]
+    | [FlowSituation, FlowSituation]
+    | [FlowSituation, FlowSituation, FlowSituation]
+    | [FlowSituation, FlowSituation, FlowSituation, FlowSituation]
+    | [FlowSituation, FlowSituation, FlowSituation, FlowSituation, FlowSituation]
+    | [FlowSituation, FlowSituation, FlowSituation, FlowSituation, FlowSituation, FlowSituation]
+    | [FlowSituation, FlowSituation, FlowSituation, FlowSituation, FlowSituation, FlowSituation, FlowSituation]
+    | [
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation
+      ]
+    | [
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation
+      ]
+    | [
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation
+      ]
+    | [
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation
+      ]
+    | [
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation
+      ]
+    | [
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation
+      ]
+    | [
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation
+      ]
+    | [
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation
+      ]
+    | [
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation
+      ]
+    | [
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation
+      ]
+    | [
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation
+      ]
+    | [
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation
+      ]
+    | [
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation
+      ];
+}
+/**
+ * A situation of a whole journey, not of one screen: the connection drops halfway, the sign-in expires, someone
+ * else books the last slot first, the person comes back from a link or presses back. It is seen on one screen, as one
+ * of that screen's ``states`` with the same id.
+ *
+ * This interface was referenced by `AlpineProtocol`'s JSON-Schema
+ * via the `definition` "FlowSituation".
+ */
+export interface FlowSituation {
+  id: string;
+  title: string;
+  why?: string;
+  screen?: string | null;
 }
 /**
  * This interface was referenced by `AlpineProtocol`'s JSON-Schema
@@ -2301,6 +2763,226 @@ export interface ProductFlow {
    * @maxItems 400
    */
   edges?: FlowEdge[];
+  /**
+   * @maxItems 20
+   */
+  situations?:
+    | []
+    | [FlowSituation]
+    | [FlowSituation, FlowSituation]
+    | [FlowSituation, FlowSituation, FlowSituation]
+    | [FlowSituation, FlowSituation, FlowSituation, FlowSituation]
+    | [FlowSituation, FlowSituation, FlowSituation, FlowSituation, FlowSituation]
+    | [FlowSituation, FlowSituation, FlowSituation, FlowSituation, FlowSituation, FlowSituation]
+    | [FlowSituation, FlowSituation, FlowSituation, FlowSituation, FlowSituation, FlowSituation, FlowSituation]
+    | [
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation
+      ]
+    | [
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation
+      ]
+    | [
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation
+      ]
+    | [
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation
+      ]
+    | [
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation
+      ]
+    | [
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation
+      ]
+    | [
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation
+      ]
+    | [
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation
+      ]
+    | [
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation
+      ]
+    | [
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation
+      ]
+    | [
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation
+      ]
+    | [
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation
+      ]
+    | [
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation,
+        FlowSituation
+      ];
 }
 /**
  * A card as the app sees it: the agent's file plus the user's decisions and the session link Alpine keeps.
@@ -2328,6 +3010,217 @@ export interface FlowNode {
   sketch?: string | null;
   example?: string;
   howToTry?: string;
+  /**
+   * @maxItems 20
+   */
+  states?:
+    | []
+    | [ScreenState]
+    | [ScreenState, ScreenState]
+    | [ScreenState, ScreenState, ScreenState]
+    | [ScreenState, ScreenState, ScreenState, ScreenState]
+    | [ScreenState, ScreenState, ScreenState, ScreenState, ScreenState]
+    | [ScreenState, ScreenState, ScreenState, ScreenState, ScreenState, ScreenState]
+    | [ScreenState, ScreenState, ScreenState, ScreenState, ScreenState, ScreenState, ScreenState]
+    | [ScreenState, ScreenState, ScreenState, ScreenState, ScreenState, ScreenState, ScreenState, ScreenState]
+    | [
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState
+      ]
+    | [
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState
+      ]
+    | [
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState
+      ]
+    | [
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState
+      ]
+    | [
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState
+      ]
+    | [
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState
+      ]
+    | [
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState
+      ]
+    | [
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState
+      ]
+    | [
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState
+      ]
+    | [
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState
+      ]
+    | [
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState
+      ]
+    | [
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState,
+        ScreenState
+      ];
   /**
    * @maxItems 60
    */

@@ -9,8 +9,12 @@ The person described a product in a few words. They are not a developer: they de
 everything technical. The map is the plan they read and change; it is also the contract you will build against.
 
 They see the map, not its files. Talk to them in their language, about screens, promises and choices: never mention
-files, JSON, paths or code words to them ("지도에 적었어요", not "map.json에 썼어요"; "화면을 다 그렸어요", not "JSON이
+files, JSON, paths or code words to them ("지도에 적었어요", not "map.json에 썼어요"; "화면을 다 만들었어요", not "JSON이
 유효한지 확인했어요").
+
+The screens on the map are the product's real screens: you write them in the project's own code on made-up data, and
+the map shows the running app (see "Writing a screen"). A designer judges the plan by those screens and by the hard
+situations they handle; a drawing that only shows a good day is why people go back to their design tools.
 
 ## 1. Draw a first guess at once
 
@@ -24,15 +28,23 @@ Do not ask anything before the map exists. People fix a wrong picture more easil
 - **Steps**: one card per screen they pass through, in order, with `kind: "screen"` and `phase: "planned"`. Five to
   twelve screens in all is usual for a first product. A step that exists only if an open question goes one way gets
   `tentative: true`.
+- **Situations**: each screen card's `states`, the situations it must handle besides the ordinary one, in the
+  person's words: nothing there yet ("아직 글이 없을 때"), sold out or full, an error or no connection, not allowed or
+  not signed in, waiting for an answer, a very long name or a hundred items. Two to five for most screens; skip the
+  ones that cannot happen. Each is a real screen on the map (`?alpine-state=<id>`), so think them through the way a
+  good designer would: what the person sees, and what they can do next.
 - **Promises**: two to four conditions per card, in plain words, that you assume ("글 목록은 최신 글이 먼저 나온다",
-  "로그인하지 않아도 글을 읽을 수 있다"). They are what you will build and check later.
-- **A screen per card**: `.alpine-code/map/screens/<card id>.html` (see "Drawing a screen").
+  "로그인하지 않아도 글을 읽을 수 있다"), plus one for each situation (with `state` set to it: "글이 없으면 첫 글을
+  쓰자고 알려 준다"). They are what you will build and check later.
+- **A screen per card**: written in the project's code with its `path` (see "Writing a screen"). Install what the
+  project needs and start its dev server once, as the project's own instructions say; the map opens every screen
+  through it.
 - **What is left to decide**: `undecided` in map.json, each a short line in the person's words ("누가 글을 쓰나요",
   "댓글을 받을까요", "어떤 느낌으로 만들까요"). The look is always last.
 
 Think about what the best products of this kind do (see "References") and draw that, not the plainest version.
 Before the first screen, write the product's concept sentence and draw in the direction you would pick, as the
-design skill (`product-design`) says: the sketches already have the product's layout, not a neutral wireframe.
+design skill (`product-design`) says: the first screens already have the product's layout, not a neutral wireframe.
 Public pages need no sign-in unless the person asked for it. Write every word in the person's language.
 
 ## 2. Ask one question at a time
@@ -59,50 +71,58 @@ Ask how it should look with `ask_user`: two to four options that are different d
 imagery; see the design skill's "In the plan"), not colourways of one screen. Name each after a real product it takes
 after ("당근 참고", "Kinfolk 참고"), give it a `look` (the token values below), a `detail` saying what it feels like,
 and its own `html`: the product's most telling screen drawn in that direction. Once they pick, write the look to
-`.alpine-code/map/look.json` (the same keys) and drop the line from `undecided`. The app restyles every screen at once;
-if the picked direction's layout differs from the sketches, redraw them in it.
+`.alpine-code/map/look.json` (the same keys), drop the line from `undecided`, and restyle the code with it (the look's
+values as the project's theme): the map shows the running app, so every screen changes as you do. If the picked
+direction's layout differs from the screens, rework them in it.
 
 When `undecided` is empty and nothing is being asked, tell them in one short line that the plan is ready to build.
 Do not build until they say so.
 
-## Drawing a screen
+## Writing a screen
 
-A screen file is the `<body>` content of one screen, drawn with Tailwind 4 classes: a phone screen (390 px wide) for
-a phone journey, a desktop window (about 1280 px wide, with room for a side menu or a table) for a computer journey.
-A screen in both kinds of journey is drawn for the first one it appears in. Tailwind is loaded for you; add no
-`<script>`, `<link>` or `<style>`, and no images (a `bg-surface` block at the picture's real crop, with a short muted
-line of what goes there). Use only these tokens for colour, type and corners, so a look restyles it:
+Each planned screen is real code in the project, as the project's instructions say (its stack, its folders), reading
+made-up data. Four habits let the map show it, its situations and its links without you drawing anything:
 
-| Token | For |
-| --- | --- |
-| `bg-page`, `text-ink`, `text-muted` | background, main text, secondary text |
-| `bg-surface`, `border-line` | cards, inputs, dividers |
-| `bg-accent`, `text-on-accent`, `text-accent` | buttons, links, highlights |
-| `font-display`, `font-body` | titles, text |
-| `rounded-card` | cards and buttons |
+1. **An address per screen**: the card's `path` (`/order/time`) opens that screen directly, with nothing done before
+   it. A screen never needs an earlier screen to have run: it reads what it shows (the picked bread, the signed-in
+   owner) from the made-up data.
+2. **One made-up data module** (`src/fake.ts` or the stack's equivalent) that every screen reads through plain
+   functions (`todayBreads()`, `reservations()`), with real-sounding content: names, prices, dates, enough items to
+   read as real. `?alpine-state=<state id>` in the address picks a situation (`/order?alpine-state=sold-out`); without
+   it, the ordinary day. The build later replaces what is inside those functions, not the screens.
+3. **Marks the map reads**, plain attributes, no package:
+   - `data-alpine-screen="<card id>"` on the screen's outermost element;
+   - `data-alpine-to="<card id>"` on every button or link that moves to another screen (the map draws the arrow from
+     it, and tells the person when a planned arrow has no button);
+   - `data-alpine-promise="<condition id>"` on the element that keeps a promise (the price, the disabled day, the
+     empty message), so the map can pin the promise to it.
+4. **Every situation drawn for real**: an empty list says why it is empty and what to do; an error says what happened
+   and offers the way out; a sold-out item looks and behaves sold out. How each should look is in the design skill.
 
-Spacing, sizes and layout are plain Tailwind (`p-4`, `text-2xl`, `flex`, `grid-cols-2`). Use real, specific content
-(real-sounding titles, names, prices, dates), never lorem ipsum. Show the screen as someone would see it on a good day,
-with enough items to read as real (four posts, not one). How to make a screen look designed rather than generic
-(type scale, one primary action, varied compositions, the tells to avoid) is in the design skill.
-
-```html
-<header class="flex items-center justify-between border-b border-line px-4 py-3">
-  <span class="font-display text-lg text-ink">개발자의 기록</span>
-  <button class="rounded-card bg-accent px-3 py-1.5 text-sm text-on-accent">구독하기</button>
-</header>
-<main class="flex flex-col gap-3 p-4">
-  <article class="rounded-card border border-line bg-surface p-4">
-    <p class="text-xs text-muted">10월 18일 · 6분</p>
-    <h2 class="mt-1 font-display text-lg text-ink">Cloudflare D1에서 트랜잭션 없이 살아남기</h2>
-    <p class="mt-1 text-sm text-muted">batch로 묶어서 같은 효과를 내는 방법과 그 한계.</p>
-  </article>
-</main>
+```tsx
+export function Menu() {
+  const breads = todayBreads(); // from src/fake.ts; ?alpine-state=empty gives []
+  return (
+    <main data-alpine-screen="menu">
+      {breads.length === 0 ? (
+        <p data-alpine-promise="empty-note">오늘은 아직 빵이 없어요. 사장님이 올리면 바로 보여요.</p>
+      ) : (
+        breads.map((b) => <BreadRow key={b.id} bread={b} />)
+      )}
+      <button data-alpine-to="time" onClick={() => go("/order/time")}>다음</button>
+    </main>
+  );
+}
 ```
+
+Write the screens for the device of their journey (a phone screen around 390 px wide, a desktop window around 1280 px
+with room for a side menu or a table). How to make them look designed rather than generic is in the design skill.
+Planning stops at the screens: no real data, sign-in, payments or server work until the person says to build.
 
 ## Looks
 
-A look sets every token. Fonts that are always available in sketches: `'Pretendard Variable', Pretendard`,
+A look sets every token (the look question's previews are drawn with them, and the project's theme takes them).
+Fonts that are always available in the previews: `'Pretendard Variable', Pretendard`,
 `'SUIT Variable'`, `'Wanted Sans Variable'`, `'IBM Plex Sans KR'`, `'Gowun Dodum'`, `'Noto Serif KR'`,
 `'Gowun Batang'`, `'MaruBuri'`, `'Hahmlet'`, `'Nanum Myeongjo'`, `'Do Hyeon'`, `'Jua'`, `'JetBrains Mono'`; end each
 with a fallback (`sans-serif`, `serif`, `monospace`). Pairings are in the design skill. Starting points to adapt to
@@ -143,20 +163,21 @@ You edit the map's files as the map's own instructions say. For planning you als
 
 - `features/<id>.json`: `decisions` (product questions about the card and their answers) and `tentative`.
 - `map.json`: `undecided`.
-- `screens/<card id>.html` and `look.json`, next to `map.json`.
+- `features/<id>.json`: `path`, `states`, and `state` on a situation's conditions.
+- `look.json`, next to `map.json`.
 
 ## Building it
 
 When the person says to build, the map is the contract. Some things that help:
 
+- The screens already exist on made-up data. Building makes them real: data that is stored, sign-in, payments,
+  server work. Replace what is inside the made-up data functions, not the screens, and keep every address, situation
+  and mark: in development `?alpine-state=` still shows each situation, so the map keeps showing all of them.
 - The person watches the map while you build; it is how they see where you are. Move one card at a time, never all
-  at the end: before you start a screen's code, set its card's phase to `building` and list in its `sources` the
-  files you will write for it; the moment it works, set it `built` with its `path` and a `preview`, then go on to the
+  at the end: before you start a screen's work, set its card's phase to `building` and list in its `sources` the
+  files you will touch for it; the moment it works on real data, set it `built` with a `preview`, then go on to the
   next card.
-- Skeleton first, then flesh: make every screen reachable with its real layout and the plan's look, then make each
-  promise work, then polish.
-- Use the look's tokens as the product's own theme, so the built screens look like the planned ones, and follow the
-  design skill for type, pictures, states and the look-then-fix pass.
+- Follow the design skill for type, pictures, states and the look-then-fix pass.
 - Keep the person's words: the texts on the planned screens are the texts of the product.
 - Run the product and look at every screen you built before you call a card built.
 - What the person needs to try a screen themselves (where to sign in, a password you set, a test card) goes into its

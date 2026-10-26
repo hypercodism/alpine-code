@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from .processes import process_manager
+from .relay import Relay
 
 
 async def _command(*args: str) -> str:
@@ -162,6 +163,8 @@ class DevelopmentServer:
     worked: float | None = None
     quiet_since: float = field(default_factory=time.monotonic)
     gave_up: bool = False
+    # The map's way in (``relay``): open while the server runs, following it to whatever port it moved to.
+    relay: Relay | None = None
 
     async def snapshot(self) -> dict[str, Any]:
         if self.process_id:
@@ -198,12 +201,20 @@ class DevelopmentServer:
                     self.gave_up = True
                     status = "failed"
                     await process.stop()
+        if status == "running":
+            if self.relay is None:
+                self.relay = await Relay(self.port).start()
+            self.relay.target_port = self.port
+        elif self.relay is not None and status in {"stopped", "failed"}:
+            await self.relay.close()
+            self.relay = None
         return {
             "id": self.id,
             "cwd": self.cwd,
             "command": self.command,
             "port": self.port,
             "url": f"http://localhost:{self.port}" if status == "running" else None,
+            "board_url": self.relay.url if status == "running" and self.relay else None,
             "process_id": self.process_id,
             "external": self.external,
             "status": status,
@@ -324,6 +335,9 @@ class DevelopmentServerManager:
         if server.external:
             # Reused processes belong to their original launcher. Detach without signaling them.
             del self.servers[id]
+            if server.relay is not None:
+                await server.relay.close()
+                server.relay = None
             return {**await server.snapshot(), "status": "stopped", "url": None}
         await process_manager().get(server.process_id).stop()
         return await server.snapshot()

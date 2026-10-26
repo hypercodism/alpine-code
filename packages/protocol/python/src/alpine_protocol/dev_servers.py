@@ -13,6 +13,9 @@ class DevServerInfo(Message):
     command: str
     port: int
     url: str | None = None
+    board_url: str | None = None
+    """The same server through Alpine's relay, which adds the map's bridge script to every page (where each screen's
+    buttons and promises are). The map opens its screens here; ``None`` until the relay listens."""
     process_id: str | None = None
     status: Literal["starting", "running", "stopping", "stopped", "failed"]
     external: bool = False

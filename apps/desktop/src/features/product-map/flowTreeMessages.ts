@@ -124,6 +124,10 @@ export const flowTreeMessages = defineMessages({
     scopeOut: '안 함',
     openSession: '이 단계를 다룬 대화 보기',
     fixRequest: (title: string, promises: string) => `${title}에서 지켜지지 않는 약속을 고쳐 주세요: ${promises}`,
+    makeSituationRequest: (title: string, situation: string, why: string) =>
+      `${title} 화면에 "${situation}" 상황을 만들어 주세요.${why ? ` 지금은 ${why}` : ''} 이 상황에서 무엇이 보이고 무엇을 할 수 있는지 정하고, 지도에서 실제 화면으로 볼 수 있게 해 주세요.`,
+    fixSituationRequest: (title: string, situation: string) =>
+      `${title} 화면의 "${situation}" 상황이 보통 때와 똑같이 보여요. 이 상황이 실제로 화면에 나오게 고쳐 주세요.`,
     findStepsRequest: (title: string) => `${title} 여정의 단계를 코드에서 찾아 지도에 넣어 주세요.`,
     addJourneyRequest: (title: string, goal: string) => `새 여정 "${title}"을(를) 지도에 넣어 주세요. ${goal}`.trim(),
     addPersonRequest: (name: string) => `"${name}"이(가) 걷는 여정을 찾아 지도의 여정마다 actor로 묶어 주세요.`,
@@ -289,6 +293,10 @@ export const flowTreeMessages = defineMessages({
     scopeOut: 'Not doing',
     openSession: 'Open the conversation on this step',
     fixRequest: (title: string, promises: string) => `Fix the promises ${title} does not keep: ${promises}`,
+    makeSituationRequest: (title: string, situation: string, why: string) =>
+      `Make the situation "${situation}" on ${title}.${why ? ` Today: ${why}` : ''} Decide what the person sees and can do then, and make it show as a real screen on the map.`,
+    fixSituationRequest: (title: string, situation: string) =>
+      `The situation "${situation}" on ${title} looks the same as usual. Make it really show on the screen.`,
     findStepsRequest: (title: string) =>
       `Find the steps of the journey "${title}" in the code and add them to the map.`,
     addJourneyRequest: (title: string, goal: string) => `Add the journey "${title}" to the map. ${goal}`.trim(),

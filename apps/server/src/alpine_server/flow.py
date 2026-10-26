@@ -330,14 +330,15 @@ def _build_state(project: dict, sessions: list) -> str:
 
 
 def planning_files(cwd: Path) -> list[Path]:
-    """The map's folder while its product is being planned (the map began as a plan and no build has started): the
-    map conversation writes there without asking, since the map is the plan, not code."""
+    """The project while its product is being planned (the map began as a plan and no build has started): the map
+    conversation writes there without asking, since planning writes the product's screens as real code on made-up data
+    in a project Alpine just made, as well as the map itself."""
     try:
         root = folder(str(cwd))
         project = map_state.load_project(root)
         if not project.get("planned") or project.get("buildSession"):
             return []
-        return [inside(root, MAP_DIR)]
+        return [root]
     except (OSError, ValueError, MethodError):
         return []
 
@@ -532,7 +533,9 @@ def edit_flow(params: FlowEditParams) -> FlowGetResult:
         value = " ".join(params.value.split()) if params.field == "title" else params.value.strip()
         raw = _raw_card(root, card.id)
         state = map_state.load_card(root, card.id)
-        if params.field == "promise":
+        if params.field == "state":
+            _drop_situation(root, layout, raw, state, params.condition_id or "", value)
+        elif params.field == "promise":
             condition_id = _set_promise_text(raw, params.condition_id, value)
             _write_card(root, raw)
             witness = map_state.load_witness(root)
@@ -550,6 +553,36 @@ def edit_flow(params: FlowEditParams) -> FlowGetResult:
         state["title"] = raw.get("title", card.title)
         map_state.save_card(root, card.id, state)
         return _result(root, read_layout(root))
+
+
+def _drop_situation(root: Path, layout: Layout, raw: dict, state: dict, situation: str, value: str) -> None:
+    """The person does not want a situation (a proposal, usually): it goes from the card with its promises and their
+    checks, and from the journeys that point at it."""
+    states = raw.get("states") or []
+    if value or not any(item.get("id") == situation for item in states):
+        raise MethodError(APP_ERROR, "Unknown situation", "invalid_flow")
+    raw["states"] = [item for item in states if item.get("id") != situation]
+    gone = {item.get("id") for item in raw.get("conditions") or [] if item.get("state") == situation}
+    raw["conditions"] = [item for item in raw.get("conditions") or [] if item.get("id") not in gone]
+    raw["checks"] = [item for item in raw.get("checks") or [] if item.get("conditionId") not in gone]
+    _write_card(root, raw)
+    for condition_id in gone:
+        state["promises"].pop(condition_id, None)
+    for flow in layout.flows:
+        if not any(item.id == situation and item.screen == raw.get("id") for item in flow.situations):
+            continue
+        path = lpath(root, f"{FLOWS}/{flow.id}.json")
+        try:
+            flow_raw = copy.deepcopy(json.loads(read_bytes(path).decode("utf-8")))
+            flow_raw["situations"] = [
+                item
+                for item in flow_raw.get("situations") or []
+                if not (item.get("id") == situation and item.get("screen") == raw.get("id"))
+            ]
+            FlowFile.model_validate(flow_raw)
+        except (OSError, ValueError, AttributeError, ValidationError):
+            continue
+        atomic(path, dump(flow_raw))
 
 
 def review_flow(params: FlowReviewParams) -> FlowGetResult:
@@ -898,7 +931,10 @@ Draw the map as a TF (the user chose this for map drawing): read only enough fir
 existing map and `unmapped`) to split the product into parts that can be mapped apart (doors, kinds of users, product
 areas), then propose a TF with the task_force tool right away: agents that each map one part into card and flow
 files, followed by agents that review and join the parts (shared doors reused rather than drawn twice, flows calling
-each other, `unmapped` kept true). Give every agent these same rules and the part it owns, so two agents never write
+each other, `unmapped` kept true), and one agent that walks every screen and journey through the situations skill below
+and records what is missing: the situations the code handles that no card lists yet, and the ones a product like this
+must handle that the code does not (`"handled": false`). Give every agent these same rules and the part it owns,
+so two agents never write
 the same file. Do not draw the map yourself before the TF; when its result comes, fix what it left inconsistent.
 If the user chooses to go without it, or the task_force tool is not offered, draw the map yourself.
 """
@@ -933,6 +969,13 @@ realistic styling) saved under .alpine-code/map/sketches/ and store its project-
 labels it as drawn. Never put a drawing in `preview`, and capture a real screenshot once a tool allows.
 When you know where a screen lives in the running app, write it in the card's `path`: the address inside the app
 (`/reservations`), a path only, so the app can open that screen.
+For a screen, list in `states` the situations it handles besides the ordinary one that the code shows (nothing there
+yet, an error, sold out, not allowed), each with an `id` and a `title` in the user's words; a promise about one of
+them carries its `state`. A situation the product should handle but the code does not yet gets `"handled": false`
+and a `why` saying what happens today: it is a proposal for the user, never a promise of what the code does. A
+situation of a whole journey (the connection drops halfway, someone else takes the last slot) goes in the flow's
+`situations` with the `screen` where it is seen, which lists the same id in its `states`. Where the app shows a
+situation at `?alpine-state=<id>`, the map shows it as a screen of its own.
 When trying a card needs something a person would not know (a test account, keys, seed data, a command, a running
 server), write it in `howToTry` in plain words.
 Phase: built means implemented, NOT verified; new branches start planned; use building while actually working.
@@ -1031,14 +1074,15 @@ check gets a blocked check that says why.
 _NO_CHECKS = "Do not record checks: checking promises is a separate step the user starts from the map.\n"
 
 _BUILD = """\
-Build the whole planned product now. The map is the contract: its promises are what done means. The person watches
-the map while you build, so let it move with your work, one card at a time, never all at the end: before you start a
-screen's code, set its card's phase to building and list in its `sources` the files you will write for it (each one
-written or opened in this session); the moment it works, write its `path` (the address inside the running app that
-shows that screen, such as `/reservations`, a path only, so the app can open it), capture its `preview` (a real
-screenshot, project-relative, never under .alpine-code/), look at it as the design skill below says, fix what fails,
-and set it built. Then the next card. Choose your own order: with every journey in hand, design the data and
-structure for all of them first.
+Build the whole planned product now. The map is the contract: its promises are what done means. The planned screens
+already run on made-up data: make them real (stored data, sign-in, payments, server work) by replacing what is inside
+the made-up data functions, keeping every screen's address, situations and marks as the planning skill says. The person
+watches the map while you build, so let it move with your work, one card at a time, never all at the end: before you
+start a screen's work, set its card's phase to building and list in its `sources` the files you will touch for it
+(each one written or opened in this session); the moment it works on real data, check that its `path` still opens it,
+capture its `preview` (a real screenshot, project-relative, never under .alpine-code/), look at it as the design skill
+below says, fix what fails, and set it built. Then the next card. Choose your own order: with every journey in hand,
+design the data and structure for all of them first.
 When a product question comes up that the map does not answer, do not stop: take the pick you would recommend, record
 it on the card as a decision with "by": "ai" (with the options you weighed), and go on. Stop to ask with ask_user only
 when no sensible default exists.
@@ -1052,14 +1096,20 @@ Finish with one short line: what was built, how many promises were checked, and 
 PLANNING_SKILL = "product-planning"
 #: The skill sent with every planning and building request: how the product should look is decided in both.
 DESIGN_SKILL = "product-design"
+#: The skill sent wherever screens and journeys are planned, drawn or built: finding every situation besides the usual
+#: day is the AI's job, so the person never has to list them.
+SITUATIONS_SKILL = "product-situations"
 
 _PLAN = """\
-The product does not exist yet: plan it with the person on this map before anything is built, as the planning skill
-below says, and give it a look of its own as the design skill below says. Draw the first map now, then ask what is
-left with ask_user, one question per turn. Write cards with phase planned, kind screen for screens, conditions for the
-promises you assume, no sources and no checks. Give each flow a `device` (phone or computer) and draw a computer
-journey's screens at desktop width. Do not write product code, install anything or start servers until the person
-says to build.
+The product does not exist yet: plan it with the person on this map before it is built, as the planning skill below
+says, and give it a look of its own as the design skill below says. The planned screens are real: write each one in
+the project's own code on made-up data, with its address, its situations and the marks the map reads, and start the
+project's dev server once in the background, so the map shows the running app. Make the first screens now, then walk
+every screen and journey for its situations as the situations skill below says and make each one real, then ask what
+is left with ask_user, one question per turn. Write cards with phase planned, kind screen for screens, their
+`path`, their `states` (the situations besides the ordinary one) and conditions for the promises you assume, no
+checks. Give each flow a `device` (phone or computer) and write a computer journey's screens at desktop width. Do not
+build the real thing (stored data, sign-in, payments, server work) until the person says to build.
 """
 
 
@@ -1147,13 +1197,17 @@ def _prompt(params: FlowPrepareParams, selected: str | None, board: FlowGetResul
             extra += "Sources never opened by the sessions that wrote these cards (open them, or remove them):\n"
             extra += "".join(f"- {cid}: {', '.join(unread[cid][:10])}\n" for cid in shown[:20])
     if params.action == "plan":
-        body = _PLAN + _skills(PLANNING_SKILL, DESIGN_SKILL)
+        body = _PLAN + _skills(PLANNING_SKILL, DESIGN_SKILL, SITUATIONS_SKILL)
     elif params.action == "build":
-        body = _BUILD + _CHECKS.replace("SESSION", params.session_id) + _skills(DESIGN_SKILL)
+        body = _BUILD + _CHECKS.replace("SESSION", params.session_id) + _skills(DESIGN_SKILL, SITUATIONS_SKILL)
     elif params.action == "discover":
-        body = _CARDS + _DISCOVER + _CHECKS.replace("SESSION", params.session_id)
-    elif params.action in ("sync", "reshape"):
+        body = _CARDS + _DISCOVER + _CHECKS.replace("SESSION", params.session_id) + _skills(SITUATIONS_SKILL)
+    elif params.action == "sync":
+        body = _CARDS + _NO_CHECKS + _skills(SITUATIONS_SKILL)
+    elif params.action == "reshape":
         body = _CARDS + _NO_CHECKS
+    elif params.action == "extend":
+        body = _CARDS + _CHECKS.replace("SESSION", params.session_id) + _RECHECK + _skills(SITUATIONS_SKILL)
     else:
         body = _CARDS + _CHECKS.replace("SESSION", params.session_id) + _RECHECK
     return f"""{request}

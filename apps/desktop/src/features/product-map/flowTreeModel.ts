@@ -50,6 +50,27 @@ export interface TreePromise {
   question?: boolean;
   /** The person's call (set only by a person): how much it matters, and whether it is for now. */
   priority?: 'must' | 'should' | 'later';
+  /** For a screen: the situation (one of the card's `states`) this promise is about; empty for the ordinary one. */
+  state?: string | null;
+}
+
+/** A situation a screen must handle besides the ordinary one, shown as a real screen of its own (`?alpine-state=`). */
+export interface ScreenSituation {
+  id: string;
+  /** In the person's words: "빵이 하나도 없을 때". */
+  title: string;
+  why?: string;
+  /** False: the product should handle it but its code does not yet; shown as a proposal to take or drop. */
+  handled?: boolean;
+}
+
+/** A situation of a whole journey (the connection drops halfway, someone else books first), seen on one screen. */
+export interface JourneySituation {
+  id: string;
+  title: string;
+  why?: string;
+  /** The card where it is seen; that card lists a situation with the same id. */
+  screen: string | null;
 }
 
 /** What a card is, read from the code: something a person sees, an API, a library call, or work done on its own. */
@@ -84,10 +105,15 @@ export interface TreeCard {
   tentative?: boolean;
   /** How far it is made: planned, being built now, or built (implemented; not the same as checked). */
   phase?: 'planned' | 'building' | 'built' | null;
-  /** For a built screen: its address inside the running app (`/reservations`), so the app view can open it. */
+  /**
+   * For a screen: its address inside the running app (`/reservations`), so the map and the app view can open it. A
+   * planned screen has one too: it is real code on made-up data.
+   */
   path?: string | null;
   /** Product questions answered on this card, oldest first: by the person, or by the AI on its own. */
   picks?: CardPick[];
+  /** For a screen: the situations besides the ordinary one (nothing yet, sold out, an error...). */
+  states?: ScreenSituation[];
 }
 
 /** The journey holding the cards no journey holds yet, while the AI is still placing them. */
@@ -138,6 +164,8 @@ export interface Journey {
   edges?: { from: string; to: string; label: string }[];
   /** What the person uses it on; empty on maps made before devices, read as a phone. */
   device?: Device | null;
+  /** Situations of the whole journey, each seen on one of its screens. */
+  situations?: JourneySituation[];
 }
 
 export interface Person {

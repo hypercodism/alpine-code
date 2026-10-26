@@ -1572,6 +1572,43 @@ class FlowCondition(Message):
     id: str = Field(min_length=1, max_length=100, pattern=r"^[a-zA-Z0-9_-]+$")
     expectation: str = Field(min_length=1, max_length=2000)
     """Observable outcome under a specific condition, written for the user/caller."""
+    state: str | None = Field(default=None, max_length=60, pattern=r"^[a-z0-9][a-z0-9-]*$")
+    """For a screen: the situation (one of the card's ``states``) this promise is about; ``None`` is the ordinary one.
+    In the running app, the element that keeps the promise carries ``data-alpine-promise="<condition id>"``."""
+
+
+class ScreenState(Message):
+    """A situation a screen must handle besides the ordinary one (nothing to show, an error, sold out, not allowed...).
+    The running app shows it at the screen's address with ``?alpine-state=<id>`` on made-up data, so the map can show
+    every situation as a real screen."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1, max_length=60, pattern=r"^[a-z0-9][a-z0-9-]*$")
+    title: str = Field(min_length=1, max_length=80)
+    """In the person's words: "빵이 하나도 없을 때"."""
+    why: str = Field(default="", max_length=300)
+    """When it happens, if the title does not say it."""
+    handled: bool = True
+    """``False``: a situation the product should handle that its code does not yet (found while mapping an existing
+    product). The map shows it as a proposal the person takes ("만들어 줘") or drops; it is never shown at
+    ``?alpine-state=`` since there is nothing to show yet. A planned product's situations are all handled: they are
+    what the plan will build."""
+
+
+class FlowSituation(Message):
+    """A situation of a whole journey, not of one screen: the connection drops halfway, the sign-in expires, someone
+    else books the last slot first, the person comes back from a link or presses back. It is seen on one screen, as one
+    of that screen's ``states`` with the same id."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1, max_length=60, pattern=r"^[a-z0-9][a-z0-9-]*$")
+    title: str = Field(min_length=1, max_length=80)
+    """In the person's words: "예약하는 동안 마지막 자리가 먼저 팔렸을 때"."""
+    why: str = Field(default="", max_length=300)
+    screen: str | None = Field(default=None, max_length=100, pattern=r"^[a-zA-Z0-9_-]+$")
+    """The card where the person sees it; that card lists a state with this id."""
 
 
 class ObservationSource(Message):
@@ -1685,8 +1722,9 @@ class FeatureFile(Message):
     description: str = Field(default="", max_length=4000)
     kind: Literal["screen", "api", "sdk", "process", "data"] = "process"
     path: str | None = Field(default=None, max_length=200, pattern=r"^/([^/\s]\S*)?$")
-    """For a screen: its address inside the running app (``/reservations``), written when the screen is built, so the
-    app view can open that screen. A path only, never a scheme or host."""
+    """For a screen: its address inside the running app (``/reservations``), written as soon as the screen exists in
+    the code (planned screens are real code on made-up data), so the map and the app view can open that screen. A path
+    only, never a scheme or host."""
     tags: list[Annotated[str, Field(min_length=1, max_length=40)]] = Field(default_factory=list, max_length=50)
     """A few short words for finding the card: the product part or topic it belongs to (결제, 관리자). The agent's
     choice; there is no fixed list."""
@@ -1705,6 +1743,8 @@ class FeatureFile(Message):
     how_to_try: str = Field(default="", max_length=1000)
     """What a person needs to try this card themselves (a test account, keys, seed data, a command, a running
     server), in plain words. Written by the agent; the user may rewrite it in the app."""
+    states: list[ScreenState] = Field(default_factory=list, max_length=20)
+    """For a screen: the situations besides the ordinary one, each shown as its own real screen on the map."""
     conditions: list[FlowCondition] = Field(default_factory=list, max_length=60)
     checks: list[FlowCheck] = Field(default_factory=list, max_length=60)
     """One current check per condition; the server keeps the history of results."""
@@ -1721,6 +1761,11 @@ class FeatureFile(Message):
             raise ValueError("Duplicate condition id")
         if not set(linked) <= ids or len(set(linked)) != len(linked):
             raise ValueError("Unknown or duplicate condition check")
+        states = {state.id for state in self.states}
+        if len(states) != len(self.states):
+            raise ValueError("Duplicate state id")
+        if any(condition.state is not None and condition.state not in states for condition in self.conditions):
+            raise ValueError("A condition names a state the card does not have")
         return self
 
 
@@ -1781,6 +1826,8 @@ class ProductFlow(Message):
     edges: list[FlowEdge] = Field(default_factory=list, max_length=400)
     """This journey's own transitions. The same two cards may be joined differently in another flow (another door),
     so a flow is drawn with these, not with the map's merged ``edges``."""
+    situations: list[FlowSituation] = Field(default_factory=list, max_length=20)
+    """Situations of the whole journey, each seen on one of its screens."""
 
 
 class FlowFile(ProductFlow):
@@ -2126,13 +2173,14 @@ class FlowPromiseParams(Message):
 
 class FlowEditParams(Message):
     """The user rewrites one sentence of a card in the app. Alpine writes it into the card file and records it as the
-    user's own (decision 16). An empty ``value`` removes a promise or clears ``how_to_try``."""
+    user's own (decision 16). An empty ``value`` removes a promise or clears ``how_to_try``. ``state`` only drops a
+    situation the person does not want (``condition_id`` is its id, ``value`` empty), with its promises."""
 
     cwd: str
     node_id: str
-    field: Literal["title", "how_to_try", "promise"]
+    field: Literal["title", "how_to_try", "promise", "state"]
     condition_id: str | None = None
-    """For ``promise``: the promise to rewrite. None adds a new promise."""
+    """For ``promise``: the promise to rewrite. None adds a new promise. For ``state``: the situation to drop."""
     value: str = Field(default="", max_length=2000)
 
 

@@ -2787,6 +2787,17 @@
           ],
           "default": null
         },
+        "boardUrl": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "processId": {
           "anyOf": [
             {
@@ -3387,6 +3398,13 @@
           "maxLength": 1000,
           "type": "string"
         },
+        "states": {
+          "items": {
+            "$ref": "#/$defs/ScreenState"
+          },
+          "maxItems": 20,
+          "type": "array"
+        },
         "conditions": {
           "items": {
             "$ref": "#/$defs/FlowCondition"
@@ -3950,6 +3968,19 @@
           "maxLength": 2000,
           "minLength": 1,
           "type": "string"
+        },
+        "state": {
+          "anyOf": [
+            {
+              "maxLength": 60,
+              "pattern": "^[a-z0-9][a-z0-9-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -3995,7 +4026,7 @@
       "type": "object"
     },
     "FlowEditParams": {
-      "description": "The user rewrites one sentence of a card in the app. Alpine writes it into the card file and records it as the\nuser's own (decision 16). An empty ``value`` removes a promise or clears ``how_to_try``.",
+      "description": "The user rewrites one sentence of a card in the app. Alpine writes it into the card file and records it as the\nuser's own (decision 16). An empty ``value`` removes a promise or clears ``how_to_try``. ``state`` only drops a\nsituation the person does not want (``condition_id`` is its id, ``value`` empty), with its promises.",
       "properties": {
         "cwd": {
           "type": "string"
@@ -4007,7 +4038,8 @@
           "enum": [
             "title",
             "how_to_try",
-            "promise"
+            "promise",
+            "state"
           ],
           "type": "string"
         },
@@ -4093,6 +4125,13 @@
             "$ref": "#/$defs/FlowEdge"
           },
           "maxItems": 400,
+          "type": "array"
+        },
+        "situations": {
+          "items": {
+            "$ref": "#/$defs/FlowSituation"
+          },
+          "maxItems": 20,
           "type": "array"
         }
       },
@@ -4396,6 +4435,13 @@
           "default": "",
           "maxLength": 1000,
           "type": "string"
+        },
+        "states": {
+          "items": {
+            "$ref": "#/$defs/ScreenState"
+          },
+          "maxItems": 20,
+          "type": "array"
         },
         "conditions": {
           "items": {
@@ -4828,6 +4874,47 @@
         "field"
       ],
       "title": "FlowSetParams",
+      "type": "object"
+    },
+    "FlowSituation": {
+      "additionalProperties": false,
+      "description": "A situation of a whole journey, not of one screen: the connection drops halfway, the sign-in expires, someone\nelse books the last slot first, the person comes back from a link or presses back. It is seen on one screen, as one\nof that screen's ``states`` with the same id.",
+      "properties": {
+        "id": {
+          "maxLength": 60,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9-]*$",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 80,
+          "minLength": 1,
+          "type": "string"
+        },
+        "why": {
+          "default": "",
+          "maxLength": 300,
+          "type": "string"
+        },
+        "screen": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "pattern": "^[a-zA-Z0-9_-]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "id",
+        "title"
+      ],
+      "title": "FlowSituation",
       "type": "object"
     },
     "GitHubAccountInfo": {
@@ -6439,6 +6526,13 @@
           },
           "maxItems": 400,
           "type": "array"
+        },
+        "situations": {
+          "items": {
+            "$ref": "#/$defs/FlowSituation"
+          },
+          "maxItems": 20,
+          "type": "array"
         }
       },
       "required": [
@@ -7910,6 +8004,38 @@
         "message"
       ],
       "title": "RunStoppedItem",
+      "type": "object"
+    },
+    "ScreenState": {
+      "additionalProperties": false,
+      "description": "A situation a screen must handle besides the ordinary one (nothing to show, an error, sold out, not allowed...).\nThe running app shows it at the screen's address with ``?alpine-state=<id>`` on made-up data, so the map can show\nevery situation as a real screen.",
+      "properties": {
+        "id": {
+          "maxLength": 60,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9-]*$",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 80,
+          "minLength": 1,
+          "type": "string"
+        },
+        "why": {
+          "default": "",
+          "maxLength": 300,
+          "type": "string"
+        },
+        "handled": {
+          "default": true,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "title"
+      ],
+      "title": "ScreenState",
       "type": "object"
     },
     "ServerInfo": {

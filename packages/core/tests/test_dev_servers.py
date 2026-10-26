@@ -1,4 +1,5 @@
 """Real loopback listeners and subprocesses, isolated from the user's development servers."""
+
 import asyncio
 import shlex
 import socket
@@ -39,6 +40,14 @@ def test_lifecycle_deduplication_and_logs(tmp_path: Path):
             listed = await manager.list(str(tmp_path))
             assert listed[0]["status"] == "running"
             assert listed[0]["url"] == f"http://localhost:{port}"
+            # The map's way in: the same server through the relay, which adds the bridge to its pages.
+            assert listed[0]["board_url"].startswith("http://127.0.0.1:")
+            import urllib.request
+
+            page = await asyncio.to_thread(
+                lambda: urllib.request.urlopen(listed[0]["board_url"] + "/", timeout=5).read()
+            )
+            assert b"/__alpine/bridge.js" in page
             assert "Serving HTTP" in manager.logs(first["id"], 0, 65536)["text"]
             restarted = (await manager.restart(first["id"]))["server"]
             assert restarted["process_id"] != first["process_id"]
@@ -48,6 +57,7 @@ def test_lifecycle_deduplication_and_logs(tmp_path: Path):
             assert await listener(port) is None
         finally:
             await process_manager().shutdown()
+
     asyncio.run(check())
 
 
@@ -55,9 +65,17 @@ def test_external_project_ownership_and_detach(tmp_path: Path):
     async def check():
         manager = DevelopmentServerManager()
         port = free_port()
-        outside = await asyncio.create_subprocess_exec(sys.executable, "-m", "http.server", str(port),
-            "--bind", "127.0.0.1", cwd=tmp_path, stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL)
+        outside = await asyncio.create_subprocess_exec(
+            sys.executable,
+            "-m",
+            "http.server",
+            str(port),
+            "--bind",
+            "127.0.0.1",
+            cwd=tmp_path,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
         try:
             await ready(port)
             conflict = await manager.start(str(tmp_path), command(port), port)
@@ -76,6 +94,7 @@ def test_external_project_ownership_and_detach(tmp_path: Path):
         finally:
             outside.terminate()
             await outside.wait()
+
     asyncio.run(check())
 
 
@@ -83,14 +102,24 @@ def test_detect_actual_port_and_reject_unrelated_log_url(tmp_path: Path):
     async def check():
         manager = DevelopmentServerManager()
         requested, actual, unrelated = free_port(), free_port(), free_port()
-        outside = await asyncio.create_subprocess_exec(sys.executable, "-m", "http.server", str(unrelated),
-            "--bind", "127.0.0.1", cwd=tmp_path, stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL)
+        outside = await asyncio.create_subprocess_exec(
+            sys.executable,
+            "-m",
+            "http.server",
+            str(unrelated),
+            "--bind",
+            "127.0.0.1",
+            cwd=tmp_path,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
         try:
             await ready(unrelated)
-            source = (f"import http.server; print('http://localhost:{actual}', flush=True); "
-                      f"http.server.HTTPServer(('127.0.0.1',{actual}), http.server.SimpleHTTPRequestHandler)"
-                      ".serve_forever()")
+            source = (
+                f"import http.server; print('http://localhost:{actual}', flush=True); "
+                f"http.server.HTTPServer(('127.0.0.1',{actual}), http.server.SimpleHTTPRequestHandler)"
+                ".serve_forever()"
+            )
             cmd = f"{shlex.quote(sys.executable)} -u -c {shlex.quote(source)}"
             first = (await manager.start(str(tmp_path), cmd, requested))["server"]
             await ready(actual)
@@ -109,6 +138,7 @@ def test_detect_actual_port_and_reject_unrelated_log_url(tmp_path: Path):
             outside.terminate()
             await outside.wait()
             await process_manager().shutdown()
+
     asyncio.run(check())
 
 
@@ -116,14 +146,24 @@ def test_discovers_agent_launched_server_and_can_stop_it(tmp_path: Path):
     async def check():
         manager = DevelopmentServerManager()
         port, unrelated = free_port(), free_port()
-        outside = await asyncio.create_subprocess_exec(sys.executable, "-m", "http.server", str(unrelated),
-            "--bind", "127.0.0.1", cwd=tmp_path, stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL)
+        outside = await asyncio.create_subprocess_exec(
+            sys.executable,
+            "-m",
+            "http.server",
+            str(unrelated),
+            "--bind",
+            "127.0.0.1",
+            cwd=tmp_path,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
         try:
             await ready(unrelated)
-            source = (f"import http.server; print('http://localhost:{port}', flush=True); "
-                      f"http.server.HTTPServer(('127.0.0.1',{port}), http.server.SimpleHTTPRequestHandler)"
-                      ".serve_forever()")
+            source = (
+                f"import http.server; print('http://localhost:{port}', flush=True); "
+                f"http.server.HTTPServer(('127.0.0.1',{port}), http.server.SimpleHTTPRequestHandler)"
+                ".serve_forever()"
+            )
             cmd = f"{shlex.quote(sys.executable)} -u -c {shlex.quote(source)}"
             process = await process_manager().start(cmd, tmp_path, session_id="agent-session")
             fake_source = f"import time; print('http://localhost:{unrelated}',flush=True); time.sleep(30)"
@@ -148,6 +188,7 @@ def test_discovers_agent_launched_server_and_can_stop_it(tmp_path: Path):
             outside.terminate()
             await outside.wait()
             await process_manager().shutdown()
+
     asyncio.run(check())
 
 
@@ -189,6 +230,7 @@ def test_open_starts_the_project_once_and_shows_what_runs(tmp_path: Path):
         finally:
             busy.close()
             await process_manager().shutdown()
+
     asyncio.run(check())
 
 
@@ -235,8 +277,8 @@ def test_open_again_after_stop_finds_the_port_the_app_took_back(tmp_path: Path, 
             assert current["url"] == f"http://localhost:{first}"
         finally:
             await process_manager().shutdown()
-    asyncio.run(check())
 
+    asyncio.run(check())
 
 
 def test_port_reaches_every_step_of_the_command(tmp_path: Path):
@@ -255,6 +297,7 @@ def test_port_reaches_every_step_of_the_command(tmp_path: Path):
             await ready(port)
         finally:
             await process_manager().shutdown()
+
     asyncio.run(check())
 
 
@@ -293,6 +336,7 @@ def test_a_server_that_never_listens_fails_instead_of_starting_for_ever(tmp_path
             assert listed[installing["id"]]["status"] == "starting"
         finally:
             await process_manager().shutdown()
+
     asyncio.run(check())
 
 

@@ -20,6 +20,17 @@ import {
 } from './filmstripModel';
 import { CardDialog, type FlowTreeProps, type Focus } from './FlowTree';
 import {
+  LiveScreen,
+  missingButtons,
+  plannedLinks,
+  SituationCheck,
+  SituationChip,
+  situationResult,
+  useLayout,
+  useLiveApp,
+  useLiveLayouts,
+} from './liveScreens';
+import {
   hasScreenArea,
   isJourneyLink,
   tally,
@@ -66,7 +77,7 @@ interface Strip {
   touching?: ReadonlySet<string>;
   asked?: string | null;
   lit?: Set<string> | null;
-  open: (personId: string, journeyId: string, cardId: string) => void;
+  open: (personId: string, journeyId: string, cardId: string, state?: string | null) => void;
   /** Opens a person's or a journey's details (what holds, what to do next, grouping, adding). */
   show: (focus: Focus) => void;
   seek: (cardId: string) => void;
@@ -91,6 +102,7 @@ export function Filmstrip(props: FilmstripProps) {
   // What to bring into view next: a screen, or a whole journey (a step that goes through it).
   const [target, setTarget] = useState<{ cardId?: string; journeyId?: string; at: number } | null>(null);
   const wall = useRef<HTMLDivElement>(null);
+  const zoom = useWallZoom(wall);
   const wide = useWideScreens(map);
   const fresh = useJustBuilt(map);
 
@@ -99,8 +111,8 @@ export function Filmstrip(props: FilmstripProps) {
       for (const journey of person.journeys) if (journey.steps.includes(cardId)) return { person, journey };
     return null;
   };
-  const open = (personId: string, journeyId: string, cardId: string) =>
-    setFocus({ kind: 'step', personId, journeyId, cardId });
+  const open = (personId: string, journeyId: string, cardId: string, state?: string | null) =>
+    setFocus({ kind: 'step', personId, journeyId, cardId, state: state ?? null });
   // A screen the "more" tile holds opens its row first.
   const seek = (cardId: string) => {
     const holding = map.people
@@ -185,18 +197,22 @@ export function Filmstrip(props: FilmstripProps) {
         aria-label={t.label}
         className="min-h-0 min-w-0 grow overflow-auto bg-canvas-sunken px-10 pb-20 text-body text-fg"
       >
-        {map.people.map((one) => (
-          <PersonRows
-            key={one.id}
-            person={one}
-            strip={strip}
-            expanded={expanded}
-            onExpand={(journeyId) => setExpanded((current) => new Set(current).add(journeyId))}
-            device={(journey) => deviceOf(journey, map, wide)}
-          />
-        ))}
-        <AddButton onClick={() => setFocus({ kind: 'addPerson' })}>{tree.addPerson}</AddButton>
+        <div style={zoom.level === 1 ? undefined : { zoom: zoom.level }}>
+          {map.people.map((one) => (
+            <PersonRows
+              key={one.id}
+              person={one}
+              strip={strip}
+              expanded={expanded}
+              onExpand={(journeyId) => setExpanded((current) => new Set(current).add(journeyId))}
+              device={(journey) => deviceOf(journey, map, wide)}
+            />
+          ))}
+          <AddButton onClick={() => setFocus({ kind: 'addPerson' })}>{tree.addPerson}</AddButton>
+        </div>
       </div>
+      <ZoomControls zoom={zoom} />
+      <SituationCheck map={map} />
       {notice > 0 && (
         <RemovedNotice
           key={notice}
@@ -335,7 +351,29 @@ function JourneyRow({
               ? t.journeyPlanned(counts.screens, counts.promises)
               : t.journeyChecked(counts.screens, counts.promises, counts.checked)}
           </span>
+          <SituationsShown journey={journey} strip={strip} />
         </h3>
+      )}
+      {!loose && (journey.situations?.length ?? 0) > 0 && (
+        <div
+          role="group"
+          aria-label={t.journeySituations}
+          className="-mt-2 mb-4 ml-7.5 flex flex-wrap items-center gap-1.5"
+        >
+          <span className="text-meta text-fg-muted">{t.journeySituations}</span>
+          {journey.situations!.map((situation) => {
+            const screen = situation.screen ? strip.map.cards[situation.screen] : undefined;
+            const own = screen?.states?.find((one) => one.id === situation.id);
+            return (
+              <SituationChip
+                key={situation.id}
+                cardId={screen?.id ?? ''}
+                situation={own ?? { id: situation.id, title: situation.title, why: situation.why }}
+                onClick={() => screen && strip.open(person.id, journey.id, screen.id, situation.id)}
+              />
+            );
+          })}
+        </div>
       )}
       {device === 'computer' && !loose ? (
         <ComputerColumn person={person} journey={journey} steps={steps} strip={strip} />
@@ -382,7 +420,11 @@ function PhoneRow({
       {shown.map((step, index) => (
         <Fragment key={`${step.id}-${index}`}>
           {index > 0 &&
-            (loose ? <span className="w-6 shrink-0" /> : <Between before={shown[index - 1]!} strip={strip} />)}
+            (loose ? (
+              <span className="w-6 shrink-0" />
+            ) : (
+              <Between before={shown[index - 1]!} after={step} strip={strip} />
+            ))}
           <PhoneStep person={person} journey={journey} step={step} strip={strip} />
         </Fragment>
       ))}
@@ -412,8 +454,8 @@ function PhoneRow({
 }
 
 /** What joins two phone frames: an arrow, or after a screen that forks, its ways as small stacked rows. */
-function Between({ before, strip }: { before: FilmStep; strip: Strip }) {
-  if (!before.forks.length) return <Arrow />;
+function Between({ before, after, strip }: { before: FilmStep; after: FilmStep; strip: Strip }) {
+  if (!before.forks.length) return <LinkArrow from={before.id} to={after.id} strip={strip} />;
   return (
     <span className="flex h-100 w-36 shrink-0 flex-col justify-center gap-1.5 px-2">
       <Ways ways={before.forks} strip={strip} />
@@ -454,19 +496,46 @@ function AddButton({ onClick, children }: { onClick: () => void; children: React
   );
 }
 
-function Arrow() {
+function Arrow({ tone = 'quiet', label }: { tone?: 'quiet' | 'checked' | 'missing'; label?: string }) {
   return (
-    <span aria-hidden className="flex h-100 w-9 shrink-0 items-center justify-center text-fg-faint/60">
+    <span
+      aria-hidden={!label}
+      role={label ? 'img' : undefined}
+      aria-label={label}
+      title={label}
+      className={clsx(
+        'flex h-100 w-9 shrink-0 items-center justify-center',
+        tone === 'checked' ? 'text-interactive' : tone === 'missing' ? 'text-attention' : 'text-fg-faint/60',
+      )}
+    >
       <svg width="24" height="10" viewBox="0 0 24 10" fill="none">
         <path
           d="M1 5h21M18 1.5 22 5l-4 3.5"
           stroke="currentColor"
-          strokeWidth="1.2"
+          strokeWidth={tone === 'quiet' ? 1.2 : 1.6}
+          strokeDasharray={tone === 'missing' ? '3 3' : undefined}
           strokeLinecap="round"
           strokeLinejoin="round"
         />
       </svg>
     </span>
+  );
+}
+
+/**
+ * The arrow between two screens, checked against the real screen once it has been seen: the button that leads on
+ * (blue, its words as the arrow's label), or none (orange, dashed) when the plan has a way on the screen has no button
+ * for.
+ */
+function LinkArrow({ from, to, strip }: { from: string; to: string; strip: Strip }) {
+  const t = useMessages(messages);
+  const layout = useLayout(from);
+  if (!layout?.screen || !plannedLinks(strip.map).get(from)?.has(to)) return <Arrow />;
+  const button = layout.targets.find((target) => target.to === to);
+  return button ? (
+    <Arrow tone="checked" label={button.label} />
+  ) : (
+    <Arrow tone="missing" label={t.missingButton(stepTitle(strip.map, to))} />
   );
 }
 
@@ -561,6 +630,7 @@ function PhoneStep({
     >
       {look.making && <NightSky />}
       {look.fresh && <JustReal />}
+      {!look.making && (card.states?.length ?? 0) > 0 && <Deck />}
       <button
         type="button"
         aria-haspopup="dialog"
@@ -587,7 +657,12 @@ function PhoneStep({
           <ScreenFace card={card} device="phone" ratio={386 / 186} look={strip.look} touched={look.touched} />
         </span>
       </button>
-      <Caption card={card} step={step} strip={strip} />
+      <Caption
+        card={card}
+        step={step}
+        strip={strip}
+        onSituation={(state) => strip.open(person.id, journey.id, card.id, state)}
+      />
     </div>
   );
 }
@@ -664,7 +739,13 @@ function ComputerStep({
           <NoScreen card={card} outlined={look.touched || look.asked || look.making} onOpen={open} />
         </span>
       )}
-      <Caption card={card} step={step} strip={strip} wide />
+      <Caption
+        card={card}
+        step={step}
+        strip={strip}
+        wide
+        onSituation={(state) => strip.open(person.id, journey.id, card.id, state)}
+      />
     </div>
   );
 }
@@ -686,6 +767,7 @@ function ScreenFace({
   look: string;
   touched: boolean;
 }) {
+  const app = useLiveApp();
   const screen = card.screen;
   const face = !screen ? (
     <span className="flex size-full items-center justify-center p-4 text-center text-meta text-fg-faint">
@@ -708,7 +790,18 @@ function ScreenFace({
       <span
         className={clsx('block size-full transition-[filter] duration-(--motion-panel)', touched && 'blur-[1.5px]')}
       >
-        {face}
+        {app && card.path && card.kind === 'screen' ? (
+          <LiveScreen
+            cardId={card.id}
+            path={card.path}
+            device={device}
+            ratio={ratio}
+            title={card.title}
+            fallback={face}
+          />
+        ) : (
+          face
+        )}
       </span>
       {touched && (
         <span aria-hidden className="motion-content absolute inset-0 bg-brand-blue/15">
@@ -755,8 +848,23 @@ function LinkTile({ step, strip }: { step: FilmStep; strip: Strip }) {
 }
 
 /** Under a screen (or beside it, for a computer): its name and state, its promises, where it leads back, a pick. */
-function Caption({ card, step, strip, wide }: { card: TreeCard; step: FilmStep; strip: Strip; wide?: boolean }) {
+function Caption({
+  card,
+  step,
+  strip,
+  wide,
+  onSituation,
+}: {
+  card: TreeCard;
+  step: FilmStep;
+  strip: Strip;
+  wide?: boolean;
+  /** Opens the card on one of its situations. */
+  onSituation?: (state: string) => void;
+}) {
   const t = useMessages(messages);
+  const layout = useLayout(card.id);
+  const missing = missingButtons(strip.map, card.id, layout);
   const pick = strip.planned ? card.picks?.findLast((one) => one.by === 'ai') : undefined;
   const shown = card.promises.slice(0, PROMISE_ROWS);
   const name = (
@@ -796,6 +904,23 @@ function Caption({ card, step, strip, wide }: { card: TreeCard; step: FilmStep; 
           )}
         </ul>
       )}
+      {(card.states?.length ?? 0) > 0 && (
+        <div role="group" aria-label={t.situationCount(card.states!.length)} className="mt-2 flex flex-wrap gap-1">
+          {card.states!.map((situation) => (
+            <SituationChip
+              key={situation.id}
+              cardId={card.id}
+              situation={situation}
+              onClick={() => onSituation?.(situation.id)}
+            />
+          ))}
+        </div>
+      )}
+      {missing.map((to) => (
+        <p key={to} className="mt-1.5 truncate text-meta text-attention">
+          {t.missingButton(stepTitle(strip.map, to))}
+        </p>
+      ))}
       {step.loops.map((loop) => (
         <p key={loop.to} className="mt-1.5 truncate text-meta text-fg-muted" title={loop.label || undefined}>
           {t.backTo(stepTitle(strip.map, loop.to))}
@@ -954,6 +1079,107 @@ function DeviceIcon({ device }: { device: Device }) {
       <rect x=".6" y=".6" width="11.8" height="7.8" rx="1.2" stroke="currentColor" strokeWidth="1.1" />
       <path d="M4 10.4h5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
     </svg>
+  );
+}
+
+/** How many of a journey's situations Alpine saw show as real screens, once it has looked at any. */
+function SituationsShown({ journey, strip }: { journey: Journey; strip: Strip }) {
+  const t = useMessages(messages);
+  const layouts = useLiveLayouts((store) => store.byKey);
+  const situations = journey.steps.flatMap((id) =>
+    (strip.map.cards[id]?.states ?? [])
+      .filter((situation) => situation.handled !== false)
+      .map((situation) => situationResult(layouts, id, situation.id)),
+  );
+  const seen = situations.filter((result) => result !== 'unseen');
+  if (!seen.length) return null;
+  const shown = seen.filter((result) => result === 'shows').length;
+  return (
+    <span className={clsx('text-meta', shown < situations.length ? 'text-attention' : 'text-fg-muted')}>
+      · {t.situationsShown(shown, situations.length)}
+    </span>
+  );
+}
+
+/** The frames behind a screen that has situations besides its usual day: one card, several screens. */
+function Deck() {
+  return (
+    <>
+      {[10, 5].map((offset) => (
+        <span
+          key={offset}
+          aria-hidden
+          className="absolute top-0 left-0 h-100 w-50 border border-line bg-canvas-raised"
+          style={{
+            borderRadius: PHONE_RADIUS,
+            transform: `translate(${offset}px, ${offset}px)`,
+            opacity: 0.55 + offset / 40,
+          }}
+        />
+      ))}
+    </>
+  );
+}
+
+const ZOOMS = [0.4, 0.55, 0.7, 0.85, 1, 1.15];
+
+/** How large the wall is drawn: ⌘ or Ctrl with the wheel or a pinch zooms it, like a design canvas. */
+function useWallZoom(wall: React.RefObject<HTMLDivElement | null>) {
+  const [level, setLevel] = useState(1);
+  useEffect(() => {
+    const element = wall.current;
+    if (!element) return;
+    const wheel = (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      setLevel((current) =>
+        Math.min(1.15, Math.max(0.4, Math.round(current * Math.exp(-event.deltaY * 0.01) * 100) / 100)),
+      );
+    };
+    element.addEventListener('wheel', wheel, { passive: false });
+    return () => element.removeEventListener('wheel', wheel);
+  }, [wall]);
+  const step = (direction: 1 | -1) =>
+    setLevel((current) =>
+      direction > 0
+        ? (ZOOMS.find((one) => one > current + 0.001) ?? current)
+        : (ZOOMS.findLast((one) => one < current - 0.001) ?? current),
+    );
+  return { level, step, reset: () => setLevel(1) };
+}
+
+function ZoomControls({ zoom }: { zoom: ReturnType<typeof useWallZoom> }) {
+  const t = useMessages(messages);
+  const percent = Math.round(zoom.level * 100);
+  return (
+    <div className="absolute bottom-4 left-4 z-30 flex items-center rounded-lg border border-line bg-canvas-raised text-meta text-fg-muted shadow-overlay">
+      <button
+        type="button"
+        aria-label={t.zoomOut}
+        title={t.zoomOut}
+        onClick={() => zoom.step(-1)}
+        className="size-8 cursor-pointer rounded-l-lg hover:bg-hover hover:text-fg"
+      >
+        −
+      </button>
+      <button
+        type="button"
+        title={t.zoomFit(percent)}
+        onClick={zoom.reset}
+        className="h-8 min-w-12 cursor-pointer px-1 hover:bg-hover hover:text-fg"
+      >
+        {percent}%
+      </button>
+      <button
+        type="button"
+        aria-label={t.zoomIn}
+        title={t.zoomIn}
+        onClick={() => zoom.step(1)}
+        className="size-8 cursor-pointer rounded-r-lg hover:bg-hover hover:text-fg"
+      >
+        +
+      </button>
+    </div>
   );
 }
 
