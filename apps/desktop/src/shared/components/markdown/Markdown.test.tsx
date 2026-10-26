@@ -26,6 +26,15 @@ describe('Markdown', () => {
     expect(container.querySelector('pre')?.textContent).toBe('const a = 1;');
   });
 
+  it('makes bold the words a Korean particle follows right after the closing stars (dogfood 19)', () => {
+    const container = draw('Basecamp를 **"설원 위의 기술 기록"**으로 잡을게요. **지도**는 그대로예요.');
+    const bold = [...container.querySelectorAll('strong')].map((element) => element.textContent);
+    expect(bold).toEqual(['"설원 위의 기술 기록"', '지도']);
+    expect(container.textContent).not.toContain('**');
+    // Code keeps its stars.
+    expect(draw('`a**b**c`').textContent).toBe('a**b**c');
+  });
+
   it('keeps HTML the model wrote as text', () => {
     const container = draw('버튼은 <button onclick="x()">여기</button> 이렇게 써요');
     expect(container.querySelector('button[onclick]')).toBeNull();
