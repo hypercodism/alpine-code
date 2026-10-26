@@ -14,7 +14,7 @@ from alpineagents import Image, ToolError
 from alpine_core.dev_servers import DevelopmentServerManager
 from alpine_core.processes import process_manager
 from alpine_protocol.dev_servers import ScreenRead, ScreensCapturedParams, ScreenTarget
-from alpine_server.screens import AppScreenTools, ScreenCaptures
+from alpine_server.screens import AppScreens, AppScreenTools, ScreenCaptures
 
 PNG = base64.b64encode(
     bytes.fromhex(
@@ -59,7 +59,7 @@ def test_a_screen_is_opened_through_alpines_server_and_seen_with_what_it_says(tm
         captures = ScreenCaptures(notify)
         tools = AppScreenTools(tmp_path, DevelopmentServerManager(), captures)
         try:
-            seen = await tools.app_screen.invoke({"path": "/posts/1", "situation": "empty"}, None)
+            seen = await tools.app_screen.invoke({"address": "/posts/1", "situation": "empty"}, None)
             text, picture = seen
             said = json.loads(text)
             assert said["screen"] == "home" and said["buttons"] == [{"to": "post", "label": "읽기"}]
@@ -70,7 +70,7 @@ def test_a_screen_is_opened_through_alpines_server_and_seen_with_what_it_says(tm
             assert request.url.startswith("http://127.0.0.1:") and request.url.endswith("/posts/1?alpine-state=empty")
             assert (request.width, request.height) == (390, 844)
             with pytest.raises(ToolError, match="starting with /"):
-                await tools.app_screen.invoke({"path": "https://evil.example/"}, None)
+                await tools.app_screen.invoke({"address": "https://evil.example/"}, None)
         finally:
             await process_manager().shutdown()
 
@@ -98,3 +98,14 @@ def test_map_check_says_what_the_map_could_not_read(tmp_path: Path):
     (base / "features/post.json").write_text('{"id": "post"}')
     said = tools.map_check.invoke({}, None)
     assert "features/post.json (not shown)" in said and "title" in said
+
+
+def test_looking_at_a_screen_never_asks(tmp_path: Path):
+    """In the app it asked, "a file outside the project": its address had been read as a file path."""
+    from alpine_core.permissions import PermissionPolicy
+    from alpine_core.tools import Workspace
+
+    tools = AppScreens(tmp_path, DevelopmentServerManager(), ScreenCaptures(lambda request: None)).offered()
+    screen = next(o.tool for o in tools if o.tool.name == "app_screen")
+    verdict = PermissionPolicy(Workspace(tmp_path)).evaluate("app_screen", {"address": "/rss"}, screen)
+    assert verdict.allowed

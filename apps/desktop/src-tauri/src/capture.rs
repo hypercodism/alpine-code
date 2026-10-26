@@ -22,7 +22,8 @@ pub struct Capture {
 }
 
 /// Before anything of the page runs: what goes wrong in it is kept, to be said with the screen.
-const WATCH: &str = r#"(function(){var e=window.__alpineErrors=[];function add(t){if(e.length<20)e.push(String(t).slice(0,500))}
+/// What the app's own plugins say in this window (it has no permissions, so their scripts are refused) is not the page's.
+const WATCH: &str = r#"(function(){var e=window.__alpineErrors=[];function add(t){t=String(t);if(/not allowed on window "capture-/.test(t))return;if(e.length<20)e.push(t.slice(0,500))}
 addEventListener('error',function(x){add(x.message||x)});
 addEventListener('unhandledrejection',function(x){add('Unhandled rejection: '+((x.reason&&x.reason.message)||x.reason))});
 var c=console.error;console.error=function(){add(Array.prototype.map.call(arguments,String).join(' '));return c.apply(console,arguments)}})();"#;

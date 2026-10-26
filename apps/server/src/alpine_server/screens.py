@@ -103,7 +103,7 @@ class AppScreenTools:
     @tool(name="app_screen", read_only=True, open_world=False)
     async def app_screen(
         self,
-        path: str = "/",
+        address: str = "/",
         situation: str | None = None,
         device: Literal["phone", "computer"] = "phone",
         save: str | None = None,
@@ -114,14 +114,16 @@ class AppScreenTools:
         write your own capture scripts to see a screen. Use it after changing a screen and before calling it done.
 
         Args:
-            path: The screen's address in the app, as on its map card ("/", "/posts/hello")
+            address: The screen's address in the app, its card's path ("/", "/posts/hello")
             situation: A situation id of the card, opened as ?alpine-state=<id>; leave out for the usual day
             device: "phone" (390 wide) or "computer" (1280 wide), as the screen's journey is drawn
             save: A project-relative .png path to keep the picture at (a card's preview, a check's screenshot);
                 never under .alpine-code/
         """
+        # Not named `path`: the permissions read a `path` as a file, and an app's "/rss" is not one.
+        path = address
         if not path.startswith("/") or path.startswith("//"):
-            raise ToolError("path is an address inside the app, starting with / (no host)")
+            raise ToolError("address is inside the app, starting with / (no host)")
         kept = self._keep_at(save) if save else None
         server = await self._running()
         base = (server.get("board_url") or server["url"]).rstrip("/")
