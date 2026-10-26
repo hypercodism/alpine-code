@@ -509,7 +509,13 @@ function Question({
         {lead && <p className="text-meta text-fg-muted">{lead}</p>}
       </div>
       {looks ? (
-        <div className="grid grid-cols-3 gap-2">
+        // As many columns as options (up to three), so two looks each get half the room and their names fit.
+        <div
+          className="grid gap-2"
+          style={{
+            gridTemplateColumns: `repeat(${Math.min(Math.max(question.options.length, 1), 3)}, minmax(0, 1fr))`,
+          }}
+        >
           {question.options.map((option, i) => (
             <button
               key={option.label}
@@ -533,7 +539,7 @@ function Question({
                 className="rounded-md border border-line-subtle bg-canvas"
               />
               <span className="flex items-baseline gap-1.5 px-0.5">
-                <span className="truncate text-body text-fg">{option.label}</span>
+                <span className="line-clamp-2 min-w-0 text-body break-keep text-fg">{option.label}</span>
                 {option.recommended && <span className="shrink-0 text-meta text-interactive">{t.recommended}</span>}
               </span>
               {option.detail && <span className="px-0.5 text-meta text-fg-muted">{option.detail}</span>}

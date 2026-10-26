@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { toTreeMap } from './flowTreeData';
 import { blogBoard } from './planExample';
-import { DESKTOP_WIDTH, SCREEN_WIDTH, screenWidthFor, wornLook } from './planLook';
+import { DESKTOP_WIDTH, SCREEN_WIDTH, screenPage, screenWidthFor, wornLook } from './planLook';
 
 const words = { unnamed: { ko: '누군가', en: 'Someone' }, unnamedRole: { ko: '', en: '' } };
 
@@ -44,5 +44,11 @@ describe('wornLook', () => {
     // Picked again over an old look: the old one is not worn back while the new one is on its way.
     expect(wornLook(undefined, { css: 'new', before: 'old' }, 'old')).toBe('new');
     expect(wornLook(undefined, { css: 'new', before: 'old' }, 'newer')).toBe('newer');
+  });
+});
+
+describe('a planned page in Korean (dogfood 20)', () => {
+  it('breaks between words, never inside one, however narrow its menu', () => {
+    expect(screenPage('<nav><a>기록</a><a>주제</a></nav>')).toContain('word-break:keep-all');
   });
 });
