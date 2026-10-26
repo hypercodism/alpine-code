@@ -250,6 +250,18 @@ describe('the live map', () => {
     }
   });
 
+  it('draws a screen smaller when the wall is zoomed out, never narrower (dogfood 16)', async () => {
+    mount();
+    const before = await frameOf('빵 고르기');
+    expect(before.style.width).toBe('390px');
+    fireEvent.click(screen.getByRole('button', { name: '작게' }));
+    await waitFor(async () => expect((await frameOf('빵 고르기')).style.zoom).not.toBe(''));
+    const after = await frameOf('빵 고르기');
+    // The frame undoes the wall's zoom on itself: the app inside still lays out at a phone's 390.
+    expect(after.style.width).toBe('390px');
+    expect(Number(after.style.zoom)).toBeCloseTo(1 / 0.85);
+  });
+
   it('says when the app stays blank, and restarts it fresh', async () => {
     const { request } = mount();
     const menu = await frameOf('빵 고르기');

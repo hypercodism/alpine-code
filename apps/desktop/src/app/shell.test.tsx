@@ -267,6 +267,8 @@ describe('the app view', () => {
     expect(screen.getByRole('button', { name: '휴대폰 크기', pressed: true })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '글 쓰기' }));
     expect(await screen.findByRole('button', { name: '컴퓨터 크기', pressed: true })).toBeTruthy();
+    // At a computer's size the page is a computer's width, scaled to the room beside the strip (dogfood 16).
+    expect((await frame()).style.width).toBe('1280px');
     fireEvent.click(screen.getByRole('button', { name: '휴대폰 크기' }));
     expect(screen.getByRole('button', { name: '휴대폰 크기', pressed: true })).toBeTruthy();
     expect(screen.getByRole('button', { name: '컴퓨터 크기', pressed: false })).toBeTruthy();

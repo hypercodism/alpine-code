@@ -45,6 +45,13 @@ export interface LiveLayout {
   at: number;
 }
 
+/**
+ * How large the map's wall is drawn (its CSS zoom). A frame undoes it on itself, so the app inside still gets its own
+ * width (390 or 1280) and draws its own layout, and is scaled to fit instead: zoomed out, a screen is drawn smaller,
+ * not narrower.
+ */
+export const WallZoom = createContext(1);
+
 /** The relay's address of the project's running app, or `null` while it is not running. */
 const LiveApp = createContext<string | null>(null);
 export const LiveAppProvider = LiveApp.Provider;
@@ -481,8 +488,11 @@ export function LiveScreen({
     return () => removeEventListener('message', listen);
   }, [cardId, state, interactive, onGo, report]);
 
+  const zoom = useContext(WallZoom);
   const pageWidth = pageWidthFor(device);
+  // In the box's own CSS pixels (what the pins over it use), and in real pixels for the frame, which undoes the zoom.
   const scale = width > 0 ? width / pageWidth : 0;
+  const frameScale = scale * zoom;
   const live = !!app && near;
   return (
     <span ref={box} className="relative block size-full overflow-clip">
@@ -499,7 +509,8 @@ export function LiveScreen({
           style={{
             width: pageWidth,
             height: Math.ceil(pageWidth * ratio),
-            transform: `scale(${scale || 0.0001})`,
+            transform: `scale(${frameScale || 0.0001})`,
+            ...(zoom === 1 ? {} : { zoom: 1 / zoom }),
             pointerEvents: interactive ? 'auto' : 'none',
           }}
         />

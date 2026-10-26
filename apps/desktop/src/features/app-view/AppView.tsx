@@ -2,7 +2,7 @@ import { Button, LinkButton } from '@alpine/ui/primitives';
 import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { Monitor, Smartphone } from 'lucide-react';
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { useMessages } from '@/shared/i18n';
 import { openInBrowser } from '@/shared/platform';
@@ -255,19 +255,51 @@ export function AppView({
                   {shown ? `${name} · ${t.screenOf(shown.person.name)}` : name}
                 </span>
               </div>
-              <iframe
-                key={`${app.serverId}:${reload}`}
-                src={url}
-                title={t.frameTitle(name)}
-                sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-                className="min-h-0 grow bg-canvas-raised"
-              />
+              <ComputerScreen key={`${app.serverId}:${reload}`} src={url} title={t.frameTitle(name)} />
             </div>
           )}
         </div>
         <ScreenStrip people={people} shown={shown} cardId={cardId} onPick={onPick} />
       </div>
     </section>
+  );
+}
+
+/** A computer's page width: the app draws its computer layout at it, and the frame is scaled to fit beside the strip. */
+export const COMPUTER_WIDTH = 1280;
+
+/**
+ * The app at a computer's width (dogfood 16: in the room beside the strip it was about 520 px wide and drew its narrow
+ * layout): the page is 1280 wide, scaled down to the room there is, never up.
+ */
+function ComputerScreen({ src, title }: { src: string; title: string }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [room, setRoom] = useState({ width: 0, height: 0 });
+  useEffect(() => {
+    const element = box.current;
+    if (!element) return;
+    const measure = () => setRoom({ width: element.clientWidth, height: element.clientHeight });
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const sizes = new ResizeObserver(measure);
+    sizes.observe(element);
+    return () => sizes.disconnect();
+  }, []);
+  const scale = room.width > 0 ? Math.min(1, room.width / COMPUTER_WIDTH) : 1;
+  return (
+    <div ref={box} className="relative min-h-0 grow overflow-clip bg-canvas-raised">
+      <iframe
+        src={src}
+        title={title}
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+        className="absolute top-0 left-0 origin-top-left border-0 bg-canvas-raised"
+        style={{
+          width: COMPUTER_WIDTH,
+          height: room.height > 0 ? Math.ceil(room.height / scale) : '100%',
+          transform: scale === 1 ? undefined : `scale(${scale})`,
+        }}
+      />
+    </div>
   );
 }
 

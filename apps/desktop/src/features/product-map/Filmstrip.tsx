@@ -29,6 +29,7 @@ import {
   useLayout,
   useLiveApp,
   useLiveLayouts,
+  WallZoom,
 } from './liveScreens';
 import {
   hasScreenArea,
@@ -197,19 +198,21 @@ export function Filmstrip(props: FilmstripProps) {
         aria-label={t.label}
         className="min-h-0 min-w-0 grow overflow-auto bg-canvas-sunken px-10 pb-20 text-body text-fg"
       >
-        <div style={zoom.level === 1 ? undefined : { zoom: zoom.level }}>
-          {map.people.map((one) => (
-            <PersonRows
-              key={one.id}
-              person={one}
-              strip={strip}
-              expanded={expanded}
-              onExpand={(journeyId) => setExpanded((current) => new Set(current).add(journeyId))}
-              device={(journey) => deviceOf(journey, map, wide)}
-            />
-          ))}
-          <AddButton onClick={() => setFocus({ kind: 'addPerson' })}>{tree.addPerson}</AddButton>
-        </div>
+        <WallZoom.Provider value={zoom.level}>
+          <div style={zoom.level === 1 ? undefined : { zoom: zoom.level }}>
+            {map.people.map((one) => (
+              <PersonRows
+                key={one.id}
+                person={one}
+                strip={strip}
+                expanded={expanded}
+                onExpand={(journeyId) => setExpanded((current) => new Set(current).add(journeyId))}
+                device={(journey) => deviceOf(journey, map, wide)}
+              />
+            ))}
+            <AddButton onClick={() => setFocus({ kind: 'addPerson' })}>{tree.addPerson}</AddButton>
+          </div>
+        </WallZoom.Provider>
       </div>
       <ZoomControls zoom={zoom} />
       <SituationCheck map={map} />
