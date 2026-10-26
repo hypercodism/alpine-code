@@ -6,6 +6,10 @@ export const messages = defineMessages({
     proposeTitle: (title: string) => `${title} AI 팀을 꾸릴게요`,
     agents: (count: number) => `AI ${count}명`,
     proposeTime: (minutes: number) => `${minutes}분 안팎`,
+    oneByOne: '한 명씩 차례로',
+    together: (most: number) => `최대 ${most}명이 함께`,
+    left: (minutes: number) =>
+      minutes < 60 ? `지금 속도면 ${minutes}분쯤 더` : `지금 속도면 ${Math.round(minutes / 6) / 10}시간쯤 더`,
     start: '시작',
     alone: '혼자 하기',
     showPlan: '계획 보기',
@@ -60,6 +64,12 @@ export const messages = defineMessages({
     proposeTitle: (title: string) => `A task force for ${title}`,
     agents: (count: number) => `${count} agents`,
     proposeTime: (minutes: number) => `about ${minutes} min`,
+    oneByOne: 'one after another',
+    together: (most: number) => `up to ${most} at once`,
+    left: (minutes: number) =>
+      minutes < 60
+        ? `about ${minutes} min more at this pace`
+        : `about ${Math.round(minutes / 6) / 10} h more at this pace`,
     start: 'Start',
     alone: 'Do it alone',
     showPlan: 'Show plan',

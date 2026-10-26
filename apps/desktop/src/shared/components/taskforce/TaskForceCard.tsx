@@ -8,7 +8,7 @@ import { useMessages } from '@/shared/i18n';
 import { useResumeTaskForce, useTaskForceAction, type TaskForceAction } from '@/shared/server';
 
 import { messages } from './messages';
-import { counts, minutesSince, roomOf } from './room';
+import { counts, minutesLeft, minutesSince, roomOf, teamShape } from './room';
 import { Workshop } from './Workshop';
 
 /**
@@ -52,11 +52,13 @@ export function TaskForceCard({
               : item.status === 'failed'
                 ? t.failedEnd(item.title)
                 : t.interrupted(item.title);
+  const shape = teamShape(item);
+  const left = live ? minutesLeft(done, total, minutesSince(item.startedAt, now)) : null;
   const sub =
     item.status === 'proposed'
-      ? `${t.agents(room.planned)} · ${t.proposeTime(item.minutes)}`
+      ? `${t.agents(room.planned)} · ${shape.oneByOne ? t.oneByOne : t.together(shape.most)}`
       : total
-        ? t.doneCount(done, total)
+        ? [t.doneCount(done, total), left !== null && t.left(left)].filter(Boolean).join(' · ')
         : null;
 
   return (

@@ -94,3 +94,18 @@ export function latestTaskForce(items: readonly { kind: string }[]): TaskForceIt
   }
   return null;
 }
+
+/**
+ * How the plan's agents work: one after another when every step has one (three agents are not three at once), else
+ * how many work together at most. Said instead of the AI's own guess of minutes, which was far off (dogfood 8).
+ */
+export function teamShape(item: Pick<TaskForceItem, 'steps'>): { oneByOne: boolean; most: number } {
+  const most = Math.max(1, ...item.steps.map((step) => step.count));
+  return { oneByOne: most === 1, most };
+}
+
+/** Minutes left at the pace so far: the time per finished agent times the ones left; `null` before one finished. */
+export function minutesLeft(done: number, total: number, minutesSoFar: number): number | null {
+  if (done <= 0 || done >= total || minutesSoFar <= 0) return null;
+  return Math.max(1, Math.round((minutesSoFar / done) * (total - done)));
+}

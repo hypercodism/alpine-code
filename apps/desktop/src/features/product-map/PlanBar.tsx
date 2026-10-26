@@ -24,7 +24,10 @@ export interface PlanTeam {
   status: 'proposed' | 'over';
   title: string;
   agents: number;
-  minutes: number;
+  /** Every step has one agent: they work one after another. */
+  oneByOne: boolean;
+  /** The most agents working at once. */
+  most: number;
   /** How many agents it needs once over; `null` when it did not say. */
   needed: number | null;
 }
@@ -237,7 +240,7 @@ export function PlanBar({
     return <Working key={activity.text} text={activity.text} hint={t.leaveHint} stop={t.stop} onStop={onStop} />;
   if (phase === 'team' && team?.status === 'proposed')
     return (
-      <Bar title={t.teamTitle(team.agents)} hint={t.teamHint(team.title, team.minutes)}>
+      <Bar title={t.teamTitle(team.agents)} hint={t.teamHint(team.title, team.oneByOne, team.most)}>
         <Button variant="primary" onClick={() => onTeam('start')}>
           {t.teamStart}
         </Button>

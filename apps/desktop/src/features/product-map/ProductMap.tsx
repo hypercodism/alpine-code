@@ -10,7 +10,7 @@ import { lookingAt } from '@/features/app-view/state';
 
 import { AgentChip, ModeChip, type Mode } from '@/shared/components/composer';
 import { ImportLink } from '@/shared/components/import-link';
-import { latestTaskForce, roomOf } from '@/shared/components/taskforce';
+import { latestTaskForce, roomOf, teamShape } from '@/shared/components/taskforce';
 import { useMessages } from '@/shared/i18n';
 import {
   SESSION_RUNNING,
@@ -1474,7 +1474,7 @@ export function ProductMap({
                         status: buildTeam.status,
                         title: buildTeam.title,
                         agents: roomOf(buildTeam).planned,
-                        minutes: buildTeam.minutes,
+                        ...teamShape(buildTeam),
                         needed: buildTeam.needed,
                       }
                     : null

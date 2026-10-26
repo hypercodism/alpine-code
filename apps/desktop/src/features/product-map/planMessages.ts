@@ -47,7 +47,8 @@ export const planMessages = defineMessages({
     publish: '인터넷에 올리기',
     decideRestMessage: '나머지는 알아서 정해 줘',
     teamTitle: (agents: number) => `AI ${agents}명이 나눠서 만들 계획을 세웠어요`,
-    teamHint: (title: string, minutes: number) => `${title} · ${minutes}분 안팎`,
+    teamHint: (title: string, oneByOne: boolean, most: number) =>
+      `${title} · ${oneByOne ? '한 명씩 차례로 해요' : `최대 ${most}명이 함께 해요`}`,
     teamStart: '시작',
     teamAlone: '혼자 하기',
     stoppedTitle: '만들기가 멈췄어요',
@@ -144,7 +145,8 @@ export const planMessages = defineMessages({
     publish: 'Put it online',
     decideRestMessage: 'Decide the rest for me',
     teamTitle: (agents: number) => `Planned to build it with ${agents} AIs`,
-    teamHint: (title: string, minutes: number) => `${title} · about ${minutes} min`,
+    teamHint: (title: string, oneByOne: boolean, most: number) =>
+      `${title} · ${oneByOne ? 'one after another' : `up to ${most} at once`}`,
     teamStart: 'Start',
     teamAlone: 'Do it alone',
     stoppedTitle: 'The build stopped',
