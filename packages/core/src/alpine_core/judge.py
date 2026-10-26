@@ -58,13 +58,14 @@ class JudgeError(Exception):
 _SETUPS = {
     "blank": (
         "Empty project / 빈 프로젝트",
-        "Nothing is set up. For whatever is not a web page with sign-in and saved data: scripts, automations, "
-        "command-line tools, bots, data work, libraries, or a stack the other setups do not cover.",
+        "Nothing is set up. For whatever is not a website or web app: scripts, automations, command-line tools, "
+        "bots, data work, libraries, or a stack the other setups do not cover.",
     ),
     "web-lite": (
         "Web app / 웹앱",
-        "A web app with sign-in and saved data, ready to run. Fits most apps: bookings, notes, lists, dashboards, "
-        "small shops, tools for a team. Comfortable up to thousands of visitors a day.",
+        "Any website or web app, ready to run, with sign-in and saved data there for when it needs them. Fits most: "
+        "homepages, blogs, bookings, notes, lists, dashboards, small shops, tools for a team. Comfortable up to "
+        "thousands of visitors a day.",
     ),
     "web-pro": (
         "Realtime web app / 실시간 웹앱",

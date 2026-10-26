@@ -463,3 +463,13 @@ def test_the_prompts_name_the_setups_as_the_screen_shows_them(monkeypatch):
 def test_a_reason_that_names_a_setup_otherwise_is_put_in_the_screens_words(monkeypatch, said, shown):
     assert judged(monkeypatch, new(reason=said)).reason == shown
     assert judged_new(monkeypatch, new(reason=said)).reason == shown
+
+
+def test_a_reason_never_argues_against_what_its_setup_comes_with():
+    """Dogfood 25: "로그인과 저장된 데이터가 필요 없으니까 웹앱" sat right above the web app's own point "로그인, 데이터 저장이
+    처음부터 연결돼 있어요". A website without sign-in is still a web app, and the reason says what the idea needs."""
+    from alpine_core.judge import _system
+
+    prompt = _system(["blank", "web-lite"], new_project=True)
+    assert "Any website or web app" in prompt
+    assert "never say the idea does not need something the setup comes with" in prompt
