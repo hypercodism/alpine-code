@@ -133,7 +133,10 @@ function BoardRoute() {
   // A finished build of a plan, as one line in the map's conversation: how long it took, and its work when opened.
   const buildDone = planned && !!buildSessionId && !building && !!buildInfo && buildInfo.status !== 'running';
   const buildMinutes = buildInfo
-    ? Math.max(1, Math.round((Date.parse(buildInfo.updatedAt) - Date.parse(buildInfo.createdAt)) / 60000) || 1)
+    ? Math.max(
+        1,
+        Math.round((Date.parse(builtAt(buildInfo, buildDone)) - Date.parse(buildInfo.createdAt)) / 60000) || 1,
+      )
     : 1;
   const conversation = attachedHere ? (
     <div className="flex min-h-0 grow flex-col">
@@ -332,6 +335,24 @@ function BoardRoute() {
       </div>
     </FileNavigationProvider>
   );
+}
+
+const BUILT_AT = 'alpine.build.ended-at';
+
+/**
+ * When a build ended, as first seen: its conversation may be touched again later (asked something once built), and
+ * 만들기 · N분 걸렸어요 counts the build alone, not what came after it (dogfood 24).
+ */
+function builtAt(info: { id: string; updatedAt: string }, done: boolean): string {
+  try {
+    const key = `${BUILT_AT}:${info.id}`;
+    const seen = localStorage.getItem(key);
+    if (seen) return seen;
+    if (done) localStorage.setItem(key, info.updatedAt);
+  } catch {
+    // Not kept: the latest change stands in.
+  }
+  return info.updatedAt;
 }
 
 /** A developer tool in the conversation's place: the ones that scroll and pad themselves fill it edge to edge. */

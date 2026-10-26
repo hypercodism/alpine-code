@@ -117,6 +117,13 @@ describe('FlowTree', () => {
     expect(within(panel).getByText('지키지 못한 약속이 1개 있어요')).toBeTruthy();
   });
 
+  it('says only how many promises a plan has, before anything could pass (dogfood 24)', () => {
+    mount({ planning: true, onCheck: undefined });
+    const panel = openPerson();
+    expect(within(panel).getByText('약속 4개 · 만들고 나서 확인해요')).toBeTruthy();
+    expect(within(panel).queryByText(/개 통과/)).toBeNull();
+  });
+
   it("draws a band per person: their way in, their journeys, and each journey's steps in a row", () => {
     mount();
     expect(screen.getByRole('button', { name: /첫 화면에서 수업을 골라요/ })).toBeTruthy();

@@ -1483,10 +1483,15 @@ function PersonPanel({
         </span>
       </div>
       <section className="flex flex-col gap-2">
+        {/* Before anything is built nothing could have passed yet: no red 0 while planning (dogfood 24). */}
         <span className="text-title tabular-nums">
-          {counts.total ? t.promiseSummary(counts.passed, counts.total) : t.noPromises}
+          {!counts.total
+            ? t.noPromises
+            : props.planning
+              ? t.promisesPlanned(counts.total)
+              : t.promiseSummary(counts.passed, counts.total)}
         </span>
-        {counts.total > 0 && <Progress counts={counts} wide />}
+        {counts.total > 0 && !props.planning && <Progress counts={counts} wide />}
         {counts.checking > 0 && (
           <p role="status" className="motion-step flex items-center gap-2 text-meta text-interactive">
             <LoaderCircle size={13} aria-hidden className="motion-spin" />
@@ -1588,8 +1593,10 @@ function JourneyPanel({
       ) : (
         <>
           <section className="flex flex-col gap-2">
-            <span className="tabular-nums">{t.promiseSummary(counts.passed, counts.total)}</span>
-            <Progress counts={counts} wide />
+            <span className="tabular-nums">
+              {props.planning ? t.promisesPlanned(counts.total) : t.promiseSummary(counts.passed, counts.total)}
+            </span>
+            {!props.planning && <Progress counts={counts} wide />}
           </section>
           <ol className="flex flex-col">
             {journey.steps.map((cardId, index) => {

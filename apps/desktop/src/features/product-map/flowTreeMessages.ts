@@ -9,6 +9,7 @@ export const flowTreeMessages = defineMessages({
     cancel: '취소',
     startsWith: '처음 하는 일',
     promiseSummary: (passed: number, total: number) => `약속 ${total}개 중 ${passed}개 통과`,
+    promisesPlanned: (total: number) => `약속 ${total}개 · 만들고 나서 확인해요`,
     noPromises: '아직 약속이 없어요',
     journeys: (count: number) => `여정 ${count}`,
     // What to do next, worst first
@@ -174,6 +175,7 @@ export const flowTreeMessages = defineMessages({
     cancel: 'Cancel',
     startsWith: 'First thing they do',
     promiseSummary: (passed: number, total: number) => `${passed} of ${total} promises pass`,
+    promisesPlanned: (total: number) => `${total} ${total === 1 ? 'promise' : 'promises'} · checked once built`,
     noPromises: 'No promises yet',
     journeys: (count: number) => `${count} ${count === 1 ? 'journey' : 'journeys'}`,
     todoFailed: (count: number) => `${count} ${count === 1 ? 'promise is' : 'promises are'} broken`,
