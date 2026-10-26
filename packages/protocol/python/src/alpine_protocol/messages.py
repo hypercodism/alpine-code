@@ -1890,6 +1890,8 @@ class MapProblem(Message):
     file: str
     """Project-relative path of the file."""
     message: str
+    partial: bool = False
+    """The file was read without the parts ``message`` names: the rest of it shows."""
 
 
 class ProductMap(Message):

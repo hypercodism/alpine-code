@@ -293,6 +293,36 @@ def test_dangling_references_are_dropped_with_a_problem_each(proj):
         assert needle in messages
 
 
+def test_a_card_with_a_wrong_check_still_shows_and_so_do_its_journeys(proj):
+    """Dogfood 7: one check pointing at a promise the card does not have took the card, and every journey it was in,
+    off the map ("지도 파일 28개를 읽지 못했어요" for nine files)."""
+    card = {
+        "id": "order",
+        "title": "Order",
+        "conditions": [{"id": "c1", "expectation": "주문이 들어간다"}],
+        "checks": [
+            {"id": "k1", "conditionId": "c1", "result": "passed", "summary": "s", "command": "x", "output": "ok"},
+            {"id": "k2", "conditionId": "gone", "result": "passed", "summary": "s", "command": "x", "output": "ok"},
+        ],
+    }
+    write_map(proj, features=[card, {"id": "pay", "title": "Pay"}])
+    board = get(proj)
+    assert [n.id for n in board.document.nodes] == ["order", "pay"]
+    order = next(n for n in board.document.nodes if n.id == "order")
+    assert [c.id for c in order.checks] == ["k1"]
+    assert next(f for f in board.document.flows if f.id == "web").node_ids == ["order", "pay"]
+    [problem] = board.problems
+    assert problem.partial and problem.file.endswith("features/order.json")
+    assert "Unknown or duplicate condition check" in problem.message
+
+
+def test_a_card_that_cannot_be_read_is_said_once_not_again_by_every_journey(proj):
+    write_map(proj, features=[{"id": "order"}, {"id": "pay", "title": "Pay"}])  # no title: nothing to show
+    board = get(proj)
+    assert [n.id for n in board.document.nodes] == ["pay"]
+    assert [p.file.rsplit("/", 1)[1] for p in board.problems] == ["order.json"]
+
+
 def test_newer_format_is_read_only_and_tolerates_unknown_fields(proj):
     write_map(proj, features=[{"id": "order", "title": "Order", "future": {"x": 1}}], flows=[])
     put(proj, "map.json", {"formatVersion": 2, "areas": [{"id": "a", "title": "A", "color": "red"}], "extra": 1})
@@ -1145,13 +1175,16 @@ def test_a_journey_keeps_its_device_and_a_screen_its_path(proj):
 def test_a_screen_path_is_an_address_inside_the_app(proj, path):
     write_map(proj, features=[{"id": "order", "title": "Order", "path": path}], flows=[])
     board = get(proj)
-    assert not board.document.nodes and any(p.file.endswith("features/order.json") for p in board.problems)
+    # The card still shows, without an address that is not one; its file says what was left out.
+    assert [(n.id, n.path) for n in board.document.nodes] == [("order", None)]
+    assert any(p.file.endswith("features/order.json") and p.partial for p in board.problems)
 
 
 def test_a_journey_device_is_phone_or_computer(proj):
     write_map(proj, flows=[{"id": "web", "title": "Order", "device": "tablet", "nodeIds": ["order"]}])
     board = get(proj)
-    assert not board.document.flows and any(p.file.endswith("flows/web.json") for p in board.problems)
+    assert [(f.id, f.device, f.node_ids) for f in board.document.flows] == [("web", None, ["order"])]
+    assert any(p.file.endswith("flows/web.json") and p.partial for p in board.problems)
 
 
 def test_branch_is_attached_and_existing_work_survives(proj):
@@ -2225,3 +2258,40 @@ def test_a_situation_the_person_does_not_want_goes_with_its_promises(proj):
     assert after["states"] == [] and [c["id"] for c in after["conditions"]] == ["shown"]
     assert json.loads((proj / BASE / "flows/web.json").read_text())["situations"] == []
     assert board.document.flows[0].situations == []
+
+
+# ---- writing map files: Alpine checks them as the AI writes
+
+
+def test_a_map_file_alpine_could_not_show_is_refused_as_it_is_written(proj):
+    from alpine_core.tools import Workspace
+    from alpine_core.tools.write import Write
+    from alpineagents import ToolError
+
+    from alpine_server import map_files  # noqa: F401  (registers the check)
+
+    write_map(proj)
+    writer = Write(Workspace(proj))
+
+    def write(path, content):
+        return writer.write.invoke({"path": path, "content": content}, None)
+    card = {
+        "id": "order",
+        "title": "Order",
+        "conditions": [{"id": "c1", "expectation": "주문이 들어간다"}],
+        "checks": [{"id": "k2", "conditionId": "gone", "result": "passed", "summary": "s", "command": "x", "output": "ok"}],
+    }
+    target = proj / BASE / "features/order.json"
+    before = target.read_text()
+    with pytest.raises(ToolError) as refused:
+        write(str(target), json.dumps(card))
+    assert "Alpine did not write .alpine-code/map/features/order.json" in str(refused.value)
+    assert "conditionId must be the id of one of this card's own conditions" in str(refused.value)
+    assert target.read_text() == before  # nothing was written
+    with pytest.raises(ToolError, match="file name must be the card id"):
+        write(str(target), json.dumps({"id": "other", "title": "x"}))
+    with pytest.raises(ToolError, match="Alpine keeps it itself"):
+        write(str(proj / BASE / "state/x.json"), "{}")
+    # A flow whose card is not written yet is kept, and the AI is told.
+    said = write(str(proj / BASE / "flows/web.json"), json.dumps({"id": "web", "title": "W", "nodeIds": ["later"]}))
+    assert "no card file yet for 'later'" in said

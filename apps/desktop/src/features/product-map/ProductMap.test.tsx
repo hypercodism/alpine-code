@@ -1040,6 +1040,28 @@ describe('map upkeep', () => {
     expect(await stepCard('상품 찾기')).toBeTruthy();
   });
 
+  it('counts a file once, says in Korean what is wrong, and tells a card shown without its wrong parts', async () => {
+    mount(
+      withBoard((board) => {
+        board.problems = [
+          { file: '.alpine-code/map/flows/read.json', message: "The card 'home' does not exist" },
+          { file: '.alpine-code/map/flows/read.json', message: 'The edge about -> home points outside this flow' },
+          {
+            file: '.alpine-code/map/features/home.json',
+            message: 'Unknown or duplicate condition check',
+            partial: true,
+          },
+        ];
+      }),
+    );
+    const summary = await screen.findByText(
+      '지도 파일 1개를 읽지 못했어요 · 지도 파일 1개는 틀린 부분만 빼고 보여 주고 있어요',
+    );
+    const list = within(summary.closest('details')!);
+    expect(list.getByText("없는 카드 'home'를 가리켜요 · 흐름 밖의 화면을 잇는 화살표가 있어요")).toBeTruthy();
+    expect(list.getByText('약속에 없는 확인 기록이 있거나 같은 약속을 두 번 확인했어요')).toBeTruthy();
+  });
+
   it('asks only for what changed: an unchanged answer keeps the map on screen', async () => {
     const { request, client } = mount();
     await loaded();

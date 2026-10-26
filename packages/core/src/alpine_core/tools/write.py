@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from alpineagents import ToolError, tool
 
-from ._common import WorkspaceTool, json_note, os_error
+from ._common import WorkspaceTool, check_write, json_note, os_error
 from ._file_write import atomic_write, file_lock
 
 
@@ -22,7 +22,8 @@ class Write(WorkspaceTool):
             existed = file.exists()
             file.parent.mkdir(parents=True, exist_ok=True)
             before = file.read_bytes() if existed else None
+            notes = check_write(self.workspace.root, file, content)
             atomic_write(file, content, before)
             lines = content.count("\n") + (0 if content.endswith("\n") or not content else 1)
             verb = "Overwrote" if existed else "Created"
-            return f"{verb} {self.workspace.display(file)} ({lines} lines)" + json_note(file, content)
+            return f"{verb} {self.workspace.display(file)} ({lines} lines)" + json_note(file, content) + notes

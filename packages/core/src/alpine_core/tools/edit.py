@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from alpineagents import ToolError, tool
 
-from ._common import Workspace, WorkspaceTool, json_note, os_error
+from ._common import Workspace, WorkspaceTool, check_write, json_note, os_error
 from ._file_write import atomic_write, file_lock
 
 
@@ -41,9 +41,10 @@ class Edit(WorkspaceTool):
                     "or set replace_all to true"
                 )
             new_text = text.replace(old_string, new_string) if replace_all else text.replace(old_string, new_string, 1)
+            notes = check_write(self.workspace.root, file, new_text)
             atomic_write(file, new_text, before)
             times = f"{count} occurrences" if replace_all and count > 1 else "1 occurrence"
-            return f"Edited {self.workspace.display(file)} ({times} replaced)" + json_note(file, new_text)
+            return f"Edited {self.workspace.display(file)} ({times} replaced)" + json_note(file, new_text) + notes
 
 
 def preview_edit(workspace: Workspace, args: dict) -> tuple[str, str] | None:

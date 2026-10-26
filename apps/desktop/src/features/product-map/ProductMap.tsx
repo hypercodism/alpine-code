@@ -1,4 +1,4 @@
-import type { FlowNode, FlowPrepareParams, FlowPrepareResult } from '@alpine/protocol';
+import type { FlowNode, FlowPrepareParams, FlowPrepareResult, MapProblem } from '@alpine/protocol';
 import { Button, Dialog, LinkButton, Popover, SlidingPanel } from '@alpine/ui/primitives';
 import clsx from 'clsx';
 import { Brain, ChevronRight, CircleX, RotateCcw, Search, Sparkles, X } from 'lucide-react';
@@ -61,6 +61,7 @@ import { DeleteMap, MapMenu, MapMenuItems, ScopeEditor } from './MapSettings';
 import { Unmapped } from './Unmapped';
 import { messages } from './messages';
 import { type LaterWord, useLaterWords, useMapTalk } from './mapTalk';
+import { problemFiles, problemWordMessages, problemWords } from './problemWords';
 import { mapOf, matchingIds, searchOrder } from './model';
 
 type Action = FlowPrepareParams['action'];
@@ -1210,22 +1211,7 @@ export function ProductMap({
           {t.readOnlyBanner}
         </p>
       )}
-      {!!data?.problems?.length && (
-        <details className="border-b border-line bg-canvas-sunken px-5 py-2 text-body">
-          <summary className="cursor-pointer">{t.problemsBanner(data.problems.length)}</summary>
-          <ul className="mt-2 flex flex-col gap-1 text-meta text-fg-muted" aria-label={t.problemsDetail}>
-            {data.problems.map((problem) => (
-              <li key={`${problem.file}-${problem.message}`}>
-                {t.problemLine} <span className="font-mono break-all">{problem.file}</span>
-                <details className="text-fg-faint">
-                  <summary className="cursor-pointer">{t.technicalInfo}</summary>
-                  {problem.message}
-                </details>
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
+      {!!data?.problems?.length && <MapProblems problems={data.problems} />}
       {data?.review && (
         <div
           data-review
@@ -1673,5 +1659,37 @@ function Chip({
     >
       {children}
     </button>
+  );
+}
+
+/**
+ * What in the map files Alpine could not use, one line per file (dogfood 7: nine files were counted as 28): the files
+ * it could not read at all, and the ones it shows without their wrong parts, in the person's words, with the server's
+ * own sentence as 기술 정보.
+ */
+function MapProblems({ problems }: { problems: readonly MapProblem[] }) {
+  const t = useMessages(messages);
+  const w = useMessages(problemWordMessages);
+  const files = problemFiles(problems);
+  const unread = files.filter((file) => !file.partial).length;
+  const partial = files.length - unread;
+  return (
+    <details className="border-b border-line bg-canvas-sunken px-5 py-2 text-body">
+      <summary className="cursor-pointer">
+        {[unread && t.problemsBanner(unread), partial && t.problemsPartial(partial)].filter(Boolean).join(' · ')}
+      </summary>
+      <ul className="mt-2 flex flex-col gap-1 text-meta text-fg-muted" aria-label={t.problemsDetail}>
+        {files.map((file) => (
+          <li key={file.file}>
+            {file.partial ? t.problemPartLine : t.problemLine} <span className="font-mono break-all">{file.file}</span>
+            <p className="text-fg">{file.messages.map((message) => problemWords(message, w)).join(' · ')}</p>
+            <details className="text-fg-faint">
+              <summary className="cursor-pointer">{t.technicalInfo}</summary>
+              {file.messages.join('\n')}
+            </details>
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }

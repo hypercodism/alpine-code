@@ -5632,6 +5632,10 @@
         },
         "message": {
           "type": "string"
+        },
+        "partial": {
+          "default": false,
+          "type": "boolean"
         }
       },
       "required": [

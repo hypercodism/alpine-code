@@ -3,6 +3,7 @@ overview."""
 
 from __future__ import annotations
 
+import copy
 import json
 import types
 import typing
@@ -24,6 +25,8 @@ from alpine_protocol import (
     ProductFlow,
     ProductMap,
 )
+
+from alpine_core.tools._common import WRITE_CHECKS
 
 from .map_io import MAP_DIR, atomic, guard, inside, lpath, read_bytes, sha
 from .methods import MethodError
@@ -59,8 +62,19 @@ class Layout:
     look: MapLook | None = None
 
 
-# Parsed files: path -> (mtime_ns, size, lenient, digest, model or error text).
-_parsed: dict[str, tuple[int, int, bool, str, Any]] = {}
+# Parsed files: path -> (mtime_ns, size, lenient, digest, model or error text, what was left out to read it).
+_parsed: dict[str, tuple[int, int, bool, str, Any, list[str]]] = {}
+
+#: What the checks across a card's own fields mean, for the AI that wrote it.
+_RULES = {
+    "Duplicate condition id": "every condition (promise) of a card needs its own id",
+    "Unknown or duplicate condition check": (
+        "every check's conditionId must be the id of one of this card's own conditions, with at most one check per "
+        "condition (replace the old check instead of adding a second)"
+    ),
+    "Duplicate state id": "every state (situation) of a card needs its own id",
+    "A condition names a state the card does not have": "a condition's state must be the id of one of the card's states",
+}
 
 
 def _prune(annotation: Any, value: Any) -> Any:
@@ -94,19 +108,22 @@ def _read(path: Path) -> tuple[str, bytes | None]:
         return "", str(exc).encode()
 
 
-def _load(root: Path, relative: str, model: type[BaseModel], lenient: bool) -> tuple[str, Any]:
-    """(content hash, parsed model or error text) for one file, cached by modification time and size."""
+def _load(root: Path, relative: str, model: type[BaseModel], lenient: bool) -> tuple[str, Any, list[str]]:
+    """(content hash, parsed model or error text, what was left out) for one file, cached by modification time and
+    size. A card or a flow with a few wrong parts is read without them (``_salvage``): one wrong check does not take
+    the card, and the flows it is in, off the map."""
     try:
         path = inside(root, relative)
         st = path.stat()
     except (OSError, ValueError, MethodError) as exc:
-        return "", str(exc)
+        return "", str(exc), []
     cached = _parsed.get(str(path))
     if cached and cached[:3] == (st.st_mtime_ns, st.st_size, lenient) and cached[4] is not None:
-        return cached[3], cached[4]
+        return cached[3], cached[4], cached[5]
     digest, error = _read(path)
     if error is not None:
-        return "", error.decode()
+        return "", error.decode(), []
+    left_out: list[str] = []
     try:
         data = json.loads(read_bytes(path).decode("utf-8"))
         if lenient and isinstance(data, dict):
@@ -114,10 +131,101 @@ def _load(root: Path, relative: str, model: type[BaseModel], lenient: bool) -> t
             if model is MapFile:
                 data["formatVersion"] = FORMAT
         result: Any = model.model_validate(data)
-    except (OSError, ValueError, ValidationError) as exc:
+    except ValidationError as exc:
         result = _short(exc)
-    _parsed[str(path)] = (st.st_mtime_ns, st.st_size, lenient, digest, result)
-    return digest, result
+        if model in (FeatureFile, FlowFile) and isinstance(data, dict):
+            salvaged, left_out = _salvage(model, data)
+            if salvaged is not None:
+                result = salvaged
+            else:
+                left_out = []
+    except (OSError, ValueError) as exc:
+        result = _short(exc)
+    _parsed[str(path)] = (st.st_mtime_ns, st.st_size, lenient, digest, result, left_out)
+    return digest, result, left_out
+
+
+def _salvage(model: type[BaseModel], data: dict[str, Any]) -> tuple[BaseModel | None, list[str]]:
+    """The file read without its wrong parts: a list item that fails is left out, an optional field that fails is
+    left empty, and a card's checks, conditions and states that do not fit together are cut back to what does. What
+    was left out is said; ``None`` when even that does not make it valid (no id or title, say)."""
+    data = copy.deepcopy(data)
+    left_out: list[str] = []
+    for _ in range(100):
+        try:
+            return model.model_validate(data), left_out
+        except ValidationError as exc:
+            error = exc.errors()[0]
+            loc = list(error["loc"])
+            message = str(error["msg"]).removeprefix("Value error, ")
+            left_out.append(f"{'.'.join(map(str, loc))}: {message}" if loc else message)
+            if not loc:
+                if model is FeatureFile and _fit_references(data):
+                    continue
+                return None, left_out
+            if not _leave_out(data, loc):
+                return None, left_out
+    return None, left_out
+
+
+def _leave_out(data: dict[str, Any], loc: list[Any]) -> bool:
+    """Takes out what the error at ``loc`` is about: the innermost list item it is in, else the top-level field
+    (never the id or the title, without which there is nothing to show)."""
+    for at in range(len(loc) - 1, 0, -1):
+        if isinstance(loc[at], int):
+            container: Any = data
+            for key in loc[:at]:
+                if isinstance(container, dict) and key in container:
+                    container = container[key]
+                elif isinstance(container, list) and isinstance(key, int) and key < len(container):
+                    container = container[key]
+                else:
+                    return False
+            if isinstance(container, list) and loc[at] < len(container):
+                del container[loc[at]]
+                return True
+            return False
+    key = loc[0]
+    if key in ("id", "title") or key not in data:
+        return False
+    del data[key]
+    return True
+
+
+def _fit_references(data: dict[str, Any]) -> bool:
+    """A card's conditions, states and checks cut back to what fits together: the first condition and state of each
+    id, a condition's state only when the card has it, and one check per condition, the last written, for conditions
+    the card has. ``False`` when nothing changed."""
+    before = json.dumps(data, sort_keys=True, default=str)
+
+    def unique(items: Any) -> list[Any]:
+        seen: set[Any] = set()
+        kept = []
+        for item in items if isinstance(items, list) else []:
+            key = item.get("id") if isinstance(item, dict) else None
+            if key not in seen:
+                seen.add(key)
+                kept.append(item)
+        return kept
+
+    data["conditions"] = unique(data.get("conditions"))
+    data["states"] = unique(data.get("states"))
+    states = {state.get("id") for state in data["states"] if isinstance(state, dict)}
+    for condition in data["conditions"]:
+        if isinstance(condition, dict) and condition.get("state") is not None and condition["state"] not in states:
+            del condition["state"]
+    ids = {condition.get("id") for condition in data["conditions"] if isinstance(condition, dict)}
+    checks: dict[Any, Any] = {}
+    loose = []
+    for check in data.get("checks") or []:
+        linked = check.get("conditionId") if isinstance(check, dict) else None
+        if linked is None:
+            loose.append(check)
+        elif linked in ids:
+            checks.pop(linked, None)
+            checks[linked] = check
+    data["checks"] = loose + list(checks.values())
+    return json.dumps(data, sort_keys=True, default=str) != before
 
 
 def _short(exc: Exception) -> str:
@@ -152,7 +260,7 @@ def read_layout(root: Path) -> Layout:
             layout.read_only = isinstance(version, int) and version > FORMAT
         except (OSError, ValueError):
             pass  # the strict parse below reports it
-        digest, parsed = _load(root, MAP_FILE, MapFile, layout.read_only)
+        digest, parsed, _ = _load(root, MAP_FILE, MapFile, layout.read_only)
         layout.files[MAP_FILE] = digest
         if isinstance(parsed, MapFile):
             layout.map = parsed
@@ -160,15 +268,21 @@ def read_layout(root: Path) -> Layout:
             problems.append(MapProblem(file=MAP_FILE, message=str(parsed)))
     lenient = layout.read_only
     cards: dict[str, FeatureFile] = {}
+    # Cards whose file is there but could not be read: the flows they are in are not blamed for them again.
+    broken: set[str] = set()
     for name in _names(root, FEATURES):
         relative = f"{FEATURES}/{name}"
-        digest, parsed = _load(root, relative, FeatureFile, lenient)
+        digest, parsed, left_out = _load(root, relative, FeatureFile, lenient)
         layout.files[relative] = digest
         if not isinstance(parsed, FeatureFile):
+            broken.add(name.removesuffix(".json"))
             problems.append(MapProblem(file=relative, message=str(parsed)))
         elif parsed.id != name.removesuffix(".json"):
+            broken.add(name.removesuffix(".json"))
             problems.append(MapProblem(file=relative, message=f"The file name must be the card id ({parsed.id})"))
         else:
+            if left_out:
+                problems.append(MapProblem(file=relative, message="; ".join(left_out), partial=True))
             cards[parsed.id] = parsed
             try:
                 layout.mtimes[parsed.id] = inside(root, relative).stat().st_mtime
@@ -177,13 +291,15 @@ def read_layout(root: Path) -> Layout:
     flows: list[FlowFile] = []
     for name in _names(root, FLOWS):
         relative = f"{FLOWS}/{name}"
-        digest, parsed = _load(root, relative, FlowFile, lenient)
+        digest, parsed, left_out = _load(root, relative, FlowFile, lenient)
         layout.files[relative] = digest
         if not isinstance(parsed, FlowFile):
             problems.append(MapProblem(file=relative, message=str(parsed)))
         elif parsed.id != name.removesuffix(".json"):
             problems.append(MapProblem(file=relative, message=f"The file name must be the flow id ({parsed.id})"))
         else:
+            if left_out:
+                problems.append(MapProblem(file=relative, message="; ".join(left_out), partial=True))
             flows.append(parsed)
     # Maps made before tags grouped cards into areas listed in map.json: the area's title becomes a tag.
     titles = {a.get("id"): a.get("title") for a in layout.map.areas if isinstance(a, dict)}
@@ -203,14 +319,14 @@ def read_layout(root: Path) -> Layout:
         elif card_id in cards:
             layout.screens[card_id] = relative
     if inside(root, LOOK_FILE).is_file():
-        digest, parsed = _load(root, LOOK_FILE, MapLook, lenient)
+        digest, parsed, _ = _load(root, LOOK_FILE, MapLook, lenient)
         layout.files[LOOK_FILE] = digest
         if isinstance(parsed, MapLook):
             layout.look = parsed
         else:
             problems.append(MapProblem(file=LOOK_FILE, message=str(parsed)))
     flow_ids = {f.id for f in flows}
-    layout.flows = [_clean_flow(f, cards, flow_ids, problems) for f in flows]
+    layout.flows = [_clean_flow(f, cards, flow_ids, problems, broken) for f in flows]
     return layout
 
 
@@ -219,8 +335,14 @@ CALL = "flow:"
 
 
 def _clean_flow(
-    flow: FlowFile, cards: dict[str, FeatureFile], flow_ids: set[str], problems: list[MapProblem]
+    flow: FlowFile,
+    cards: dict[str, FeatureFile],
+    flow_ids: set[str],
+    problems: list[MapProblem],
+    broken: frozenset[str] | set[str] = frozenset(),
 ) -> FlowFile:
+    """The flow with only the steps and transitions that exist. Each step or transition left out is a problem of the
+    flow, except one about a card whose own file could not be read: that is said once, on the card's file."""
     file = f"{FLOWS}/{flow.id}.json"
     node_ids: list[str] = []
     for node_id in flow.node_ids:
@@ -230,13 +352,16 @@ def _clean_flow(
         elif called is not None and called not in flow_ids:
             problems.append(MapProblem(file=file, message=f"The flow '{called}' does not exist"))
         elif called is None and node_id not in cards:
-            problems.append(MapProblem(file=file, message=f"The card '{node_id}' does not exist"))
+            if node_id not in broken:
+                problems.append(MapProblem(file=file, message=f"The card '{node_id}' does not exist"))
         elif node_id not in node_ids:
             node_ids.append(node_id)
     edges: list[FlowEdge] = []
     for edge in flow.edges:
         if edge.source in node_ids and edge.target in node_ids:
             edges.append(edge)
+        elif edge.source in broken or edge.target in broken:
+            continue
         else:
             problems.append(
                 MapProblem(file=file, message=f"The edge {edge.source} -> {edge.target} points outside this flow")
@@ -329,3 +454,69 @@ def write_overview(root: Path, files: dict[str, str]) -> None:
     ignore = lpath(root, f"{MAP_DIR}/.gitignore")
     if not ignore.exists():
         atomic(ignore, "OVERVIEW.md\noverview/\n")
+
+
+#: The map files an AI writes, and how each is checked when it does.
+_WRITTEN = ((FEATURES, FeatureFile, "card"), (FLOWS, FlowFile, "flow"))
+
+
+def _errors(exc: ValidationError) -> str:
+    """Every error of a check, up to a few, with what a check across fields means."""
+    said = []
+    for error in exc.errors()[:6]:
+        where = ".".join(str(part) for part in error["loc"])
+        message = str(error["msg"]).removeprefix("Value error, ")
+        rule = _RULES.get(message)
+        said.append(f"{where + ': ' if where else ''}{message}{f' ({rule})' if rule else ''}")
+    return "; ".join(said)
+
+
+def check_write(root: Path, file: Path, text: str) -> tuple[bool, str] | None:
+    """What Alpine says when a file tool writes a map file (``WRITE_CHECKS``): a card or flow it could not read is
+    refused, with every reason, so the AI fixes it at once instead of leaving the map unreadable; what it keeps but
+    cannot place yet (a flow's step whose card is not written yet) is said with the result. Alpine's own files
+    (state, the overview) are never written by the AI."""
+    try:
+        relative = file.resolve().relative_to(root.resolve()).as_posix()
+    except (OSError, ValueError):
+        return None
+    if not relative.startswith(MAP_DIR + "/"):
+        return None
+    if relative.startswith((STATE + "/", OVERVIEW_DIR + "/")) or relative == OVERVIEW:
+        return True, f"Alpine did not write {relative}: Alpine keeps it itself. Write cards and flows instead."
+    found = next(((folder, model, kind) for folder, model, kind in _WRITTEN if relative.startswith(folder + "/")), None)
+    model: type[BaseModel] | None = found[1] if found else MapFile if relative == MAP_FILE else None
+    if model is None and relative == LOOK_FILE:
+        model = MapLook
+    if model is None or not relative.endswith(".json"):
+        return None
+    try:
+        data = json.loads(text)
+    except ValueError as exc:
+        return True, f"Alpine did not write {relative}: it is not valid JSON ({exc}). Fix it and write it again."
+    if isinstance(data, dict) and model is MapFile and isinstance(data.get("formatVersion"), int):
+        if data["formatVersion"] > FORMAT:
+            return None  # a newer Alpine's map: this one only reads it
+    try:
+        parsed = model.model_validate(data)
+    except ValidationError as exc:
+        return True, (
+            f"Alpine did not write {relative}, since the map could not show it: {_errors(exc)}. "
+            "Fix these and write the whole file again."
+        )
+    if found is None:
+        return None
+    name = relative.rsplit("/", 1)[1].removesuffix(".json")
+    if getattr(parsed, "id", name) != name:
+        return True, f"Alpine did not write {relative}: the file name must be the {found[2]} id ({parsed.id})."
+    if isinstance(parsed, FlowFile):
+        cards = set(_names(root, FEATURES))
+        missing = [n for n in parsed.node_ids if not n.startswith(CALL) and f"{n}.json" not in cards]
+        if missing:
+            listed = ", ".join(f"'{n}'" for n in missing[:10])
+            return False, f"Alpine notes: no card file yet for {listed}; those steps show once their cards exist."
+    return None
+
+
+if check_write not in WRITE_CHECKS:
+    WRITE_CHECKS.append(check_write)

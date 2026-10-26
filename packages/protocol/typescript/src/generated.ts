@@ -3570,6 +3570,7 @@ export interface MapCoverage {
 export interface MapProblem {
   file: string;
   message: string;
+  partial?: boolean;
 }
 /**
  * The optional scheduled 지도 점검 (decision 6), kept on this computer.
