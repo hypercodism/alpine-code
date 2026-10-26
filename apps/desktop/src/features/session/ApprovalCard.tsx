@@ -1,5 +1,6 @@
 import type { ApprovalItem } from '@alpine/protocol';
 import { Button, LinkButton } from '@alpine/ui/primitives';
+import clsx from 'clsx';
 
 import { Lines } from '@/shared/components/output';
 import { useMessages } from '@/shared/i18n';
@@ -21,11 +22,17 @@ export function ApprovalCard({
   sessionId,
   approval,
   inputOnMap = false,
+  compact = false,
+  hint = true,
 }: {
   sessionId: string;
   approval: ApprovalItem;
   /** Shown beside the map: what to do instead is written in the map's input. */
   inputOnMap?: boolean;
+  /** Held above the input (`WaitingApprovals`): its command or diff takes less room. */
+  compact?: boolean;
+  /** Says that the input below answers it otherwise (only the card the input answers). */
+  hint?: boolean;
 }) {
   const t = useMessages(messages);
   const answer = useAnswerApproval();
@@ -50,7 +57,7 @@ export function ApprovalCard({
               {t.approvalWaiting}
             </span>
           </div>
-          <Preview call={approval} />
+          <Preview call={approval} compact={compact} />
         </>
       ) : (
         <>
@@ -79,7 +86,7 @@ export function ApprovalCard({
                 </div>
                 {/* Sessions saved before each agent's call was kept have only its task: the card's call stands in. */}
                 <Title call={ask.title ? ask : approval} />
-                <Preview call={ask.title ? ask : approval} />
+                <Preview call={ask.title ? ask : approval} compact={compact} />
               </li>
             ))}
           </ul>
@@ -116,7 +123,7 @@ export function ApprovalCard({
           {asks.length > 1 ? t.skipAll : t.skip}
         </LinkButton>
       </div>
-      <p className="text-meta text-fg-muted">{inputOnMap ? t.answerHintMap : t.answerHint}</p>
+      {hint && <p className="text-meta text-fg-muted">{inputOnMap ? t.answerHintMap : t.answerHint}</p>}
     </section>
   );
 }
@@ -128,7 +135,7 @@ function Title({ call }: { call: Call }) {
   return call.tool ? <CallTitle name={call.tool} args={call.args} /> : <p className="text-body">{call.title}</p>;
 }
 
-function Preview({ call }: { call: Call }) {
+function Preview({ call, compact = false }: { call: Call; compact?: boolean }) {
   // The file names at the top of a diff repeat the call's own line.
   const preview =
     call.previewKind === 'diff'
@@ -136,7 +143,7 @@ function Preview({ call }: { call: Call }) {
       : call.preview?.split('\n');
   if (!preview) return null;
   return (
-    <div className="max-h-60 overflow-auto rounded-lg bg-canvas-sunken px-3 py-2">
+    <div className={clsx('overflow-auto rounded-lg bg-canvas-sunken px-3 py-2', compact ? 'max-h-32' : 'max-h-60')}>
       <Lines
         lines={preview[preview.length - 1] === '' ? preview.slice(0, -1) : preview}
         kind={call.previewKind === 'diff' ? 'diff' : 'text'}

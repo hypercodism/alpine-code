@@ -249,6 +249,11 @@ describe('the completion card', () => {
     const open = within(done).getByRole('list', { name: '고칠 약속' });
     expect(within(open).getByText('댓글 달기 · 로그인한 사람만 댓글을 달 수 있어요')).toBeTruthy();
 
+    fireEvent.click(within(open).getByRole('button', { name: '앱에서 보기' }));
+    expect(onOpenInApp).toHaveBeenCalledWith('comment');
+    fireEvent.click(within(done).getByRole('button', { name: '인터넷에 올리기' }));
+    expect(onPublish).toHaveBeenCalled();
+
     fireEvent.click(within(open).getByRole('button', { name: '바로 고치기' }));
     await waitFor(() =>
       expect(request.mock.calls.find(([method]) => method === 'flow/prepare')?.[1]).toMatchObject({
@@ -257,11 +262,11 @@ describe('the completion card', () => {
         request: '댓글 달기에서 지켜지지 않는 약속을 고쳐 주세요: 로그인한 사람만 댓글을 달 수 있어요',
       }),
     );
-
-    fireEvent.click(within(open).getByRole('button', { name: '앱에서 보기' }));
-    expect(onOpenInApp).toHaveBeenCalledWith('comment');
-    fireEvent.click(within(done).getByRole('button', { name: '인터넷에 올리기' }));
-    expect(onPublish).toHaveBeenCalled();
+    // The fix is new work: the card folds to one line, so the conversation and what it asks stay in view.
+    const folded = await screen.findByRole('button', { name: '펼치기' });
+    expect(screen.queryByRole('list', { name: '고칠 약속' })).toBeNull();
+    fireEvent.click(folded);
+    expect(await screen.findByRole('list', { name: '고칠 약속' })).toBeTruthy();
   });
 
   it('says 다 만들었어요 alone only when nothing is broken or waits', async () => {

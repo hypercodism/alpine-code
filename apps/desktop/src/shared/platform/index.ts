@@ -16,4 +16,4 @@ export {
   useUpdateReady,
   type UpdateCheck,
 } from './update';
-export { notify } from './notify';
+export { notify, setBadge } from './notify';

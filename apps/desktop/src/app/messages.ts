@@ -21,6 +21,8 @@ export const messages = defineMessages({
     mapStopped: 'AI가 지도의 일을 하다 멈췄어요. 열어서 이유를 확인해 보세요.',
     mapAsks: 'AI가 물어볼 게 있어요. 열어서 답해 주면 이어서 해요.',
     mapNeedsYes: 'AI가 허락을 기다려요. 열어서 확인해 주세요.',
+    waitingOn: (project: string) => `확인을 기다려요 · ${project}`,
+    waitingOpen: '열기',
     engineStopped: '앱 엔진이 멈췄어요.',
     engineStoppedHint: '다시 시작하면 프로젝트와 지도, 대화는 그대로 있어요. 하던 AI 작업은 다시 부탁해 주세요.',
     engineRestart: '다시 시작',
@@ -51,6 +53,8 @@ export const messages = defineMessages({
     mapStopped: 'The AI stopped while working on the map. Open it to see why.',
     mapAsks: 'The AI has a question. Open it and answer to let it go on.',
     mapNeedsYes: 'The AI is waiting for your OK. Open it to have a look.',
+    waitingOn: (project: string) => `Waiting for your OK · ${project}`,
+    waitingOpen: 'Open',
     engineStopped: "The app's engine stopped.",
     engineStoppedHint:
       'Restart: your projects, maps and conversations stay. Ask again for any AI work that was going on.',

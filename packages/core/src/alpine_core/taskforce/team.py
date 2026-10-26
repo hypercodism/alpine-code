@@ -406,6 +406,7 @@ class TaskForce:
         recorder = self._session._recorder
         member.state = "asking"
         self._changed(run)
+        self._session._asks_beside(+1)
         mine = AgentAsk(
             member.id,
             member.task,
@@ -455,6 +456,7 @@ class TaskForce:
                 self._groups[key] = group
             return await self._wait(member, group)
         finally:
+            self._session._asks_beside(-1)
             if member.state == "asking":
                 member.state = "working"
             self._changed(run)

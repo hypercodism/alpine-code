@@ -51,6 +51,16 @@ export function activeApproval(state: SessionState): ApprovalItem | null {
   return found?.kind === 'approval' ? found : null;
 }
 
+/** Every call that waits for my answer: the session's own, and its TF's agents'. */
+export function waitingApprovals(state: SessionState): ApprovalItem[] {
+  const active = new Set(state.activeIds);
+  return state.items.filter((item): item is ApprovalItem => item.kind === 'approval' && active.has(item.id));
+}
+
+/** The session waits for my OK: its own call, or one of its TF's agents' (its activity says so). */
+export const waitsForMe = (info: Pick<SessionInfo, 'status' | 'activity'> | null | undefined) =>
+  !!info && (info.status === 'waiting' || info.activity?.kind === 'waiting_approval');
+
 /** Text streamed into an item: a reply grows its `text`, a tool call its `result`. */
 function grow(item: Item, text: string): Item {
   if (item.kind === 'tool_call') return { ...item, result: (item.result ?? '') + text };

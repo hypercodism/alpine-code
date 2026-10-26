@@ -212,6 +212,9 @@ class Session:
         self._created = self._updated = ""
         self._imported_from: dict[str, str] | None = None
         self._activity: Activity | None = None
+        # How many of a TF's agents ask the user now, and what the session did before the first asked.
+        self._beside_asks = 0
+        self._before_asks: Activity | None = None
         self._run_started_at: str | None = None
         self._run_base = UsageInfo()
         self._running_tools: dict[str, str] = {}
@@ -949,6 +952,19 @@ class Session:
         except (OSError, TimeoutError, subprocess.TimeoutExpired) as exc:
             self._dispatch(Notice(f"Checkpoint could not be captured: {exc}"))
             return None
+
+    def _asks_beside(self, delta: int) -> None:
+        """A TF's agent asks the user (``+1``) or has its answer (``-1``). The session's own turn is not waiting, so its
+        status stays; while any agent asks, its activity says an approval waits, so the list (and the app's notices)
+        tell that it needs the user."""
+        self._beside_asks = max(0, self._beside_asks + delta)
+        asking = self._activity is not None and self._activity.kind == "waiting_approval"
+        if self._beside_asks and not asking:
+            self._before_asks, self._activity = self._activity, Activity("waiting_approval", None, _now())
+            self._touch()
+        elif not self._beside_asks and asking and self._status != "waiting":
+            self._activity, self._before_asks = self._before_asks, None
+            self._touch()
 
     def _end_beside(self, checkpoint: str | None, status: str) -> None:
         if checkpoint is None:

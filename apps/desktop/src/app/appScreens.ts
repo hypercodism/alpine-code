@@ -76,9 +76,8 @@ export function useAppPeople(cwd: string, product: string): AppPerson[] {
  */
 export function useHasApp(cwd: string): boolean {
   const board = useProductMap(cwd).data;
-  const { buildWorking, buildTeam } = useMapTalk(cwd);
+  const { buildState } = useMapTalk(cwd);
   if (!board) return false;
-  if (board.planned)
-    return planPhase(board, false, false, { working: buildWorking, team: buildTeam?.status ?? null }) === 'built';
+  if (board.planned) return planPhase(board, false, false, buildState) === 'built';
   return (board.document?.nodes ?? []).some((node) => node.kind === 'screen' || !!board.previews?.[node.id]);
 }

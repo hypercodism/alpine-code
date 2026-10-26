@@ -204,8 +204,11 @@ def test_agents_asking_the_same_thing_share_one_card_showing_each_call(tmp_path,
         assert "+b" in approval.asked_by[1].preview and approval.asked_by[1].preview_kind == "diff"
         assert len(approver.requests) == 1
         assert session.info.status == "idle"  # the session's own turn is not waiting
+        # but the list says an approval waits, so the app tells me even when I look elsewhere.
+        assert session.info.activity is not None and session.info.activity.kind == "waiting_approval"
         gate.set()
         await until(lambda: taskforce_items(session, active=False))
+        assert session.info.activity is None or session.info.activity.kind != "waiting_approval"
         assert [m["state"] for m in taskforce_items(session, active=False)[0].members] == ["done", "done"]
 
     asyncio.run(go())

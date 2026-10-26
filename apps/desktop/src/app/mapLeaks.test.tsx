@@ -265,7 +265,7 @@ describe('Ctrl+Tab and search with a map (#24, #41)', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/session/cart'));
   });
 
-  it("names the map's conversations as the rail does, and opens them on the map", async () => {
+  it("names the map's conversations as the rail does, and opens the one picked on the map", async () => {
     const { router } = mount('/board' + q(docs), sessions);
     await screen.findByRole('main', { name: '제품 지도' });
     fireEvent.keyDown(window, { key: 'k', metaKey: true });
@@ -279,7 +279,10 @@ describe('Ctrl+Tab and search with a map (#24, #41)', () => {
         name: /^지도 대화/,
       }),
     );
-    await waitFor(() => expect(router.state.location.href).toBe('/board' + q(app)));
+    // The conversation picked shows, even when the map's input goes elsewhere right then.
+    await waitFor(() =>
+      expect(router.state.location.search).toMatchObject({ project: app, session: expect.any(String) }),
+    );
   });
 });
 

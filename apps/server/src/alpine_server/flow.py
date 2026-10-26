@@ -977,7 +977,8 @@ situation of a whole journey (the connection drops halfway, someone else takes t
 `situations` with the `screen` where it is seen, which lists the same id in its `states`. Where the app shows a
 situation at `?alpine-state=<id>`, the map shows it as a screen of its own.
 When trying a card needs something a person would not know (a test account, keys, seed data, a command, a running
-server), write it in `howToTry` in plain words.
+server), write it in `howToTry` in plain words. Never put Alpine's own marks there (`?alpine-state=`, situation ids,
+`data-alpine-*`): the person sees every situation by pressing its chip on the map.
 Phase: built means implemented, NOT verified; new branches start planned; use building while actually working.
 Flows: a flow is one kind of user's journey through one door of the product (the screens of an app, a terminal
 command, a library, a protocol other programs speak), from what they start wanting to what they get. Give it a
@@ -1088,7 +1089,8 @@ it on the card as a decision with "by": "ai" (with the options you weighed), and
 when no sensible default exists.
 Check every promise you built and record the checks, as below. A promise is done only when a recorded check says so.
 Whatever the person needs to try a screen themselves (where to sign in, a password you set, a test card) goes into
-that card's `howToTry` in plain words ("사장님 비밀번호: bakery1234"), never only in your message.
+that card's `howToTry` in plain words ("사장님 비밀번호: bakery1234"), never only in your message. Never Alpine's own marks
+(`?alpine-state=`, situation ids): the person opens each situation from its chip on the map.
 Finish with one short line: what was built, how many promises were checked, and what you decided on your own.
 """
 

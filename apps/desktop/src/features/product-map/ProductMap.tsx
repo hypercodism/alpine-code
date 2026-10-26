@@ -13,11 +13,11 @@ import { ImportLink } from '@/shared/components/import-link';
 import { latestTaskForce, roomOf } from '@/shared/components/taskforce';
 import { useMessages } from '@/shared/i18n';
 import {
-  activeApproval,
   SESSION_RUNNING,
   ServerError,
   useAgents,
   useAnswerApproval,
+  useProjectApprovals,
   useCancelSession,
   useConnections,
   useMemory,
@@ -223,15 +223,19 @@ export function ProductMap({
   const document = data && mapOf(data);
   // Where the map talks and who does its work now: the build while it is unfinished, else the map's own conversation
   // (or, before the map has one, the session the page attached, as an older map's drawing was).
-  const { mapConversation, buildSessionId, buildWorking, buildItems, buildTeam, building, talkTo } = useMapTalk(cwd);
+  const { mapConversation, buildSessionId, buildWorking, buildItems, buildTeam, buildState, building, talkTo } =
+    useMapTalk(cwd);
   const workId = talkTo ?? sessionId;
   const work = useSession(workId);
   const workInfo = work.data?.info;
   const workTeam = work.data ? latestTaskForce(work.data.items) : null;
   // A TF the work started keeps working while the session itself waits for it.
   const workBusy = atWork(workInfo) || (!!workTeam && TEAM_WORKING.has(workTeam.status));
-  // A call the work waits for me to allow: words in the map's input skip it and tell the AI what to do instead.
-  const approval = work.data && workInfo?.status === 'waiting' ? activeApproval(work.data) : null;
+  // A call of this project that waits for me to allow (the work's own, its TF's agents', or another conversation's):
+  // words in the map's input skip the one nearest the input and tell the AI what to do instead.
+  const waitingCalls = useProjectApprovals(cwd);
+  const waitingCall = waitingCalls.at(-1) ?? null;
+  const approval = waitingCall?.approval ?? null;
   const answer = useAnswerApproval();
   // Other conversations of this project at work (an older one on the rail, one opened beside the map): the map waits
   // for them, and says so.
@@ -381,10 +385,7 @@ export function ProductMap({
   const question = pending?.question ?? null;
   // A build is a conversation of its own (map-first 36): the map follows it and the TF it proposes or runs. While it
   // is unfinished the map's one input goes to it, which fixes things itself (map-first 37).
-  const phase =
-    planned && data
-      ? planPhase(data, conversationWorking, !!question, { working: buildWorking, team: buildTeam?.status ?? null })
-      : null;
+  const phase = planned && data ? planPhase(data, conversationWorking, !!question, buildState) : null;
   const talking = building ? buildWorking : conversationWorking;
   // A plan whose build never began has no code: nothing on it is checked or found in code, and what is added to it is
   // planned. Once a build began there is code, even when cards were added later or the build stopped halfway.
@@ -895,14 +896,21 @@ export function ProductMap({
   // Words from the map's one input: another answer while a decision of the AI is open, the plan's conversation (or
   // the build's) while it is a plan, else a request to the map.
   const sendWords = async (text: string, from: DOMRect | null) => {
-    if (approval && workId && text)
-      return answer.mutateAsync({ sessionId: workId, requestId: approval.id, decision: 'deny', feedback: text }).then(
-        () => true,
-        () => {
-          setError({ text: t.answerFailed });
-          return false;
-        },
-      );
+    if (waitingCall && text)
+      return answer
+        .mutateAsync({
+          sessionId: waitingCall.info.id,
+          requestId: waitingCall.approval.id,
+          decision: 'deny',
+          feedback: text,
+        })
+        .then(
+          () => true,
+          () => {
+            setError({ text: t.answerFailed });
+            return false;
+          },
+        );
     if (pickReview && text) {
       changeDecision(text);
       nextReview();
@@ -1434,6 +1442,7 @@ export function ProductMap({
                 docked={docked}
                 phase={phase}
                 thinking={talking && phase === 'asking'}
+                busy={talking}
                 question={shownQuestion}
                 about={shownQuestion?.about ? (treeMap?.cards[shownQuestion.about]?.title ?? null) : null}
                 preview={previewing}

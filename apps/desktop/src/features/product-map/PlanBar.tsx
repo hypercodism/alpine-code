@@ -1,7 +1,7 @@
 import type { RunStoppedItem } from '@alpine/protocol';
 import { Button, LinkButton } from '@alpine/ui/primitives';
 import clsx from 'clsx';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import { HtmlFrame } from '@/shared/components/html-frame';
 import { useMessages } from '@/shared/i18n';
@@ -110,6 +110,7 @@ export function PlanBar({
   onFixConnection,
   onStop,
   onLook,
+  busy = false,
 }: {
   /**
    * Under the conversation beside the map (map-first 43): what the conversation itself shows (the OK it waits on,
@@ -166,6 +167,8 @@ export function PlanBar({
   onStop: () => void;
   /** Shows the conversation at work, where what it waits on is. */
   onLook: () => void;
+  /** The conversation is at work on something new (a fix asked once it was built): the completion card folds. */
+  busy?: boolean;
 }) {
   const t = useMessages(messages);
   if (review)
@@ -288,7 +291,9 @@ export function PlanBar({
   if (phase === 'built')
     return (
       <Done
+        key={busy ? 'busy' : 'rest'}
         built={built}
+        folded={busy}
         onReviewPicks={onReviewPicks}
         onFix={onFix}
         onRecheck={onRecheck}
@@ -310,6 +315,7 @@ const OPEN_ROWS = 5;
  */
 function Done({
   built,
+  folded: startFolded = false,
   onReviewPicks,
   onFix,
   onRecheck,
@@ -317,6 +323,8 @@ function Done({
   onPublish,
 }: {
   built: PlanBuilt;
+  /** Starts as one line (new work began after it): the conversation and what it asks stay in view. */
+  folded?: boolean;
   onReviewPicks: () => void;
   onFix: (cardId: string, promiseId: string) => void;
   onRecheck: (cardIds: string[]) => void;
@@ -324,6 +332,7 @@ function Done({
   onPublish?: (from: HTMLElement) => void;
 }) {
   const t = useMessages(messages);
+  const [folded, setFolded] = useState(startFolded);
   const broken = built.open.filter((open) => open.failed);
   const waiting = built.open.filter((open) => !open.failed);
   const shown = broken.slice(0, OPEN_ROWS);
@@ -332,13 +341,33 @@ function Done({
     : waiting.length
       ? t.builtToRecheck(waiting.length)
       : t.builtTitle;
+  if (folded)
+    return (
+      <section
+        aria-label={t.builtTitle}
+        className="pointer-events-auto motion-step flex items-center gap-3 rounded-xl border border-line bg-canvas-raised px-4 py-2 shadow-overlay"
+      >
+        <p className="min-w-0 grow truncate text-body text-fg">
+          {title}
+          <span className="text-meta text-fg-muted"> · {t.builtCounts(built.screens, built.total, built.checked)}</span>
+        </p>
+        <LinkButton className="min-h-5 shrink-0 px-0.5" aria-expanded={false} onClick={() => setFolded(false)}>
+          {t.unfold}
+        </LinkButton>
+      </section>
+    );
   return (
     <section
       aria-label={t.builtTitle}
-      className="pointer-events-auto motion-step flex flex-col gap-3 rounded-xl border border-line bg-canvas-raised p-4 shadow-overlay"
+      className="pointer-events-auto motion-step flex max-h-[45vh] flex-col gap-3 overflow-y-auto rounded-xl border border-line bg-canvas-raised p-4 shadow-overlay"
     >
-      <div className="flex flex-col">
-        <p className="text-reading font-medium text-fg">{title}</p>
+      <div className="flex items-start gap-3">
+        <p className="min-w-0 grow text-reading font-medium text-fg">{title}</p>
+        <LinkButton className="min-h-5 shrink-0 px-0.5" aria-expanded onClick={() => setFolded(true)}>
+          {t.fold}
+        </LinkButton>
+      </div>
+      <div className="-mt-3 flex flex-col">
         <p className="text-meta text-fg-muted">
           {t.builtCounts(built.screens, built.total, built.checked)}
           {built.aiPicks > 0 && (
@@ -354,6 +383,7 @@ function Done({
       {built.tries.length > 0 && (
         <section aria-label={t.howToTry} className="flex flex-col gap-1.5 border-t border-line-subtle pt-3">
           <p className="text-meta text-fg-muted">{t.howToTry}</p>
+          <p className="text-meta text-fg-muted">{t.situationsOnMap}</p>
           <ul className="flex flex-col gap-1">
             {built.tries.map((one) => (
               <li key={one.cardId} className="text-body text-fg">

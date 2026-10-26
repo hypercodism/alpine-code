@@ -208,8 +208,8 @@ describe('the conversation beside the map points at the map (#35)', () => {
   });
 });
 
-describe('another conversation beside the map is answered where it is shown (#35)', () => {
-  it('gets an input of its own while it waits, since the map’s input does not reach it', async () => {
+describe('a call of another conversation beside the map waits above the map’s input (#35)', () => {
+  it('holds its card above the input, which answers it, so words never go somewhere unseen', async () => {
     const open = renderHook(() => useDockOpen());
     act(() => open.result.current[1](true));
     open.unmount();
@@ -223,18 +223,21 @@ describe('another conversation beside the map is answered where it is shown (#35
     await router.navigate({ to: '/board', search: { project: app, session: 'old' } });
     const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
     expect(await within(dock).findByText('지금 지도 대화가 아닌 다른 대화를 보고 있어요')).toBeTruthy();
-    const card = await within(dock).findByRole('region', { name: '승인 요청' });
+    const held = await within(dock).findByRole('region', { name: '확인을 기다려요' });
+    expect(within(held).getByText('README 다시 쓰기 · 확인을 기다려요')).toBeTruthy();
+    const card = within(held).getByRole('region', { name: '승인 요청' });
     expect(within(card).getByText('다르게 하려면 아래 입력창에 적어 주세요')).toBeTruthy();
-    const own = within(dock).getByPlaceholderText('어떻게 다르게 할지 적어 주세요');
-    fireEvent.change(own, { target: { value: '고치지 말고 읽기만 해 줘' } });
-    fireEvent.keyDown(own, { key: 'Enter' });
+    // The chat says where it is, instead of a second card.
+    expect(within(dock).getAllByRole('region', { name: '승인 요청' })).toHaveLength(1);
+    expect(mapInput().getAttribute('placeholder')).toBe('건너뛰고 대신 할 일을 적어 주세요');
+    write('고치지 말고 읽기만 해 줘');
     await waitFor(() =>
       expect(calls(request, 'session/answer')).toContainEqual(
         expect.objectContaining({ sessionId: 'old', decision: 'deny', feedback: '고치지 말고 읽기만 해 줘' }),
       ),
     );
-    // Answered, it is only read here again: the map's input is the one input.
-    await waitFor(() => expect(within(dock).queryByPlaceholderText('어떻게 다르게 할지 적어 주세요')).toBeNull());
+    // What I wrote reads as my words under the call it replaced.
+    expect(await within(dock).findByText('대신 이렇게 해 달라고 했어요')).toBeTruthy();
   });
 });
 
@@ -425,5 +428,42 @@ describe('words kept for a conversation that is gone (#34, edge)', () => {
       ),
     );
     expect(calls(request, 'session/send').filter((params) => params.sessionId === 'gone')).toEqual([]);
+  });
+});
+
+describe('a call waiting for my OK is never hidden (dogfood 2, 4, 15)', () => {
+  it('stays above the input with a developer tool open, and is answered there', async () => {
+    const { connection, request } = mount('/board' + q(app), {
+      sessions: [{ info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '지도' }) }],
+    });
+    await connection.request('session/send', { sessionId: 'map-1', text: 'README를 고쳐 줘' });
+    const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
+    const held = await within(dock).findByRole('region', { name: '확인을 기다려요' });
+    expect(within(held).getByText('지도 대화 · 확인을 기다려요')).toBeTruthy();
+    // A developer tool takes the conversation's place; the card does not go with it.
+    fireEvent.click(within(dock).getByRole('button', { name: '더 보기' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: '개발 도구' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'AI가 실행한 명령' }));
+    expect(await within(dock).findByRole('heading', { name: 'AI가 실행한 명령' })).toBeTruthy();
+    fireEvent.click(
+      within(within(dock).getByRole('region', { name: '확인을 기다려요' })).getByRole('button', { name: '허용' }),
+    );
+    await waitFor(() =>
+      expect(calls(request, 'session/answer')).toContainEqual(
+        expect.objectContaining({ sessionId: 'map-1', decision: 'allow' }),
+      ),
+    );
+    await waitFor(() => expect(within(dock).queryByRole('region', { name: '확인을 기다려요' })).toBeNull());
+  });
+
+  it('is said on every other page, with the way to its map', async () => {
+    const { connection, router } = mount('/settings', {
+      sessions: [{ info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '지도' }) }],
+    });
+    await connection.request('session/send', { sessionId: 'map-1', text: 'README를 고쳐 줘' });
+    fireEvent.click(await screen.findByRole('button', { name: /확인을 기다려요 · alpine-code/ }));
+    await waitFor(() => expect(router.state.location.search).toEqual({ project: app }));
+    expect(await screen.findByRole('region', { name: '확인을 기다려요' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /확인을 기다려요 · alpine-code/ })).toBeNull();
   });
 });

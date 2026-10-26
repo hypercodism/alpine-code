@@ -21,6 +21,8 @@ export { useAgents, useDeleteAgent, useSaveAgent } from './agents';
 export { useAddSkill, useRemoveSkill, useSaveSkill, useSearchSkills, useSkill, useSkills } from './skills';
 export { useApproveMemory, useForgetMemory, useMemory, useRejectMemory } from './memory';
 export {
+  useProjectApprovals,
+  type ProjectApproval,
   useAnswerApproval,
   useCancelSession,
   useDeleteSession,
@@ -38,6 +40,8 @@ export {
 } from './sessions';
 export {
   activeApproval,
+  waitingApprovals,
+  waitsForMe,
   applyEvent,
   fromSnapshot,
   toSnapshot,

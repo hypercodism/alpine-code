@@ -33,6 +33,11 @@ export type PlanPhase = 'drawing' | 'asking' | 'ready' | 'building' | 'team' | '
 export interface BuildState {
   working: boolean;
   team: string | null;
+  /**
+   * The map's own conversation took the product up after the build last worked (a fix asked once it was built): the
+   * cards it marks as being made are its work, not a build that stopped halfway.
+   */
+  taken?: boolean;
 }
 
 /** A TF that is still at work (or finishing), so the conversation that started it is not done. */
@@ -87,6 +92,7 @@ export function planPhase(
   if (result.build !== 'none' && result.build !== undefined) {
     if ((build.team === 'proposed' && !build.working) || build.team === 'over') return 'team';
     if (result.build === 'running' || build.working || (build.team && TEAM_WORKING.has(build.team))) return 'building';
+    if (build.taken) return 'built';
     return nodes.length && nodes.every((node) => node.phase === 'built') ? 'built' : 'stopped';
   }
   if (!nodes.length) return working ? 'drawing' : 'asking';

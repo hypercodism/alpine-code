@@ -180,9 +180,10 @@ function SearchContents({ onClose, title }: { onClose: () => void; title: string
     const go = () => {
       // A project opens its map, as on the rail; so does the map's own conversation, and a record opens beside it.
       const session = entry.session;
+      // The conversation picked is the one that shows, the map's own included (it may not be where the map's input
+      // goes right then, as while a build is unfinished).
       if (session && !session.purpose) void navigate({ to: '/session/$sessionId', params: { sessionId: session.id } });
-      else if (session && (session.purpose === 'build' || session.archived))
-        void navigate({ to: '/board', search: { project: entry.path, session: session.id } });
+      else if (session) void navigate({ to: '/board', search: { project: entry.path, session: session.id } });
       else void navigate({ to: '/board', search: { project: entry.path } });
       onClose();
     };

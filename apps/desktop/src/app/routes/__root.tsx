@@ -15,6 +15,7 @@ import { useFirstPress } from '../useFirstPress';
 import { useFolderOpening } from '../useFolderOpening';
 import { useMapNotifications } from '../useMapNotifications';
 import { useNewSessionShortcut } from '../useNewSessionShortcut';
+import { WaitingElsewhere } from '../WaitingElsewhere';
 
 const RAIL_KEY = 'alpine.rail.open';
 
@@ -97,6 +98,7 @@ function Root() {
       {/* Kept in one place whatever the page, so going between them never starts them over (opening the app
           goes back to the last map only once). */}
       <NavigationController onRestored={restored} />
+      <WaitingElsewhere />
       <FirstRun auto={onNewSession && !restoring} />
       <DroppedSkillsDialog outcome={dropped} onClose={closeDropped} />
     </div>

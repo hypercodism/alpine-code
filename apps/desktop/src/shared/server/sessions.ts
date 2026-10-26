@@ -10,11 +10,12 @@ import type {
   SessionSetModelParams,
   SessionSetModeParams,
 } from '@alpine/protocol';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { ApprovalItem } from '@alpine/protocol';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useServer, useSessionStore } from './context';
 import { removeSession, sessionKey, sessionsKey, upsertSession } from './sessionStore';
-import type { SessionState } from './sessionState';
+import { waitingApprovals, waitsForMe, type SessionState } from './sessionState';
 
 /**
  * Every session of every project, most recently updated first. Kept fresh by `info_changed` and `deleted` events, so
@@ -43,6 +44,36 @@ export function useSession(id: string | null) {
     staleTime: Infinity, // Events keep it fresh; a gap in them opens the session again.
     refetchOnWindowFocus: false,
     retry: false,
+  });
+}
+
+/** A call of a project that waits for my OK, with the conversation it is in. */
+export interface ProjectApproval {
+  info: SessionInfo;
+  approval: ApprovalItem;
+}
+
+/**
+ * Every call of a project's conversations that waits for my OK (their own, and their TF's agents'), the oldest
+ * conversation first. The map holds them above its input, and words in that input answer the last one, nearest it.
+ */
+export function useProjectApprovals(cwd: string): ProjectApproval[] {
+  const sessions = useSessionStore();
+  const waiting = (useSessions().data ?? [])
+    .filter((info) => info.cwd === cwd && !info.archived && waitsForMe(info))
+    .reverse();
+  const states = useQueries({
+    queries: waiting.map((info) => ({
+      queryKey: sessionKey(info.id),
+      queryFn: (): Promise<SessionState> => sessions.open(info.id),
+      staleTime: Infinity,
+      refetchOnWindowFocus: false,
+      retry: false,
+    })),
+  });
+  return waiting.flatMap((_, index) => {
+    const state = states[index]?.data;
+    return state ? waitingApprovals(state).map((approval) => ({ info: state.info, approval })) : [];
   });
 }
 

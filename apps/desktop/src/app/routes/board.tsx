@@ -26,6 +26,7 @@ import { openPublish, usePublishable } from '@/features/publish/publishRequest';
 import { MissingProject } from '@/features/rail/MissingProject';
 import { RecordItems } from '@/features/session/RecordItems';
 import { Session } from '@/features/session/Session';
+import { WaitingApprovals } from '@/features/session/WaitingApprovals';
 import { useTaskForceTab } from '@/features/taskforce/useTaskForceTab';
 import { useWorkResultTab } from '@/features/work-result/useWorkResultTab';
 import { FileNavigationProvider } from '@/shared/files';
@@ -139,7 +140,7 @@ function BoardRoute() {
       {/* Another conversation opened beside the map (a card's, one brought over): my words to the map do not go
           there, so it says so and leads back. */}
       {talkTo && session !== talkTo && (
-        <p className="flex flex-wrap items-center gap-x-2 border-b border-line bg-canvas-sunken px-4 py-2 text-meta text-fg-muted">
+        <p className="flex shrink-0 flex-wrap items-center gap-x-2 border-b border-line bg-canvas-sunken px-4 py-2 text-meta text-fg-muted">
           <span>{m.viewingOther}</span>
           <LinkButton
             className="min-h-5 px-0.5"
@@ -151,21 +152,22 @@ function BoardRoute() {
       )}
       {buildDone && buildShownFor === buildSessionId ? (
         <div className="flex min-h-0 grow flex-col">
-          <p className="border-b border-line px-4 py-2 text-meta">
+          <p className="shrink-0 border-b border-line px-4 py-2 text-meta">
             <LinkButton className="min-h-5 px-0.5" onClick={() => setBuildShownFor(null)}>
               {m.backToConversation}
             </LinkButton>
           </p>
-          <Session key={buildSessionId} sessionId={buildSessionId} compact readOnly inputOnMap />
+          <Session key={buildSessionId} sessionId={buildSessionId} compact readOnly inputOnMap approvalsPinned />
         </div>
       ) : teamShown ? (
-        <div className="flex min-h-0 grow flex-col overflow-y-auto">
-          <p className="border-b border-line px-4 py-2 text-meta">
+        <div className="flex min-h-0 grow flex-col">
+          {/* The way back stays in view however far the agents' records scroll. */}
+          <p className="shrink-0 border-b border-line px-4 py-2 text-meta">
             <LinkButton className="min-h-5 px-0.5" onClick={() => setTeamOf(null)}>
               {m.backToConversation}
             </LinkButton>
           </p>
-          {team.content}
+          <div className="min-h-0 grow overflow-y-auto">{team.content}</div>
         </div>
       ) : (
         // The map has its own input; here the conversation only reads, unless it is one the map's input does not
@@ -188,6 +190,7 @@ function BoardRoute() {
             readOnly
             inputOnMap={!talkTo || session === talkTo}
             questionsPinned={planned && session === talkTo}
+            approvalsPinned
             onInspectProcesses={() => showDockTab('processes')}
             onShowTaskForce={
               team
@@ -314,6 +317,8 @@ function BoardRoute() {
           )}
           {/* The conversation stays mounted behind a tool, so coming back finds it where it was. */}
           <div className={clsx('min-h-0 grow flex-col', tool ? 'hidden' : 'flex')}>{conversation}</div>
+          {/* Every call of the project waiting for my OK, whatever shows above: never behind a card or another view. */}
+          <WaitingApprovals cwd={cwd} />
           {lookingTitle && (
             <p className="mx-4 mb-2 flex items-center gap-1.5 text-meta text-fg-muted">
               <span aria-hidden="true" className="size-1.5 rounded-full bg-interactive" />

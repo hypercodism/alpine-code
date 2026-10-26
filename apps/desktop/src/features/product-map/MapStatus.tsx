@@ -18,11 +18,11 @@ export type MapStatus = 'planning' | 'building' | 'waiting' | 'stopped' | 'built
 export function useMapStatus(cwd: string): MapStatus | null {
   const board = useProductMap(cwd).data;
   const sessions = (useSessions().data ?? []).filter((s) => s.cwd === cwd && !s.archived);
-  const { buildWorking, buildTeam } = useMapTalk(cwd);
+  const { buildState } = useMapTalk(cwd);
   if (sessions.some((s) => s.status === 'waiting')) return 'waiting';
   const working = sessions.some((s) => s.status === 'running');
   if (!board?.planned) return working ? 'working' : null;
-  const phase = planPhase(board, false, false, { working: buildWorking, team: buildTeam?.status ?? null });
+  const phase = planPhase(board, false, false, buildState);
   if (phase === 'team') return 'waiting';
   if (phase === 'building') return 'building';
   if (phase === 'stopped' || phase === 'built') return working ? 'working' : phase;

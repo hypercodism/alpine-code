@@ -24,11 +24,16 @@ export function useMapTalk(cwd: string) {
   const buildWorking = working(buildInfo);
   const buildItems = buildConversation.data?.items;
   const buildTeam = buildItems ? latestTaskForce(buildItems) : null;
+  // A fix asked of the map once the product was built is the map conversation's: while it works, or once it worked
+  // after the build last did, the build is not "stopped" because the cards it touches are being made again.
+  const taken =
+    !!mapConversation &&
+    !!buildInfo &&
+    !buildWorking &&
+    (working(mapConversation) || Date.parse(mapConversation.updatedAt) > Date.parse(buildInfo.updatedAt));
+  const buildState = { working: buildWorking, team: buildTeam?.status ?? null, taken };
   // Before a build starts, the plan's own state does not matter here: the input goes to the map's conversation.
-  const afterBuild =
-    planned && board
-      ? planPhase(board, false, false, { working: buildWorking, team: buildTeam?.status ?? null })
-      : null;
+  const afterBuild = planned && board ? planPhase(board, false, false, buildState) : null;
   const building = afterBuild === 'building' || afterBuild === 'team' || afterBuild === 'stopped';
   return {
     mapConversation,
@@ -37,6 +42,8 @@ export function useMapTalk(cwd: string) {
     buildWorking,
     buildItems,
     buildTeam,
+    /** How the build stands, for `planPhase`. */
+    buildState,
     /** The build is unfinished: words go to it. */
     building,
     talkTo: building ? buildSessionId : (mapConversation?.id ?? null),

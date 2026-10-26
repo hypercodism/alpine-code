@@ -38,6 +38,7 @@ export function Chat({
   onShowTaskForce,
   inputOnMap = false,
   questionsPinned = false,
+  approvalsPinned = false,
 }: {
   sessionId: string;
   /** The project the session works in, whose memory the suggestions go to. */
@@ -50,7 +51,10 @@ export function Chat({
   inputOnMap?: boolean;
   /** Its open question is answered in the bar under the conversation, so here it is one quiet line. */
   questionsPinned?: boolean;
+  /** Calls waiting for my OK are held above the input (`WaitingApprovals`): here each is one line saying so. */
+  approvalsPinned?: boolean;
 }) {
+  const t = useMessages(messages);
   const answered = useMemo(() => answers(items), [items]);
   // A run that failed last can be asked again: what I last sent, sent again.
   const last = items.at(-1);
@@ -60,9 +64,27 @@ export function Chat({
     <div className="flex flex-col gap-4">
       {toBlocks(items, activeIds).map((block) =>
         block.type === 'tools' ? (
-          <ToolCalls key={block.id} rows={block.rows} />
+          <div key={block.id} className="flex flex-col gap-4">
+            <ToolCalls rows={block.rows} />
+            {/* What I wrote instead of allowing a call is my own words: they read as mine, under the call. */}
+            {block.rows.map(({ approval }) =>
+              approval?.decision === 'deny' && approval.feedback ? (
+                <div key={approval.id} className="flex flex-col items-end gap-1">
+                  <span className="text-meta text-fg-muted">{t.insteadSaid}</span>
+                  <p className="max-w-140 rounded-2xl bg-hover px-4 py-2 text-reading whitespace-pre-wrap">
+                    {approval.feedback}
+                  </p>
+                </div>
+              ) : null,
+            )}
+          </div>
         ) : block.type === 'blocked' ? (
           <BlockedLine key={block.item.id} item={block.item} />
+        ) : block.type === 'approval' && approvalsPinned ? (
+          <p key={block.item.id} role="status" className="flex items-center gap-1.5 text-meta text-attention">
+            <span aria-hidden="true">●</span>
+            {t.waitingHere} · <span className="text-fg-muted">{t.waitingBelow}</span>
+          </p>
         ) : block.type === 'approval' ? (
           <ApprovalCard key={block.item.id} sessionId={sessionId} approval={block.item} inputOnMap={inputOnMap} />
         ) : block.type === 'question' ? (
