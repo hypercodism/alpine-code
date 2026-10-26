@@ -49,7 +49,10 @@ def test_lifecycle_deduplication_and_logs(tmp_path: Path):
             )
             assert b"/__alpine/bridge.js" in page
             assert "Serving HTTP" in manager.logs(first["id"], 0, 65536)["text"]
+            # A restart starts fresh: Vite's prepared modules, which go stale and leave pages blank, are thrown away.
+            (tmp_path / "node_modules" / ".vite" / "deps").mkdir(parents=True)
             restarted = (await manager.restart(first["id"]))["server"]
+            assert not (tmp_path / "node_modules" / ".vite").exists()
             assert restarted["process_id"] != first["process_id"]
             await ready(port)
             stopped = await manager.stop(restarted["id"])
@@ -346,3 +349,61 @@ def test_cpu_time_is_read_as_ps_prints_it():
     assert _cpu_seconds("0:01.50") == 1.5
     assert _cpu_seconds("01:02:03") == 3723
     assert _cpu_seconds("1-00:00:01") == 86401
+
+
+def test_list_adopts_a_server_started_outside_alpine(tmp_path: Path):
+    """A server the AI started with ``nohup`` (or another terminal) is the project's app on the map all the same,
+    found by the folder its process works in, and it is not Alpine's to stop."""
+
+    async def check():
+        manager = DevelopmentServerManager()
+        port = free_port()
+        (tmp_path / "index.html").write_text("<p>hi</p>")
+        outside = await asyncio.create_subprocess_exec(
+            sys.executable,
+            "-m",
+            "http.server",
+            str(port),
+            "--bind",
+            "127.0.0.1",
+            cwd=tmp_path,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        try:
+            await ready(port)
+            servers = await manager.list(str(tmp_path))
+            assert [(s["port"], s["status"], s["external"]) for s in servers] == [(port, "running", True)]
+            assert servers[0]["board_url"]
+            # Opening the app uses it rather than starting a second one.
+            opened = (await manager.open(str(tmp_path)))["server"]
+            assert opened["id"] == servers[0]["id"]
+            await manager.stop(opened["id"])
+            assert outside.returncode is None
+        finally:
+            outside.terminate()
+            await outside.wait()
+            await process_manager().shutdown()
+
+    asyncio.run(check())
+
+
+def test_the_map_gets_a_new_way_in_when_the_app_moves(tmp_path: Path):
+    async def check():
+        manager = DevelopmentServerManager()
+        first, second = free_port(), free_port()
+        try:
+            server = (await manager.start(str(tmp_path), command(first), first))["server"]
+            await ready(first)
+            before = (await manager.list(str(tmp_path)))[0]["board_url"]
+            managed = manager.servers[server["id"]]
+            await process_manager().get(managed.process_id).stop()
+            process = await process_manager().start(command(second), tmp_path)
+            managed.process_id, managed.port = process.id, second
+            await ready(second)
+            after = (await manager.list(str(tmp_path)))[0]
+            assert after["port"] == second and after["board_url"] and after["board_url"] != before
+        finally:
+            await process_manager().shutdown()
+
+    asyncio.run(check())

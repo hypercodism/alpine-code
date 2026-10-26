@@ -39,6 +39,8 @@
   function soon() { clearTimeout(timer); timer = setTimeout(layout, 16); }
   new MutationObserver(soon).observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
   addEventListener("load", layout);
+  // Said once even when the page never finishes loading (a module that never comes): the map can tell a blank screen.
+  setTimeout(layout, 1500);
   addEventListener("resize", soon);
   addEventListener("message", function (e) { if (e.data && e.data.type === "alpine:ping") { sent = ""; layout(); } });
   addEventListener("click", function (e) {

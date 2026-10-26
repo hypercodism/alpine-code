@@ -1,7 +1,10 @@
 """The map's relay: pages get the bridge, everything else passes through untouched, hot reload passes both ways."""
 
 import asyncio
+import urllib.error
 import urllib.request
+
+import pytest
 
 from alpine_core.relay import BRIDGE_PATH, Relay, inject
 
@@ -110,9 +113,34 @@ def test_a_stopped_app_answers_502():
                 await asyncio.to_thread(fetch, relay.url + "/")
             except urllib.error.HTTPError as error:
                 assert error.code == 502
+                # A page that asks again by itself, so the map's screens come back when the app does.
+                assert b"http-equiv=refresh" in error.read()
             else:
                 raise AssertionError("expected 502")
         finally:
             await relay.close()
+
+    asyncio.run(check())
+
+
+def test_an_app_listening_on_ipv6_only_is_reached():
+    """Vite on Node 17+ takes ``localhost`` as ``::1``: the relay still reaches it."""
+
+    async def check():
+        async def handler(reader, writer):
+            await reader.readuntil(b"\r\n\r\n")
+            await answer(writer, f"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {len(PAGE)}", PAGE)
+
+        try:
+            app = await asyncio.start_server(handler, "::1", 0)
+        except OSError:
+            pytest.skip("no IPv6 loopback here")
+        relay = await Relay(app.sockets[0].getsockname()[1]).start()
+        try:
+            status, _, body = await asyncio.to_thread(fetch, relay.url + "/")
+            assert status == 200 and BRIDGE_PATH.encode() in body
+        finally:
+            await relay.close()
+            app.close()
 
     asyncio.run(check())

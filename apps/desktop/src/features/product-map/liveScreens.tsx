@@ -1,3 +1,4 @@
+import type { DevServerInfo } from '@alpine/protocol';
 import clsx from 'clsx';
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -49,12 +50,16 @@ const LiveApp = createContext<string | null>(null);
 export const LiveAppProvider = LiveApp.Provider;
 export const useLiveApp = () => useContext(LiveApp);
 
+/** How long the map waits, with no app running and none starting, before it asks for the app again. */
+export const ASK_AGAIN_MS = 10_000;
+
 /**
- * The project's app through the relay, while the map has screens to show (a card with an address): asked for once per
- * project (`devServers/open` uses the server the project already has, the one the AI started included, or starts one the
- * way the project runs), then followed.
+ * The project's app through the relay, while the map has screens to show (a card with an address): asked for when the
+ * map opens (`devServers/open` uses the server the project already has, the one the AI started included, or starts one
+ * the way the project runs), then followed. Asked again while none runs or starts (one that failed waits for its fix),
+ * so a server the AI starts, restarts or moves later still shows on the map without reopening the project.
  */
-export function useBoardApp(cwd: string, wanted: boolean): string | null {
+export function useBoardApp(cwd: string, wanted: boolean): DevServerInfo | null {
   const server = useServer();
   // A phone app (Expo) runs on a phone, not in a frame: its screens stay pictures and nothing is started for them.
   const mobile = useQuery({
@@ -73,26 +78,88 @@ export function useBoardApp(cwd: string, wanted: boolean): string | null {
   const shown = wanted && mobile.data === false;
   const servers = useDevelopmentServers(cwd, shown);
   const actions = useDevelopmentServerActions();
-  const asked = useRef<string | null>(null);
+  const asked = useRef<{ cwd: string; at: number } | null>(null);
+  const list = servers.data?.servers;
+  const alive = list?.some((one) => ['starting', 'running', 'stopping'].includes(one.status)) ?? false;
+  const failed = list?.at(-1)?.status === 'failed';
+  const pending = actions.open.isPending;
+  const [, setTick] = useState(0);
   useEffect(() => {
-    if (!shown || !cwd || asked.current === cwd) return;
-    asked.current = cwd;
+    if (!shown || !cwd || pending || alive || failed || (list === undefined && asked.current?.cwd === cwd)) return;
+    const last = asked.current?.cwd === cwd ? asked.current.at : -Infinity;
+    const wait = last + ASK_AGAIN_MS - Date.now();
+    if (wait > 0) {
+      const timer = setTimeout(() => setTick((tick) => tick + 1), wait);
+      return () => clearTimeout(timer);
+    }
+    asked.current = { cwd, at: Date.now() };
     actions.open.mutate({ cwd });
-    // Asked once per project; the mutation object is new on every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cwd, shown]);
+  });
   if (!shown) return null;
-  const running = servers.data?.servers.findLast((server) => server.status === 'running' && server.boardUrl);
-  return running?.boardUrl ?? null;
+  return list?.findLast((one) => one.status === 'running' && !!one.boardUrl) ?? null;
+}
+
+/** A screen that said something: its marks, or any words. A page that has not drawn yet says nothing. */
+export const drawn = (layout: LiveLayout | undefined) =>
+  !!layout && (!!layout.screen || !layout.fingerprint?.endsWith(':0'));
+
+/** How long a frame may stay blank (no marks, no words) before the map says the app stopped drawing. */
+export const BLANK_AFTER_MS = 12_000;
+
+/**
+ * Says so when the running app's screens stay blank: the page loaded (the bridge reported) but nothing drew, as when a
+ * dev server's cached modules went stale and the page waits for files that never come. Restarting the server (which
+ * clears Vite's cache) usually brings them back; a server Alpine did not start is restarted where it was started.
+ */
+export function BlankAppNotice({ app }: { app: DevServerInfo | null }) {
+  const t = useMessages(messages);
+  const actions = useDevelopmentServerActions();
+  const byKey = useLiveLayouts((store) => store.byKey);
+  const [now, setNow] = useState(() => Date.now());
+  const layouts = Object.values(byKey);
+  const blank = layouts.filter((layout) => !drawn(layout));
+  const oldest = Math.min(...blank.map((layout) => layout.at));
+  const due = blank.length > 0 && !layouts.some(drawn) ? oldest + BLANK_AFTER_MS - now : null;
+  useEffect(() => {
+    if (due === null || due <= 0) return;
+    const timer = setTimeout(() => setNow(Date.now()), due + 50);
+    return () => clearTimeout(timer);
+  }, [due]);
+  if (!app || due === null || due > 0) return null;
+  const restarting = actions.restart.isPending;
+  return (
+    <div role="status" className="flex flex-wrap items-center gap-3 border-b border-line bg-canvas-sunken px-5 py-2.5">
+      <div className="min-w-0 grow">
+        <p className="text-body text-fg">{t.blankApp}</p>
+        <p className="text-meta text-fg-muted">{app.external ? t.blankAppOutside : t.blankAppWhy}</p>
+      </div>
+      {!app.external && (
+        <button
+          type="button"
+          disabled={restarting}
+          onClick={() => {
+            useLiveLayouts.getState().forget();
+            actions.restart.mutate(app.id);
+          }}
+          className="cursor-pointer rounded-md border border-interactive bg-interactive px-2.5 py-1 text-meta text-on-fill hover:bg-interactive-hover disabled:opacity-60"
+        >
+          {restarting ? t.restartingApp : t.restartApp}
+        </button>
+      )}
+    </div>
+  );
 }
 
 /** What every live frame last reported, by card and situation. */
 export const useLiveLayouts = create<{
   byKey: Record<string, LiveLayout>;
   report: (key: string, layout: LiveLayout) => void;
+  /** The app starts over: what its frames said before no longer holds. */
+  forget: () => void;
 }>((set) => ({
   byKey: {},
   report: (key, layout) => set((current) => ({ byKey: { ...current.byKey, [key]: layout } })),
+  forget: () => set({ byKey: {} }),
 }));
 
 export const layoutKey = (cardId: string, state?: string | null) => `${cardId}|${state ?? ''}`;
@@ -383,7 +450,8 @@ export function LiveScreen({
   const [near, setNear] = useState(() => typeof IntersectionObserver === 'undefined');
   const [width, setWidth] = useState(0);
   const report = useLiveLayouts((store) => store.report);
-  const seen = useLayout(cardId, state);
+  // Shown once the screen drew; a page still loading (or stuck blank) keeps the fallback in front.
+  const seen = drawn(useLayout(cardId, state));
 
   useEffect(() => {
     const element = box.current;

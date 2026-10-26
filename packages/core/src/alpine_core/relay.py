@@ -23,6 +23,29 @@ _TAG = f'<script src="{BRIDGE_PATH}"></script>'.encode()
 _HEAD_LIMIT = 64 * 1024
 #: An HTML page larger than this is passed through without the bridge rather than held in memory.
 _PAGE_LIMIT = 8 * 1024 * 1024
+#: Where a dev server on this machine may listen: Vite on Node 17+ takes ``localhost`` as ``::1`` only.
+_HOSTS = ("127.0.0.1", "::1")
+#: What a frame gets while the app is not up: a page that asks again every two seconds, so the map's screens come
+#: back by themselves once the server listens (again), without anyone reopening the map.
+_NOT_RUNNING = (
+    b"<!doctype html><meta charset=utf-8><meta http-equiv=refresh content=2>"
+    b"<title>The app is not running</title><body style='font:13px system-ui;color:#888;padding:16px'>"
+    b"The app is not running yet."
+)
+
+
+async def connect(port: int, prefer: str = _HOSTS[0]) -> tuple[asyncio.StreamReader, asyncio.StreamWriter, str]:
+    """A connection to ``port`` on this machine, over IPv4 or IPv6, whichever the server listens on (``prefer``
+    first), and the host it answered on. ``OSError`` when it listens on neither."""
+    error: OSError | None = None
+    for host in (prefer, *(h for h in _HOSTS if h != prefer)):
+        try:
+            reader, writer = await asyncio.open_connection(host, port)
+            return reader, writer, host
+        except OSError as exc:
+            error = exc
+    assert error is not None
+    raise error
 
 
 def _bridge() -> bytes:
@@ -90,6 +113,8 @@ class Relay:
         self.target_port = target_port
         self.port = 0
         self._server: asyncio.Server | None = None
+        # The address family the app answered on last, tried first next time.
+        self._host = _HOSTS[0]
 
     @property
     def url(self) -> str:
@@ -137,15 +162,19 @@ class Relay:
             await client_out.drain()
             return
         try:
-            app_in, app_out = await asyncio.open_connection("127.0.0.1", self.target_port)
+            app_in, app_out, self._host = await connect(self.target_port, self._host)
         except OSError:
-            message = b"The app is not running."
             client_out.write(
                 _join_head(
                     "HTTP/1.1 502 Bad Gateway",
-                    [("Content-Type", "text/plain"), ("Content-Length", str(len(message))), ("Connection", "close")],
+                    [
+                        ("Content-Type", "text/html; charset=utf-8"),
+                        ("Content-Length", str(len(_NOT_RUNNING))),
+                        ("Cache-Control", "no-store"),
+                        ("Connection", "close"),
+                    ],
                 )
-                + message
+                + _NOT_RUNNING
             )
             await client_out.drain()
             return

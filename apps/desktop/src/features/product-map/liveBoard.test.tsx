@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LocaleProvider } from '@/shared/i18n';
 import { mergeScripts, scriptedConnection, ServerProvider, sessionInfo, sessionScript } from '@/shared/server';
 
-import { missingButtons, plannedLinks, situationResult, useLiveLayouts, type LiveLayout } from './liveScreens';
+import { ASK_AGAIN_MS, BLANK_AFTER_MS, missingButtons, plannedLinks, situationResult, useLiveLayouts, type LiveLayout } from './liveScreens';
 import { ProductMap } from './ProductMap';
 import { boardScript } from './testBoard';
 import { toTreeMap } from './flowTreeData';
@@ -72,7 +72,12 @@ const running: DevServerInfo = {
   external: false,
 };
 
-function mount(app: DevServerInfo | null = running, packageJson = '{ "name": "bakery" }', shown = board) {
+function mount(
+  app: DevServerInfo | null | (() => DevServerInfo | null) = running,
+  packageJson = '{ "name": "bakery" }',
+  shown = board,
+) {
+  const current = () => (typeof app === 'function' ? app() : app);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const connection = scriptedConnection(
     mergeScripts(
@@ -82,8 +87,12 @@ function mount(app: DevServerInfo | null = running, packageJson = '{ "name": "ba
       }),
       {
         results: {
-          'devServers/open': () => ({ server: app }),
-          'devServers/list': () => ({ servers: app ? [app] : [] }),
+          'devServers/open': () => ({ server: current() }),
+          'devServers/restart': () => ({ server: current() }),
+          'devServers/list': () => {
+            const now = current();
+            return { servers: now ? [now] : [] };
+          },
           'files/read': ({ path }) => ({
             path: `${cwd}/${path}`,
             relativePath: path,
@@ -220,6 +229,36 @@ describe('the live map', () => {
       );
     });
     expect(await frameOf('찾으러 올 시간', await screen.findByRole('dialog'))).toBeTruthy();
+  });
+
+  it('asks for the app again while none runs, so one that can start later shows without reopening the map', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      // Nothing to run yet when the map opens (the project is still being set up); the second ask starts it.
+      let opens = () => 0;
+      const { request } = mount(() => (opens() >= 2 ? running : null));
+      opens = () => request.mock.calls.filter(([method]) => method === 'devServers/open').length;
+      await screen.findAllByText('빵 고르기');
+      expect(document.querySelector('iframe[src^="http://127.0.0.1"]')).toBeNull();
+      await act(async () => {
+        vi.advanceTimersByTime(ASK_AGAIN_MS + 100);
+      });
+      await waitFor(() => expect(opens()).toBe(2));
+      expect((await frameOf('빵 고르기')).getAttribute('src')).toBe(`${RELAY}/order`);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('says when the app stays blank, and restarts it fresh', async () => {
+    const { request } = mount();
+    const menu = await frameOf('빵 고르기');
+    // The page loaded (the bridge spoke) but nothing drew: no marks, no words, for longer than a page takes.
+    report(menu, { ...layout([], [], null), fingerprint: '0:0', at: Date.now() - BLANK_AFTER_MS - 1000 });
+    expect(await screen.findByText('앱 화면이 하얗게 비어 있어요')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '앱 다시 띄우기' }));
+    await waitFor(() => expect(request.mock.calls.some(([method]) => method === 'devServers/restart')).toBe(true));
+    expect(screen.queryByText('앱 화면이 하얗게 비어 있어요')).toBeNull();
   });
 
   it('keeps pictures and starts nothing for a phone app, or while the app is not running', async () => {
