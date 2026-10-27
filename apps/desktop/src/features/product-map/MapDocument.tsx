@@ -6,18 +6,11 @@ import { useMessages } from '@/shared/i18n';
 import { useBoardDevice } from './boardDevice';
 import { layoutBoard } from './boardLayout';
 import { docMessages as messages } from './docMessages';
+import { mark, readDocument } from './docModel';
 import { filmMessages } from './filmMessages';
 import { devicesOf } from './filmstripModel';
 import { flowTreeMessages } from './flowTreeMessages';
-import {
-  hasScreenArea,
-  isJourneyLink,
-  STATUS_ORDER,
-  type Journey,
-  type PromiseStatus,
-  type TreeCard,
-  type TreeMap,
-} from './flowTreeModel';
+import { hasScreenArea, isJourneyLink, type PromiseStatus, type TreeCard, type TreeMap } from './flowTreeModel';
 import { WIREFRAME, type Device } from './planLook';
 import { ScreenFace } from './screenFace';
 import { Avatar, useText } from './treeParts';
@@ -50,41 +43,8 @@ export function MapDocument({
   const scroller = useRef<HTMLDivElement>(null);
   const [at, setAt] = useState('people');
 
-  const people = map.people.filter((person) => person.journeys.some((journey) => journey.steps.length));
-  // Each card's own journey: the first that walks it, where the board draws it, and so the frame it wears.
-  const homes = new Map<string, Journey>();
-  for (const person of people)
-    for (const journey of person.journeys)
-      for (const step of journey.steps) if (!homes.has(step)) homes.set(step, journey);
-  // Cards in the board's reading order: lane by lane, row by row, left to right.
-  const ordered = Object.values(layout.nodes)
-    .sort((a, b) => a.rowY - b.rowY || a.x - b.x)
-    .map((node) => map.cards[node.id])
-    .filter((card): card is TreeCard => !!card);
-  // Worst first (broken, then to check again, … confirmed last); the board's order holds within each status.
-  const promises = ordered
-    .flatMap((card) => card.promises.map((promise) => ({ card, promise })))
-    .sort((a, b) => STATUS_ORDER.indexOf(a.promise.status) - STATUS_ORDER.indexOf(b.promise.status));
-  const statuses = STATUS_ORDER.map((status) => ({
-    status,
-    count: promises.filter((one) => one.promise.status === status).length,
-  })).filter((one) => one.count > 0);
-  // A decision several screens carry (the same answer to the same question) is listed once, naming each of its screens.
-  const decisions: { answer: string; question: string; by: 'person' | 'ai'; cards: TreeCard[] }[] = [];
-  for (const card of ordered)
-    for (const found of [
-      ...(card.decision ? [{ answer: card.decision, question: '', by: 'person' as const }] : []),
-      ...(card.picks ?? []).map((pick) => ({ answer: pick.answer, question: pick.question, by: pick.by })),
-    ]) {
-      const same = decisions.find(
-        (decision) =>
-          decision.answer === found.answer && decision.question === found.question && decision.by === found.by,
-      );
-      if (!same) decisions.push({ ...found, cards: [card] });
-      else if (!same.cards.includes(card)) same.cards.push(card);
-    }
-  const screens = ordered.filter((card) => hasScreenArea(card)).length;
-  const journeys = people.flatMap((person) => person.journeys.filter((journey) => journey.steps.length));
+  const doc = useMemo(() => readDocument(map, layout), [map, layout]);
+  const { people, journeys, homes, promises, statuses, decisions, screens } = doc;
   const journeyTitle = (id: string) => journeys.find((journey) => journey.id === id)?.title;
 
   const sections = [
@@ -326,6 +286,5 @@ export function MapDocument({
   );
 }
 
-const mark = (status: PromiseStatus) => (status === 'passed' ? '✓' : status === 'failed' ? '✗' : '○');
 const markTone = (status: PromiseStatus) =>
   status === 'passed' ? 'text-interactive' : status === 'failed' ? 'text-danger' : 'text-fg-faint';
