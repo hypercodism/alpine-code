@@ -205,8 +205,8 @@ describe('the numbers on the board', () => {
     ],
   });
 
-  it('numbers a row in the order its journey walks, not by position', () => {
-    // The arrows put c before d on the board, but the journey walks d then c.
+  it('stands and numbers a row in the order its journey walks, an arrow back pointing left', () => {
+    // The arrows lead c to d, but the journey walks d then c (d has a button back to c, like 모든 주제).
     const map = walking([
       journey('j', ['a', 'b', 'd', 'c'], {
         edges: [
@@ -218,8 +218,8 @@ describe('the numbers on the board', () => {
     ]);
     const { nodes } = layoutBoard(map, () => 'phone');
     expect(['a', 'b', 'd', 'c'].map((id) => nodes[id]!.number)).toEqual(['01', '02', '03', '04']);
-    // Only the numbers follow the walk: c still stands left of d.
-    expect(nodes.c!.x).toBeLessThan(nodes.d!.x);
+    // Left to right as walked: the board, its numbers, the 문서 and the 흐름 재생 read alike.
+    expect(nodes.d!.x).toBeLessThan(nodes.c!.x);
   });
 
   it('counts on across rows, a card drawn in an earlier row keeping its number', () => {

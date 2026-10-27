@@ -164,8 +164,14 @@ export function layoutBoard(
   // A card nothing leads to (a not-found page, reached only by a wrong address) goes last in its row, not first;
   // the journey's own first step stays first.
   const reached = new Set(edges.map((edge) => edge.to));
+  // A row's screens stand in the order its journey walks them, so the board reads left to right as the person goes
+  // (a button back, like 모든 주제, is an arrow pointing left). What has no screen follows what leads to it.
   const byRank = (ids: string[], journey: Journey) => {
     const key = (id: string) => (reached.has(id) || journey.steps[0] === id ? rank.get(id)! : 1e6);
+    return [...ids].sort((a, b) => key(a) - key(b));
+  };
+  const byWalk = (ids: string[], journey: Journey) => {
+    const key = (id: string) => (reached.has(id) || journey.steps[0] === id ? journey.steps.indexOf(id) : 1e6);
     return [...ids].sort((a, b) => key(a) - key(b));
   };
   const from = new Map<string, string[]>(cards.map((id) => [id, []]));
@@ -196,7 +202,7 @@ export function layoutBoard(
     for (const journey of person.journeys) {
       const mine = journey.steps.filter((id, index) => home.get(id) === journey && journey.steps.indexOf(id) === index);
       if (!mine.length) continue;
-      const shown = byRank(
+      const shown = byWalk(
         mine.filter((id) => screens.has(id)),
         journey,
       );
