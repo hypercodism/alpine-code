@@ -187,3 +187,46 @@ describe('a journey as it is walked (흐름 재생)', () => {
     expect(steps.map((step) => device(step.home))).toEqual(['phone', 'computer']);
   });
 });
+
+describe('the numbers on the board', () => {
+  const walking = (journeys: Journey[]): TreeMap => ({
+    product: 'test',
+    recent: [],
+    cards: Object.fromEntries(['a', 'b', 'c', 'd', 'e'].map((id) => [id, card(id)])),
+    people: [
+      {
+        id: 'p',
+        name: { ko: '사람', en: 'Person' },
+        role: { ko: '', en: '' },
+        start: { ko: '', en: '' },
+        tone: 1,
+        journeys,
+      },
+    ],
+  });
+
+  it('numbers a row in the order its journey walks, not by position', () => {
+    // The arrows put c before d on the board, but the journey walks d then c.
+    const map = walking([
+      journey('j', ['a', 'b', 'd', 'c'], {
+        edges: [
+          { from: 'a', to: 'b', label: '' },
+          { from: 'b', to: 'c', label: '' },
+          { from: 'c', to: 'd', label: '' },
+        ],
+      }),
+    ]);
+    const { nodes } = layoutBoard(map, () => 'phone');
+    expect(['a', 'b', 'd', 'c'].map((id) => nodes[id]!.number)).toEqual(['01', '02', '03', '04']);
+    // Only the numbers follow the walk: c still stands left of d.
+    expect(nodes.c!.x).toBeLessThan(nodes.d!.x);
+  });
+
+  it('counts on across rows, a card drawn in an earlier row keeping its number', () => {
+    const { nodes } = layoutBoard(
+      walking([journey('one', ['a', 'b']), journey('two', ['a', 'e', 'c'])]),
+      () => 'phone',
+    );
+    expect(['a', 'b', 'e', 'c'].map((id) => nodes[id]!.number)).toEqual(['01', '02', '03', '04']);
+  });
+});

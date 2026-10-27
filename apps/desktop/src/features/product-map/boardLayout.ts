@@ -268,11 +268,15 @@ export function layoutBoard(
   const width = Math.max(720, ...Object.values(nodes).map((node) => node.x + node.w + BOARD.lanePad + BOARD.pad));
   let number = 0;
   for (const lane of lanes)
-    for (const row of lane.rows)
+    for (const row of lane.rows) {
+      // In the order the journey walks them; what is not on the walk follows, left to right.
+      const walk = (id: string) => row.journey.steps.indexOf(id);
+      const order = (id: string) => (walk(id) < 0 ? Infinity : walk(id));
       for (const id of Object.keys(nodes)
         .filter((one) => nodes[one]!.kind !== 'system' && nodes[one]!.rowY === row.y)
-        .sort((a, b) => nodes[a]!.x - nodes[b]!.x))
+        .sort((a, b) => order(a) - order(b) || nodes[a]!.x - nodes[b]!.x))
         nodes[id]!.number = String(++number).padStart(2, '0');
+    }
   return { lanes, nodes, edges, width, height: Math.max(y - BOARD.laneGap + BOARD.pad, 320) };
 }
 
