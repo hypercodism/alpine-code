@@ -59,6 +59,7 @@ const words = (): DocWords => ({
   film: filmMessages.ko,
   text: (text) => text.ko,
   device: () => 'phone',
+  uses: () => 'phone',
   undecided: ['문 닫는 날은?'],
   date: '2026년 10월 27일',
 });

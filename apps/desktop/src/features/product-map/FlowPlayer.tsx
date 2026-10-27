@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 
 import { useMessages } from '@/shared/i18n';
 
+import { useJourneyDevice } from './boardDevice';
 import { filmMessages as messages } from './filmMessages';
 import { hasScreenArea, isJourneyLink, type Journey, type Person, type TreeCard, type TreeMap } from './flowTreeModel';
 import { useLayout } from './liveScreens';
@@ -77,6 +78,7 @@ export function FlowPlayer({
 }) {
   const t = useMessages(messages);
   const text = useText();
+  const uses = useJourneyDevice(map);
   const steps = flowWalk(map, journeyId);
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(true);
@@ -121,7 +123,7 @@ export function FlowPlayer({
         {first && (
           <span className="flex shrink-0 items-center gap-1.5 text-meta text-fg-muted">
             <Avatar person={first.person} small />
-            {text(first.person.name)} · {t[device(first.journey)]}
+            {text(first.person.name)} · {t[uses(first.journey)]}
           </span>
         )}
         <span className="grow" />

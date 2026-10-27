@@ -16,7 +16,10 @@ export interface DocWords {
   words: (typeof flowTreeMessages)['ko'];
   film: (typeof filmMessages)['ko'];
   text: (text: Localized) => string;
+  /** The frame a journey's screens wear (the board's one size for one app). */
   device: (journey: Journey) => Device;
+  /** What a journey's person uses, said beside them. */
+  uses: (journey: Journey) => Device;
   /** What is left to decide (the plan's open questions), listed last. */
   undecided: string[];
   /** The day it is taken out, as the person reads dates. */
@@ -34,7 +37,7 @@ export function documentMarkdown(map: TreeMap, doc: DocContent, layout: BoardLay
   if (status) lines.push('', status);
   lines.push('', `## ${t.people}`, '');
   for (const person of doc.people) {
-    const devices = devicesOf(person.journeys.filter((journey) => journey.steps.length).map(w.device)).map(
+    const devices = devicesOf(person.journeys.filter((journey) => journey.steps.length).map(w.uses)).map(
       (one) => film[one],
     );
     lines.push(
@@ -104,7 +107,7 @@ export function documentPage(
   const status = statusLine(doc, w);
   const people = doc.people
     .map((person) => {
-      const devices = devicesOf(person.journeys.filter((journey) => journey.steps.length).map(w.device)).map(
+      const devices = devicesOf(person.journeys.filter((journey) => journey.steps.length).map(w.uses)).map(
         (one) => film[one],
       );
       return `<li class="person"><b>${esc(text(person.name))}</b> <span class="muted">· ${esc(devices.join(', '))}</span>${

@@ -3,7 +3,7 @@ import { useMemo, useRef, useState } from 'react';
 
 import { useMessages } from '@/shared/i18n';
 
-import { useBoardDevice } from './boardDevice';
+import { useBoardDevice, useJourneyDevice } from './boardDevice';
 import { layoutBoard } from './boardLayout';
 import { DocExport } from './DocExport';
 import { docMessages as messages } from './docMessages';
@@ -40,6 +40,7 @@ export function MapDocument({
   const words = useMessages(flowTreeMessages);
   const text = useText();
   const device = useBoardDevice(map);
+  const uses = useJourneyDevice(map);
   const layout = useMemo(() => layoutBoard(map, device), [map, device]);
   const scroller = useRef<HTMLDivElement>(null);
   const [at, setAt] = useState('people');
@@ -123,7 +124,7 @@ export function MapDocument({
           <header className="flex flex-col gap-3">
             <div className="flex items-start justify-between gap-4">
               <h1 className="text-display font-medium">{map.product}</h1>
-              <DocExport map={map} doc={doc} layout={layout} undecided={undecided} device={device} />
+              <DocExport map={map} doc={doc} layout={layout} undecided={undecided} device={device} uses={uses} />
             </div>
             <p className="flex flex-wrap items-center gap-2 text-meta text-fg-muted">
               <span className="rounded-full bg-selected px-2 py-0.5 text-interactive">{t.sameAsBoard}</span>
@@ -152,7 +153,7 @@ export function MapDocument({
                       {text(person.name)}
                       <span className="text-fg-muted">
                         {' · '}
-                        {devicesOf(person.journeys.filter((journey) => journey.steps.length).map(device))
+                        {devicesOf(person.journeys.filter((journey) => journey.steps.length).map(uses))
                           .map((one) => film[one])
                           .join(', ')}
                       </span>

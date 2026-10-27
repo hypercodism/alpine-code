@@ -29,12 +29,14 @@ export function DocExport({
   layout,
   undecided,
   device,
+  uses,
 }: {
   map: TreeMap;
   doc: DocContent;
   layout: BoardLayout;
   undecided: string[];
   device: (journey: Journey) => Device;
+  uses: (journey: Journey) => Device;
 }) {
   const t = useMessages(docMessages);
   const words = useMessages(flowTreeMessages);
@@ -54,6 +56,7 @@ export function DocExport({
     film,
     text,
     device,
+    uses,
     undecided,
     date: new Date().toLocaleDateString(locale === 'ko' ? 'ko-KR' : 'en-US', { dateStyle: 'long' }),
   });

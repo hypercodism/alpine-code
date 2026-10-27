@@ -10,7 +10,7 @@ import { flowTreeMessages } from './flowTreeMessages';
 import { FlowPlayer } from './FlowPlayer';
 import { ScreenFace } from './screenFace';
 import { BOARD, layoutBoard, route, type BoardEdge, type BoardLayout, type BoardNode, type Point } from './boardLayout';
-import { useBoardDevice } from './boardDevice';
+import { useBoardDevice, useJourneyDevice } from './boardDevice';
 import { devicesOf, journeyCounts, personCounts } from './filmstripModel';
 import { CardDialog, type FlowTreeProps, type Focus } from './FlowTree';
 import {
@@ -311,7 +311,7 @@ function BoardCanvas({ strip, device }: { strip: Strip; device: (journey: Journe
             height: lane.height - 2,
           }}
         >
-          <LaneHeader person={lane.person} strip={strip} device={device} />
+          <LaneHeader person={lane.person} strip={strip} />
           {lane.rows.map((row) => {
             // The row holds its journey's title, its screens and its strip; its cards are placed from its corner.
             const origin = { x: BOARD.pad + 1, y: row.y - ROW_HEAD };
@@ -386,8 +386,10 @@ const ROW_HEAD = 30;
 const edgeTone = { quiet: 'text-fg-faint', checked: 'text-interactive', missing: 'text-attention' } as const;
 
 /** A lane's head: the person, the devices they use, how much is theirs, and a way to add a journey. */
-function LaneHeader({ person, strip, device }: { person: Person; strip: Strip; device: (journey: Journey) => Device }) {
+function LaneHeader({ person, strip }: { person: Person; strip: Strip }) {
   const t = useMessages(messages);
+  // What the person uses, whatever size the board draws the screens at.
+  const device = useJourneyDevice(strip.map);
   const text = useText();
   const tree = useMessages(flowTreeMessages);
   const loose = person.id === UNPLACED;
