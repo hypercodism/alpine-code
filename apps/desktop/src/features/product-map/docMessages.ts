@@ -27,6 +27,7 @@ export const docMessages = defineMessages({
     sharedFiles: '여러 화면이 함께 쓰는 파일',
     screensUsing: (count: number) => `화면 ${count}개`,
     onlyShared: '함께 쓰는 파일만 써요',
+    toolFiles: (count: number) => `검사·도구·글꼴 파일 ${count}개`,
   },
   en: {
     label: 'Document',
@@ -53,5 +54,6 @@ export const docMessages = defineMessages({
     sharedFiles: 'Files several screens share',
     screensUsing: (count: number) => `${count} screens`,
     onlyShared: 'Only shared files',
+    toolFiles: (count: number) => `${count} check, tool and font files`,
   },
 });

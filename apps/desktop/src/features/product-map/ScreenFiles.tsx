@@ -15,6 +15,18 @@ import { Avatar, useText } from './treeParts';
 
 const NONE: ReadonlySet<string> = new Set();
 
+/** Files that are not the app's own code: checks and capture scripts, tests, fonts and pictures, notes and licences. */
+function isToolFile(path: string): boolean {
+  const name = path.slice(path.lastIndexOf('/') + 1);
+  return (
+    /(^|\/)(scripts?|__tests__|fonts)\//.test(path) ||
+    /^(verify|capture)[-_.]/i.test(name) ||
+    /\.(test|spec)\./.test(name) ||
+    /\.(woff2?|ttf|otf|eot|png|jpe?g|gif|webp|svg|ico|icns|md|mdx)$/i.test(name) ||
+    /^(license|licence|credits|notice)(\..*)?$/i.test(name)
+  );
+}
+
 /**
  * The 코드 tab's list (10-25 design canvas): the project's code as the board reads it, each journey's screens with the
  * files they live in, numbered as on the board, and 모든 파일 for the rest. Pressing a file opens it beside the list.
@@ -73,6 +85,7 @@ function Screens({ map, selected, onOpen }: { map: TreeMap; selected: string | n
   for (const person of map.people)
     for (const journey of person.journeys)
       for (const step of journey.steps) if (!isJourneyLink(step) && !homes.has(step)) homes.set(step, journey);
+  const tools = new Set<string>();
   const groups = map.people.flatMap((person) =>
     person.journeys
       .map((journey) => ({
@@ -81,11 +94,16 @@ function Screens({ map, selected, onOpen }: { map: TreeMap; selected: string | n
         cards: journey.steps
           .filter((step, index) => homes.get(step) === journey && journey.steps.indexOf(step) === index)
           .map((step) => map.cards[step])
-          .filter((card): card is TreeCard => !!card?.sources?.length),
+          .filter((card): card is TreeCard => !!card?.sources?.length)
+          .map((card) => {
+            for (const path of card.sources ?? []) if (isToolFile(path)) tools.add(path);
+            return { ...card, sources: card.sources?.filter((path) => !isToolFile(path)) ?? [] };
+          })
+          .filter((card) => card.sources.length),
       }))
       .filter((group) => group.cards.length),
   );
-  if (!groups.length) return <p className="px-2 text-meta text-fg-muted">{t.noScreenFiles}</p>;
+  if (!groups.length && !tools.size) return <p className="px-2 text-meta text-fg-muted">{t.noScreenFiles}</p>;
   // A file several screens name (the app's frame, its styles, its data) is listed once, above them; under each screen
   // only the files that are its own.
   const uses = new Map<string, number>();
@@ -129,6 +147,12 @@ function Screens({ map, selected, onOpen }: { map: TreeMap; selected: string | n
           })}
         </section>
       ))}
+      {tools.size > 0 && (
+        <details className="flex flex-col gap-1">
+          <summary className="cursor-pointer px-2 text-meta text-fg-muted">{t.toolFiles(tools.size)}</summary>
+          {[...tools].sort().map((path) => file(path))}
+        </details>
+      )}
     </>
   );
 }
