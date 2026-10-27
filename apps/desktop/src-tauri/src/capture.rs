@@ -102,7 +102,7 @@ fn capture(app: &AppHandle, url: &str, width: f64, height: f64, whole: bool) -> 
 }
 
 #[cfg(target_os = "macos")]
-fn eval(window: &WebviewWindow, script: &str) -> Result<String, String> {
+pub(crate) fn eval(window: &WebviewWindow, script: &str) -> Result<String, String> {
     use block2::RcBlock;
     use objc2::runtime::AnyObject;
     use objc2_foundation::{NSError, NSString};
@@ -161,7 +161,7 @@ fn snapshot(window: &WebviewWindow) -> Result<Vec<u8>, String> {
 }
 
 #[cfg(not(target_os = "macos"))]
-fn eval(_: &WebviewWindow, _: &str) -> Result<String, String> {
+pub(crate) fn eval(_: &WebviewWindow, _: &str) -> Result<String, String> {
     Err("Reading a screen works on macOS only for now".into())
 }
 

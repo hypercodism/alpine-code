@@ -5,6 +5,7 @@ import { useMessages } from '@/shared/i18n';
 
 import { useBoardDevice } from './boardDevice';
 import { layoutBoard } from './boardLayout';
+import { DocExport } from './DocExport';
 import { docMessages as messages } from './docMessages';
 import { mark, readDocument } from './docModel';
 import { filmMessages } from './filmMessages';
@@ -120,7 +121,10 @@ export function MapDocument({
       <div ref={scroller} onScroll={follow} className="min-w-0 grow overflow-y-auto">
         <article aria-label={t.label} className="mx-auto flex max-w-190 flex-col gap-12 px-10 pt-12 pb-24">
           <header className="flex flex-col gap-3">
-            <h1 className="text-display font-medium">{map.product}</h1>
+            <div className="flex items-start justify-between gap-4">
+              <h1 className="text-display font-medium">{map.product}</h1>
+              <DocExport map={map} doc={doc} layout={layout} undecided={undecided} device={device} />
+            </div>
             <p className="flex flex-wrap items-center gap-2 text-meta text-fg-muted">
               <span className="rounded-full bg-selected px-2 py-0.5 text-interactive">{t.sameAsBoard}</span>
               {t.counts(screens, promises.length)}

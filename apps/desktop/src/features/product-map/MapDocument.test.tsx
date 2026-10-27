@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { LocaleProvider } from '@/shared/i18n';
@@ -107,5 +107,23 @@ describe('MapDocument promises', () => {
     expect(rows[0]).toContain('bad 약속');
     expect(rows[1]).toContain('again 약속');
     expect(rows[2]).toContain('ok 약속');
+  });
+});
+
+describe('MapDocument export', () => {
+  it('copies the document as Markdown, to paste elsewhere', async () => {
+    const writeText = vi.fn(async () => {});
+    Object.assign(navigator, { clipboard: { writeText } });
+    render(
+      <LocaleProvider locale="ko">
+        <MapDocument map={MAP} onShowOnBoard={vi.fn()} />
+      </LocaleProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: '내보내기' }));
+    // Saving and sending need the Mac app; copying works anywhere.
+    expect((await screen.findByRole('menuitem', { name: 'PDF로 저장' })).getAttribute('aria-disabled')).toBe('true');
+    fireEvent.click(screen.getByRole('menuitem', { name: '마크다운 복사' }));
+    expect((await screen.findByRole('status')).textContent).toContain('마크다운을 복사했어요');
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('# 기록장\n'));
   });
 });

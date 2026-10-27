@@ -17,3 +17,4 @@ export {
   type UpdateCheck,
 } from './update';
 export { notify, setBadge } from './notify';
+export { pickSavePath, saveText, savePdf, screenPicture, shareFile } from './documents';
