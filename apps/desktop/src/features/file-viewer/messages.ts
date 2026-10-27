@@ -2,6 +2,18 @@ import { defineMessages } from '@/shared/i18n';
 export const messages = defineMessages({
   ko: {
     title: '파일',
+    pickFile: '왼쪽에서 파일을 고르면 여기 보여요.',
+    files: '파일',
+    changes: '바뀐 파일',
+    changesCount: (count: number) => `바뀐 파일 ${count}`,
+    noGit: '이 프로젝트는 git을 쓰지 않아서 바뀐 것을 비교할 수 없어요.',
+    noChanges: '마지막 커밋 뒤로 바뀐 파일이 없어요.',
+    pickChange: '왼쪽에서 바뀐 파일을 고르면 git diff가 보여요.',
+    binaryChange: '바이너리 파일이라 바뀐 줄을 보여 줄 수 없어요.',
+    tooBig: '바뀐 것이 너무 많아서 이 파일의 줄은 빠졌어요.',
+    status: (status: string) =>
+      ({ modified: '바뀜', added: '새 파일', deleted: '지워짐', renamed: '이름 바뀜' })[status] ??
+      '새 파일 · git이 아직 모름',
     localFolder: '이 컴퓨터의 폴더',
     tree: '프로젝트 파일',
     backToTree: '파일 목록',
@@ -30,6 +42,18 @@ export const messages = defineMessages({
     failure: '파일을 열 수 없어요',
   },
   en: {
+    pickFile: 'Pick a file on the left to see it here.',
+    files: 'Files',
+    changes: 'Changes',
+    changesCount: (count: number) => `Changes ${count}`,
+    noGit: 'This project does not use git, so there is nothing to compare.',
+    noChanges: 'Nothing changed since the last commit.',
+    pickChange: 'Pick a changed file on the left to see its git diff.',
+    binaryChange: 'A binary file: its lines cannot be shown.',
+    tooBig: 'Too much changed: this file’s lines were left out.',
+    status: (status: string) =>
+      ({ modified: 'Modified', added: 'New file', deleted: 'Deleted', renamed: 'Renamed' })[status] ??
+      'New file · untracked',
     title: 'Files',
     localFolder: 'Local folder',
     tree: 'Project files',
