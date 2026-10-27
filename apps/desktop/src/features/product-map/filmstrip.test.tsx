@@ -200,9 +200,9 @@ describe('the filmstrip', () => {
     await screen.findByRole('region', { name: '빵 미리 예약하기' });
     for (const words of ['로그인했으면', '안 했으면']) expect(screen.getByText(words)).toBeTruthy();
     expect(document.querySelectorAll('svg path[marker-end]')).toHaveLength(3);
-    // The way back is a line under the card it leaves, which brings that screen into view.
-    const back = screen.getByRole('button', { name: '← 첫 화면으로' });
-    expect(back.getAttribute('title')).toBe('처음으로');
+    // The way back is a line under the card it leaves, its words in full, which brings that screen into view.
+    const back = screen.getByRole('button', { name: '← 처음으로 · 첫 화면' });
+    expect(back.getAttribute('title')).toBe('처음으로 · 첫 화면');
     vi.mocked(Element.prototype.scrollIntoView).mockClear();
     fireEvent.click(back);
     await waitFor(() => expect(scrolledTo()).toContain('home'));

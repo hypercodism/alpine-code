@@ -397,8 +397,53 @@ const DOTTED = {
   backgroundSize: '22px 22px',
 };
 
-/** An arrow's words fit the gap between two cards. */
-const LABEL = BOARD.columnGap - 8;
+/** An arrow's words fit the gap between two cards, on up to two lines. */
+const LABEL = BOARD.columnGap - 12;
+
+/**
+ * What a way between screens says (10-27 rule for arrows): the step that takes the person on, in full, on the arrow
+ * itself, since what happens to go from one screen to the next is why the board is read. Up to two lines, never cut
+ * to a word or two; its edge takes the arrow's colour.
+ */
+function ArrowWords({ middle, words, tone }: { middle: Point; words: string; tone: keyof typeof edgeTone }) {
+  return (
+    <foreignObject x={middle.x - LABEL / 2} y={middle.y - 21} width={LABEL} height={42}>
+      <span className="flex size-full items-center justify-center">
+        <span
+          title={words}
+          className={clsx(
+            'line-clamp-2 w-fit max-w-full rounded-md border bg-canvas-raised px-1.5 py-0.5 text-center text-meta leading-4 break-keep text-fg shadow-card',
+            tone === 'checked' ? 'border-interactive/45' : tone === 'missing' ? 'border-attention/55' : 'border-line',
+          )}
+        >
+          {words}
+        </span>
+      </span>
+    </foreignObject>
+  );
+}
+
+/** A way back said under its card: the step in full (its words), and the screen it goes back to. */
+function BackWay({ to, label, strip }: { to: string; label: string; strip: Strip }) {
+  const t = useMessages(messages);
+  const title = stepTitle(strip.map, to);
+  return (
+    <button
+      type="button"
+      title={label ? `${label} · ${title}` : undefined}
+      onClick={() => strip.seek(to)}
+      className="max-w-full shrink-0 cursor-pointer truncate text-left hover:text-fg"
+    >
+      {label ? (
+        <>
+          ← <span className="text-fg">{label}</span> <span className="text-fg-faint">· {title}</span>
+        </>
+      ) : (
+        t.backTo(title)
+      )}
+    </button>
+  );
+}
 
 /** Room over a row for its journey's title and situations. */
 const ROW_HEAD = 30;
@@ -509,7 +554,7 @@ function BoardArrow({ edge, board, strip }: { edge: BoardEdge; board: BoardLayou
   }
   const row = board.lanes.flatMap((lane) => lane.rows).find((one) => one.y === from.rowY);
   const { path, middle } = route(from, to, start, row ? row.y + row.height : undefined);
-  const words = edge.label;
+  const words = edge.label || button?.label || '';
   const label = tone === 'missing' ? t.missingButton(stepTitle(strip.map, edge.to)) : button?.label;
   const proposed = !!strip.map.cards[edge.to]?.tentative;
   return (
@@ -524,16 +569,7 @@ function BoardArrow({ edge, board, strip }: { edge: BoardEdge; board: BoardLayou
         strokeLinejoin="round"
         markerEnd={`url(#board-arrow-${tone})`}
       />
-      {words && (
-        <foreignObject x={middle.x - LABEL / 2} y={middle.y - 11} width={LABEL} height={22}>
-          <span
-            title={words}
-            className="mx-auto block w-fit max-w-full truncate rounded-full bg-canvas-sunken px-1.5 text-center text-meta leading-5.5 text-fg-muted"
-          >
-            {words}
-          </span>
-        </foreignObject>
-      )}
+      {words && <ArrowWords middle={middle} words={words} tone={tone} />}
     </g>
   );
 }
@@ -842,15 +878,7 @@ function SituationTile({
       {exits.back.length > 0 && (
         <p className="flex gap-x-2 overflow-clip text-meta text-fg-muted" style={{ height: BOARD.situation.foot }}>
           {exits.back.map((exit) => (
-            <button
-              key={exit.to}
-              type="button"
-              title={exit.label || undefined}
-              onClick={() => strip.seek(exit.to)}
-              className="max-w-full shrink-0 cursor-pointer truncate pt-0.5 hover:text-fg"
-            >
-              {t.backTo(stepTitle(strip.map, exit.to))}
-            </button>
+            <BackWay key={exit.to} to={exit.to} label={exit.label} strip={strip} />
           ))}
         </p>
       )}
@@ -904,7 +932,7 @@ function SituationArrows({ node, box, board }: { node: BoardNode; box: BoardSitu
         const y = box.y + TILE_PAD + (target.y + target.h / 2) * scale;
         const start =
           y > box.y && y < box.y + box.h ? { x: box.x + TILE_PAD + (target.x + target.w) * scale, y } : undefined;
-        const { path } = route(from, to, start);
+        const { path, middle } = route(from, to, start);
         return (
           <g key={target.to} role="img" aria-label={target.label} className={edgeTone.checked}>
             <title>{target.label}</title>
@@ -916,6 +944,7 @@ function SituationArrows({ node, box, board }: { node: BoardNode; box: BoardSitu
               strokeLinejoin="round"
               markerEnd="url(#board-arrow-checked)"
             />
+            {target.label && <ArrowWords middle={middle} words={target.label} tone="checked" />}
           </g>
         );
       })}
@@ -943,15 +972,7 @@ function BoardCaption({ card, strip, back }: { card: TreeCard; strip: Strip; bac
       {back.length > 0 && (
         <p className="flex flex-wrap gap-x-2 text-meta text-fg-muted">
           {back.map((way) => (
-            <button
-              key={way.to}
-              type="button"
-              title={way.label || undefined}
-              onClick={() => strip.seek(way.to)}
-              className="max-w-full cursor-pointer truncate hover:text-fg"
-            >
-              {t.backTo(stepTitle(strip.map, way.to))}
-            </button>
+            <BackWay key={way.to} to={way.to} label={way.label} strip={strip} />
           ))}
         </p>
       )}

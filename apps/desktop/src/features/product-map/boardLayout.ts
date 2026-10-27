@@ -83,7 +83,7 @@ export const BOARD = {
   lanePad: 22,
   laneGap: 24,
   rowGap: 34,
-  columnGap: 84,
+  columnGap: 136,
   title: 24,
   caption: 96,
   /** A situation's small screen, two to a line under its screen; its name over it, a way back under it. */
