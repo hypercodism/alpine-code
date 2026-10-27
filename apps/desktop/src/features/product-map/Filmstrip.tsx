@@ -1,7 +1,7 @@
 import { LinkButton } from '@alpine/ui/primitives';
 import clsx from 'clsx';
-import { Play, Plus } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Layers, Play, Plus } from 'lucide-react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { useMessages } from '@/shared/i18n';
 
@@ -9,19 +9,32 @@ import { filmMessages as messages } from './filmMessages';
 import { flowTreeMessages } from './flowTreeMessages';
 import { FlowPlayer } from './FlowPlayer';
 import { ScreenFace } from './screenFace';
-import { BOARD, layoutBoard, route, type BoardEdge, type BoardLayout, type BoardNode, type Point } from './boardLayout';
+import {
+  BOARD,
+  layoutBoard,
+  route,
+  type BoardEdge,
+  type BoardLayout,
+  type BoardNode,
+  type BoardSituation,
+  type Point,
+} from './boardLayout';
+import { boardSituations } from './boardSituations';
 import { useBoardDevice, useJourneyDevice } from './boardDevice';
 import { devicesOf, journeyCounts, personCounts } from './filmstripModel';
 import { CardDialog, type FlowTreeProps, type Focus } from './FlowTree';
 import {
+  LiveScreen,
   missingButtons,
   plannedLinks,
   SituationCheck,
-  SituationChip,
   situationResult,
   useLayout,
+  useLiveApp,
   useLiveLayouts,
+  useSituationResult,
   WallZoom,
+  type LiveTarget,
 } from './liveScreens';
 import {
   hasScreenArea,
@@ -30,6 +43,7 @@ import {
   UNPLACED,
   type Journey,
   type Person,
+  type ScreenSituation,
   type TreeCard,
   type TreeMap,
 } from './flowTreeModel';
@@ -252,102 +266,115 @@ function BoardCanvas({ strip, device }: { strip: Strip; device: (journey: Journe
   for (const edge of board.edges)
     if (edge.from !== edge.to && !forward(board, edge)) back.set(edge.from, [...(back.get(edge.from) ?? []), edge]);
   return (
-    <div className="relative" style={{ width: board.width, height: board.height }}>
-      {/* Under everything: the lanes' paper; over it the arrows; over them the cards, so no arrow crosses a screen. */}
-      {board.lanes.map((lane) => (
-        <div
-          key={lane.person.id}
-          aria-hidden
-          className="absolute rounded-2xl border border-line bg-canvas-raised/70 shadow-card"
-          style={{ left: BOARD.pad, top: lane.y, width: board.width - BOARD.pad * 2, height: lane.height }}
-        />
-      ))}
-      <svg
-        aria-hidden={false}
-        className="pointer-events-none absolute inset-0 overflow-visible"
-        width={board.width}
-        height={board.height}
-      >
-        <defs>
-          {(['quiet', 'checked', 'missing'] as const).map((tone) => (
-            <marker
-              key={tone}
-              id={`board-arrow-${tone}`}
-              viewBox="0 0 10 10"
-              refX="9"
-              refY="5"
-              markerWidth="7"
-              markerHeight="7"
-              orient="auto-start-reverse"
-              className={edgeTone[tone]}
-            >
-              <path d="M1,1 L9,5 L1,9" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-            </marker>
-          ))}
-        </defs>
-        {board.edges
-          .filter((edge) => forward(board, edge))
-          .map((edge) => (
-            <BoardArrow key={`${edge.from}>${edge.to}`} edge={edge} board={board} strip={strip} />
-          ))}
-      </svg>
-      {board.lanes.map((lane) => (
-        <section
-          key={lane.person.id}
-          aria-label={text(lane.person.name)}
-          data-person={lane.person.id}
-          className="absolute"
-          style={{
-            left: BOARD.pad + 1,
-            top: lane.y + 1,
-            width: board.width - BOARD.pad * 2 - 2,
-            height: lane.height - 2,
-          }}
+    <BoardNodes.Provider value={board.nodes}>
+      <div className="relative" style={{ width: board.width, height: board.height }}>
+        {/* Under everything: the lanes' paper; over it the arrows; over them the cards, so no arrow crosses a screen. */}
+        {board.lanes.map((lane) => (
+          <div
+            key={lane.person.id}
+            aria-hidden
+            className="absolute rounded-2xl border border-line bg-canvas-raised/70 shadow-card"
+            style={{ left: BOARD.pad, top: lane.y, width: board.width - BOARD.pad * 2, height: lane.height }}
+          />
+        ))}
+        <svg
+          aria-hidden={false}
+          className="pointer-events-none absolute inset-0 overflow-visible"
+          width={board.width}
+          height={board.height}
         >
-          <LaneHeader person={lane.person} strip={strip} />
-          {lane.rows.map((row) => {
-            // The row holds its journey's title, its screens and its strip; its cards are placed from its corner.
-            const origin = { x: BOARD.pad + 1, y: row.y - ROW_HEAD };
-            return (
-              <section
-                key={row.journey.id}
-                aria-label={text(row.journey.title)}
-                data-journey={row.journey.id}
-                className="absolute inset-x-0"
-                style={{ top: origin.y - lane.y - 1, height: row.height + ROW_HEAD }}
+          <defs>
+            {(['quiet', 'checked', 'missing'] as const).map((tone) => (
+              <marker
+                key={tone}
+                id={`board-arrow-${tone}`}
+                viewBox="0 0 10 10"
+                refX="9"
+                refY="5"
+                markerWidth="7"
+                markerHeight="7"
+                orient="auto-start-reverse"
+                className={edgeTone[tone]}
               >
-                <div className="absolute" style={{ left: BOARD.lanePad, top: 0 }}>
-                  <JourneyTitle person={lane.person} journey={row.journey} strip={strip} />
-                </div>
-                {row.band && (
-                  <div
-                    role="group"
-                    aria-label={t.noScreenLane}
-                    className="absolute rounded-xl border border-dashed border-line bg-canvas-sunken/50"
-                    style={{
-                      left: BOARD.lanePad - 10,
-                      right: BOARD.lanePad - 10,
-                      top: row.band.y - origin.y,
-                      height: row.band.height,
-                    }}
-                  >
-                    <p className="px-3 pt-1.5 text-meta text-fg-muted">{t.noScreenLane}</p>
+                <path d="M1,1 L9,5 L1,9" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </marker>
+            ))}
+          </defs>
+          {board.edges
+            .filter((edge) => forward(board, edge))
+            .map((edge) => (
+              <BoardArrow key={`${edge.from}>${edge.to}`} edge={edge} board={board} strip={strip} />
+            ))}
+          {Object.values(board.nodes).flatMap((node) =>
+            (node.situations ?? []).map((box) => (
+              <SituationArrows key={`${node.id}|${box.id}`} node={node} box={box} board={board} />
+            )),
+          )}
+        </svg>
+        {board.lanes.map((lane) => (
+          <section
+            key={lane.person.id}
+            aria-label={text(lane.person.name)}
+            data-person={lane.person.id}
+            className="absolute"
+            style={{
+              left: BOARD.pad + 1,
+              top: lane.y + 1,
+              width: board.width - BOARD.pad * 2 - 2,
+              height: lane.height - 2,
+            }}
+          >
+            <LaneHeader person={lane.person} strip={strip} />
+            {lane.rows.map((row) => {
+              // The row holds its journey's title, its screens and its strip; its cards are placed from its corner.
+              const origin = { x: BOARD.pad + 1, y: row.y - ROW_HEAD };
+              return (
+                <section
+                  key={row.journey.id}
+                  aria-label={text(row.journey.title)}
+                  data-journey={row.journey.id}
+                  className="absolute inset-x-0"
+                  style={{ top: origin.y - lane.y - 1, height: row.height + ROW_HEAD }}
+                >
+                  <div className="absolute" style={{ left: BOARD.lanePad, top: 0 }}>
+                    <JourneyTitle person={lane.person} journey={row.journey} strip={strip} />
                   </div>
-                )}
-                {Object.values(board.nodes)
-                  .filter((node) => node.journeyId === row.journey.id && node.personId === lane.person.id)
-                  .map((node) => (
-                    <BoardCard key={node.id} node={node} origin={origin} strip={strip} back={back.get(node.id) ?? []} />
-                  ))}
-              </section>
-            );
-          })}
-        </section>
-      ))}
-      <div className="absolute" style={{ left: BOARD.pad, top: board.height - BOARD.pad + 8 }}>
-        <AddButton onClick={() => strip.show({ kind: 'addPerson' })}>{tree.addPerson}</AddButton>
+                  {row.band && (
+                    <div
+                      role="group"
+                      aria-label={t.noScreenLane}
+                      className="absolute rounded-xl border border-dashed border-line bg-canvas-sunken/50"
+                      style={{
+                        left: BOARD.lanePad - 10,
+                        right: BOARD.lanePad - 10,
+                        top: row.band.y - origin.y,
+                        height: row.band.height,
+                      }}
+                    >
+                      <p className="px-3 pt-1.5 text-meta text-fg-muted">{t.noScreenLane}</p>
+                    </div>
+                  )}
+                  {Object.values(board.nodes)
+                    .filter((node) => node.journeyId === row.journey.id && node.personId === lane.person.id)
+                    .map((node) => (
+                      <BoardCard
+                        key={node.id}
+                        node={node}
+                        origin={origin}
+                        strip={strip}
+                        back={back.get(node.id) ?? []}
+                      />
+                    ))}
+                </section>
+              );
+            })}
+          </section>
+        ))}
+        <div className="absolute" style={{ left: BOARD.pad, top: board.height - BOARD.pad + 8 }}>
+          <AddButton onClick={() => strip.show({ kind: 'addPerson' })}>{tree.addPerson}</AddButton>
+        </div>
       </div>
-    </div>
+    </BoardNodes.Provider>
   );
 }
 
@@ -422,7 +449,10 @@ function LaneHeader({ person, strip }: { person: Person; strip: Strip }) {
   );
 }
 
-/** A journey's name over its row: what it is for, how many screens and promises, and how its situations stand. */
+/**
+ * A journey's name over its row: what it is for, how many screens and promises, and how its situations stand (each is
+ * drawn under the screen where it is seen).
+ */
 function JourneyTitle({ person, journey, strip }: { person: Person; journey: Journey; strip: Strip }) {
   const t = useMessages(messages);
   const text = useText();
@@ -452,22 +482,6 @@ function JourneyTitle({ person, journey, strip }: { person: Person; journey: Jou
           : t.journeyChecked(counts.screens, counts.promises, counts.checked)}
       </span>
       <SituationsShown journey={journey} strip={strip} />
-      {(journey.situations?.length ?? 0) > 0 && (
-        <span role="group" aria-label={t.journeySituations} className="flex flex-wrap items-center gap-1.5 self-center">
-          {journey.situations!.map((situation) => {
-            const screen = situation.screen ? strip.map.cards[situation.screen] : undefined;
-            const own = screen?.states?.find((one) => one.id === situation.id);
-            return (
-              <SituationChip
-                key={situation.id}
-                cardId={screen?.id ?? ''}
-                situation={own ?? { id: situation.id, title: situation.title, why: situation.why }}
-                onClick={() => screen && strip.open(person.id, journey.id, screen.id, situation.id)}
-              />
-            );
-          })}
-        </span>
-      )}
     </h3>
   );
 }
@@ -630,37 +644,294 @@ function BoardCard({
           </span>
         </button>
       </div>
-      <BoardCaption
-        card={card}
-        strip={strip}
-        back={back}
-        onSituation={(state) => {
-          if (node.personId && node.journeyId) strip.open(node.personId, node.journeyId, card.id, state);
-        }}
-      />
+      <BoardCaption card={card} strip={strip} back={back} />
+      <BoardSituations node={node} card={card} strip={strip} />
     </div>
   );
 }
 
-/** Under a screen on the board: how it stands, how many promises hold, its situations, a missing button, a note. */
-function BoardCaption({
+/**
+ * A screen's situations under it on the board: its own ones as small real screens (a proposal the code does not handle
+ * yet dashed, with nothing to show), and the ones every screen has named on one line. Pressing one opens the card at it.
+ */
+function BoardSituations({ node, card, strip }: { node: BoardNode; card: TreeCard; strip: Strip }) {
+  const t = useMessages(messages);
+  const { common } = boardSituations(card);
+  const open = (state: string) => {
+    if (node.personId && node.journeyId) strip.open(node.personId, node.journeyId, card.id, state);
+  };
+  const tray = node.tray;
+  if (!tray) return null;
+  const inner = tray.w - BOARD.tray.pad * 2;
+  return (
+    <>
+      <div
+        aria-hidden
+        className="absolute rounded-xl border border-line-subtle bg-canvas-sunken/70"
+        style={{ left: tray.x - node.x, top: tray.y - node.rowY, width: tray.w, height: tray.h }}
+      >
+        <p className="flex items-center gap-1.5 px-2.5 text-meta text-fg-muted" style={{ height: BOARD.tray.head }}>
+          <Layers size={12} aria-hidden className="shrink-0" />
+          <span className="truncate">{t.variations(boardSituations(card).framed.length + common.length)}</span>
+        </p>
+      </div>
+      {node.situations?.map((box) => (
+        <SituationTile key={box.id} node={node} box={box} card={card} strip={strip} onOpen={() => open(box.id)} />
+      ))}
+      {node.commonY !== undefined && common.length > 0 && (
+        <div
+          role="group"
+          aria-label={t.commonSituations}
+          className="absolute flex flex-col items-start text-meta text-fg-faint"
+          style={{ left: tray.x - node.x + BOARD.tray.pad, top: node.commonY - node.rowY, width: inner }}
+        >
+          <p className="flex items-end" style={{ height: BOARD.common.lead }}>
+            {t.commonLead}
+          </p>
+          {common.map((situation) => (
+            <CommonSituation key={situation.id} card={card} situation={situation} onClick={() => open(situation.id)} />
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+/** One of the situations every screen has, by name, with how it stands once Alpine has looked. */
+function CommonSituation({
   card,
-  strip,
-  back,
-  onSituation,
+  situation,
+  onClick,
 }: {
   card: TreeCard;
-  strip: Strip;
-  back: BoardEdge[];
-  onSituation: (state: string) => void;
+  situation: ScreenSituation;
+  onClick: () => void;
 }) {
+  const t = useMessages(messages);
+  const result = useSituationResult(card.id, situation.id);
+  const proposal = situation.handled === false;
+  const word = proposal
+    ? t.proposal
+    : result === 'shows'
+      ? t.situationShowsShort
+      : result === 'unseen'
+        ? ''
+        : t.sameShort;
+  return (
+    <button
+      type="button"
+      title={[situation.why, word].filter(Boolean).join(' · ') || undefined}
+      onClick={onClick}
+      style={{ height: BOARD.common.line }}
+      className={clsx(
+        'max-w-full cursor-pointer truncate text-left hover:text-fg',
+        proposal
+          ? 'text-interactive'
+          : result === 'same' || result === 'elsewhere'
+            ? 'text-attention'
+            : 'text-fg-muted',
+      )}
+    >
+      {proposal ? '+ ' : result === 'shows' ? '✓ ' : result === 'same' || result === 'elsewhere' ? '! ' : ''}
+      {situation.title}
+      {word && <span className="sr-only"> · {word}</span>}
+    </button>
+  );
+}
+
+/** A situation's small screen: its name over it (with how it stands), the real screen at it, a way back under it. */
+function SituationTile({
+  node,
+  box,
+  card,
+  strip,
+  onOpen,
+}: {
+  node: BoardNode;
+  box: BoardSituation;
+  card: TreeCard;
+  strip: Strip;
+  onOpen: () => void;
+}) {
+  const t = useMessages(messages);
+  const app = useLiveApp();
+  const result = useSituationResult(card.id, box.id);
+  const exits = useSituationExits(node, box);
+  const situation = card.states?.find((one) => one.id === box.id);
+  if (!situation) return null;
+  const proposal = situation.handled === false;
+  const off = !proposal && (result === 'same' || result === 'elsewhere');
+  const word = proposal
+    ? t.proposal
+    : result === 'shows'
+      ? t.situationShowsShort
+      : result === 'unseen'
+        ? ''
+        : t.sameShort;
+  const device = node.kind === 'computer' ? 'computer' : 'phone';
+  const phone = device === 'phone';
+  const name = (
+    <span className="flex size-full items-center justify-center p-2 text-center text-meta text-fg-faint">
+      {situation.title}
+    </span>
+  );
+  return (
+    <div
+      className="absolute"
+      style={{ left: box.x - node.x, top: box.y - node.rowY - BOARD.situation.title, width: box.w }}
+    >
+      <p
+        title={[situation.why, word].filter(Boolean).join(' · ') || undefined}
+        className={clsx(
+          'flex items-center gap-1 text-meta',
+          proposal ? 'text-interactive' : off ? 'text-attention' : 'text-fg-muted',
+        )}
+        style={{ height: BOARD.situation.title }}
+      >
+        {(proposal || off || result === 'shows') && (
+          <span aria-hidden className={clsx('shrink-0', result === 'shows' && !proposal && 'text-interactive')}>
+            {proposal ? '+' : off ? '!' : '✓'}
+          </span>
+        )}
+        <span className="truncate">{situation.title}</span>
+      </p>
+      <button
+        type="button"
+        aria-haspopup="dialog"
+        aria-label={situation.title}
+        onClick={onOpen}
+        className={clsx(
+          'block cursor-pointer border transition-colors',
+          proposal
+            ? 'border-dashed border-interactive/70 bg-selected/40 hover:border-interactive'
+            : off
+              ? 'border-attention bg-canvas-raised'
+              : 'border-line bg-canvas-raised hover:border-interactive',
+        )}
+        style={{
+          width: box.w,
+          height: box.h,
+          padding: TILE_PAD,
+          borderRadius: phone ? 16 : 8,
+          boxShadow: proposal ? undefined : phone ? PHONE_SHADOW : BROWSER_SHADOW,
+        }}
+      >
+        <span
+          className="relative block size-full overflow-clip bg-canvas-raised"
+          style={{ borderRadius: phone ? 12 : 5 }}
+        >
+          {proposal ? (
+            <span className="flex size-full items-center justify-center p-2 text-center text-meta text-interactive">
+              {t.proposal}
+            </span>
+          ) : app && card.path ? (
+            <LiveScreen
+              cardId={card.id}
+              path={card.path}
+              state={situation.id}
+              device={device}
+              ratio={(box.h - TILE_PAD * 2) / (box.w - TILE_PAD * 2)}
+              title={`${card.title} · ${situation.title}`}
+              fallback={name}
+            />
+          ) : (
+            name
+          )}
+        </span>
+      </button>
+      {exits.back.length > 0 && (
+        <p className="flex gap-x-2 overflow-clip text-meta text-fg-muted" style={{ height: BOARD.situation.foot }}>
+          {exits.back.map((exit) => (
+            <button
+              key={exit.to}
+              type="button"
+              title={exit.label || undefined}
+              onClick={() => strip.seek(exit.to)}
+              className="max-w-full shrink-0 cursor-pointer truncate pt-0.5 hover:text-fg"
+            >
+              {t.backTo(stepTitle(strip.map, exit.to))}
+            </button>
+          ))}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** The frame's edge around a situation's small screen. */
+const TILE_PAD = 3;
+
+/**
+ * Where a situation's real screen leads: its buttons to other screens that the usual day does not have (the menu every
+ * screen carries is not a way out of the situation). Those to a screen to its right or below are arrows; the rest are
+ * said under it. Nothing until both screens have reported, so the menu never shows as ways out on the way.
+ */
+function useSituationExits(node: BoardNode, box: BoardSituation): { forward: LiveTarget[]; back: LiveTarget[] } {
+  const layout = useLayout(node.id, box.id);
+  const usual = useLayout(node.id);
+  const board = useBoardNodes();
+  if (!layout?.screen || !usual?.screen) return NO_EXITS;
+  const seen = new Set<string>();
+  const exits = layout.targets.filter((target) => {
+    if (target.to === node.id || !board[target.to] || seen.has(target.to)) return false;
+    if (usual.targets.some((one) => one.to === target.to)) return false;
+    seen.add(target.to);
+    return true;
+  });
+  const ahead = (target: LiveTarget) => {
+    const to = board[target.to]!;
+    return to.rowY > node.rowY || (to.rowY === node.rowY && to.x >= box.x + box.w);
+  };
+  return { forward: exits.filter(ahead), back: exits.filter((target) => !ahead(target)) };
+}
+
+const NO_EXITS = { forward: [], back: [] };
+
+/** The board's nodes, for what is drawn on it to find where a screen is. */
+const BoardNodes = createContext<Record<string, BoardNode>>({});
+const useBoardNodes = () => useContext(BoardNodes);
+
+/** The arrows out of a situation's small screen: from the real button, blue like every button that leads on. */
+function SituationArrows({ node, box, board }: { node: BoardNode; box: BoardSituation; board: BoardLayout }) {
+  const exits = useSituationExits(node, box);
+  if (!exits.forward.length) return null;
+  const from: BoardNode = { ...node, x: box.x, y: box.y, w: box.w, h: box.h, span: undefined };
+  const scale = (box.w - TILE_PAD * 2) / screenWidthFor(node.kind === 'computer' ? 'computer' : 'phone');
+  return (
+    <>
+      {exits.forward.map((target) => {
+        const to = board.nodes[target.to]!;
+        const y = box.y + TILE_PAD + (target.y + target.h / 2) * scale;
+        const start =
+          y > box.y && y < box.y + box.h ? { x: box.x + TILE_PAD + (target.x + target.w) * scale, y } : undefined;
+        const { path } = route(from, to, start);
+        return (
+          <g key={target.to} role="img" aria-label={target.label} className={edgeTone.checked}>
+            <title>{target.label}</title>
+            <path
+              d={path}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.6}
+              strokeLinejoin="round"
+              markerEnd="url(#board-arrow-checked)"
+            />
+          </g>
+        );
+      })}
+    </>
+  );
+}
+
+/** Under a screen on the board: how it stands, how many promises hold, a missing button, a way back. */
+function BoardCaption({ card, strip, back }: { card: TreeCard; strip: Strip; back: BoardEdge[] }) {
   const t = useMessages(messages);
   const tree = useMessages(flowTreeMessages);
   const layout = useLayout(card.id);
   const missing = missingButtons(strip.map, card.id, layout);
   const counts = tally(card.promises);
   return (
-    <div data-caption className="flex flex-col gap-1 px-0.5 pt-2">
+    <div data-caption className="flex flex-col gap-1 overflow-clip px-0.5 pt-2" style={{ maxHeight: BOARD.caption }}>
       <p className="flex items-center justify-between gap-2 text-meta">
         <State card={card} strip={strip} />
         {counts.total > 0 && (
@@ -669,22 +940,6 @@ function BoardCaption({
           </span>
         )}
       </p>
-      {(card.states?.length ?? 0) > 0 && (
-        <div
-          role="group"
-          aria-label={t.situationCount(card.states!.length)}
-          className="flex max-h-13 flex-wrap gap-1 overflow-clip"
-        >
-          {card.states!.map((situation) => (
-            <SituationChip
-              key={situation.id}
-              cardId={card.id}
-              situation={situation}
-              onClick={() => onSituation(situation.id)}
-            />
-          ))}
-        </div>
-      )}
       {back.length > 0 && (
         <p className="flex flex-wrap gap-x-2 text-meta text-fg-muted">
           {back.map((way) => (

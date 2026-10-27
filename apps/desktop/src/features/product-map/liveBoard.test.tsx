@@ -448,10 +448,40 @@ describe('situations on the live map', () => {
     );
   });
 
-  it("lists a journey's situations by the journey, each opening the screen where it is seen", async () => {
+  it('draws its own situations under a screen as small real screens, and names the common ones on one line', async () => {
     mount(running, '{ "name": "bakery" }', situated);
-    const group = await screen.findByRole('group', { name: '흐름 상황' });
-    fireEvent.click(within(group).getByRole('button', { name: /먼저 예약됐을 때/ }));
+    const tile = await frameOf('빵 고르기 · 빵이 없을 때');
+    expect(tile.getAttribute('src')).toBe(`${RELAY}/order?alpine-state=empty`);
+    // Waiting and connection are on every screen: named, not drawn.
+    const common = screen.getByRole('group', { name: '어느 화면에나 있는 상황' });
+    expect(within(common).getByRole('button', { name: /연결이 끊겼을 때/ })).toBeTruthy();
+    expect(screen.queryByTitle('빵 고르기 · 연결이 끊겼을 때')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '빵이 없을 때' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('button', { name: '빵이 없을 때', pressed: true })).toBeTruthy();
+  });
+
+  it("draws a situation's way out from its own button, not from the menu the usual day has too", async () => {
+    mount(running, '{ "name": "bakery" }', situated);
+    const usual = layout([{ to: 'time', label: '다음', x: 20, y: 700, w: 350, h: 56 }]);
+    report(await frameOf('빵 고르기'), usual);
+    report(
+      await frameOf('빵 고르기 · 빵이 없을 때'),
+      layout([
+        { to: 'time', label: '다음', x: 20, y: 700, w: 350, h: 56 },
+        { to: 'contact', label: '빵이 들어오면 알려 줘요', x: 20, y: 400, w: 350, h: 56 },
+      ]),
+    );
+    expect(await screen.findByRole('img', { name: '빵이 들어오면 알려 줘요' })).toBeTruthy();
+    expect(screen.getAllByRole('img', { name: '다음' })).toHaveLength(1); // the usual day's own arrow only
+  });
+
+  it("draws a journey's situation under the screen where it is seen, opening that screen at it", async () => {
+    mount(running, '{ "name": "bakery" }', situated);
+    expect((await frameOf('연락처 남기기 · 먼저 예약됐을 때')).getAttribute('src')).toBe(
+      `${RELAY}/order/contact?alpine-state=taken`,
+    );
+    fireEvent.click(screen.getByRole('button', { name: '먼저 예약됐을 때' }));
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByRole('button', { name: /먼저 예약됐을 때/, pressed: true })).toBeTruthy();
     expect((await frameOf('연락처 남기기', dialog)).getAttribute('src')).toBe(

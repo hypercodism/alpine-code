@@ -1,5 +1,6 @@
+import { boardSituations } from './boardSituations';
 import type { Device } from './planLook';
-import { hasScreenArea, isJourneyLink, type Journey, type Person, type TreeMap } from './flowTreeModel';
+import { hasScreenArea, isJourneyLink, type Journey, type Person, type TreeCard, type TreeMap } from './flowTreeModel';
 
 /**
  * Where everything sits on the board (the map as one canvas, 10-27): a lane per person who uses the product, holding
@@ -26,6 +27,23 @@ export interface BoardNode {
   /** The lane and journey it is drawn in. */
   personId: string | null;
   journeyId: string | null;
+  /** How wide its column is, when its situations are wider than its frame: arrows go down past them. */
+  span?: number;
+  /** Under a screen: its own situations, each a small screen (`boardSituations`). */
+  situations?: BoardSituation[];
+  /** Under a screen: the tray its situations sit in. */
+  tray?: BoardSituation;
+  /** Under a screen: where the list naming its common situations starts. */
+  commonY?: number;
+}
+
+/** A situation drawn as a small screen under its screen: its frame's box, its name over it. */
+export interface BoardSituation {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 
 export interface BoardEdge {
@@ -68,6 +86,12 @@ export const BOARD = {
   columnGap: 84,
   title: 24,
   caption: 96,
+  /** A situation's small screen, two to a line under its screen; its name over it, a way back under it. */
+  situation: { phone: { w: 96, h: 192 }, computer: { w: 184, h: 128 }, title: 22, foot: 20, gap: 12 },
+  /** The tray the situations sit in: its heading over them, and its edge around them. */
+  tray: { head: 26, pad: 10, gap: 12 },
+  /** The list naming the common situations: its lead, then one line each. */
+  common: { lead: 26, line: 20 },
   phone: { w: 168, h: 336 },
   computer: { w: 380, h: 264 },
   system: { w: 196, h: 52 },
@@ -186,7 +210,7 @@ export function layoutBoard(map: TreeMap, device: (journey: Journey) => Device):
       ...from
         .get(id)!
         .filter((one) => nodes[one] && rowKey.get(one) !== key)
-        .map((one) => nodes[one]!.x + nodes[one]!.w + gap),
+        .map((one) => nodes[one]!.x + (nodes[one]!.span ?? nodes[one]!.w) + gap),
     );
   const lanes: BoardLane[] = [];
   let y = BOARD.pad;
@@ -207,12 +231,21 @@ export function layoutBoard(map: TreeMap, device: (journey: Journey) => Device):
       );
       const key = `${person.id}/${journey.id}`;
       const frame = Math.max(0, ...shown.map((id) => BOARD[kindOf(id)].h));
-      const above = shown.length ? BOARD.title + frame + BOARD.caption : 0;
+      const branchesY = rowY + BOARD.title + frame + BOARD.caption;
+      let branches = 0;
       let next = left;
       for (const id of shown) {
         const kind = kindOf(id);
         const x = Math.max(next, past(id, key));
         rowKey.set(id, key);
+        const branch = situationsUnder(
+          map.cards[id]!,
+          kind === 'computer' ? 'computer' : 'phone',
+          x,
+          branchesY,
+          BOARD[kind].w,
+        );
+        branches = Math.max(branches, branch.height);
         nodes[id] = {
           id,
           kind,
@@ -222,9 +255,14 @@ export function layoutBoard(map: TreeMap, device: (journey: Journey) => Device):
           rowY,
           personId: person.id,
           journeyId: journey.id,
+          ...(branch.width > BOARD[kind].w ? { span: branch.width } : {}),
+          ...(branch.situations.length ? { situations: branch.situations } : {}),
+          ...(branch.tray ? { tray: branch.tray } : {}),
+          ...(branch.commonY !== undefined ? { commonY: branch.commonY } : {}),
         };
-        next = x + BOARD[kind].w + BOARD.columnGap;
+        next = x + Math.max(BOARD[kind].w, branch.width) + BOARD.columnGap;
       }
+      const above = shown.length ? BOARD.title + frame + BOARD.caption + branches : 0;
       let band: BoardJourneyRow['band'];
       if (loose.length) {
         const bandY = rowY + above + (shown.length ? 6 : 0);
@@ -266,7 +304,8 @@ export function layoutBoard(map: TreeMap, device: (journey: Journey) => Device):
     lanes.push({ kind: 'person', person, y: top, height, rows });
     y = top + height + BOARD.laneGap;
   }
-  const width = Math.max(720, ...Object.values(nodes).map((node) => node.x + node.w + BOARD.lanePad + BOARD.pad));
+  const right = (node: BoardNode) => Math.max(node.x + node.w, ...(node.situations ?? []).map((one) => one.x + one.w));
+  const width = Math.max(720, ...Object.values(nodes).map((node) => right(node) + BOARD.lanePad + BOARD.pad));
   let number = 0;
   for (const lane of lanes)
     for (const row of lane.rows) {
@@ -279,6 +318,45 @@ export function layoutBoard(map: TreeMap, device: (journey: Journey) => Device):
         nodes[id]!.number = String(++number).padStart(2, '0');
     }
   return { lanes, nodes, edges, width, height: Math.max(y - BOARD.laneGap + BOARD.pad, 320) };
+}
+
+/**
+ * A screen's situations under it, from `top` (10-27 rule for variations: the same screen in another situation is not
+ * a step of the walk, so it gets no arrow into it; it sits in a tray hung under its screen, named by when it happens).
+ * In the tray: its own ones two to a line, then the common ones named one to a line.
+ */
+function situationsUnder(
+  card: TreeCard,
+  device: Device,
+  x: number,
+  top: number,
+  frameWidth: number,
+): { situations: BoardSituation[]; tray?: BoardSituation; commonY?: number; width: number; height: number } {
+  const { framed, common } = boardSituations(card);
+  if (!framed.length && !common.length) return { situations: [], width: 0, height: 0 };
+  const { pad, head, gap } = BOARD.tray;
+  const size = BOARD.situation[device];
+  const line = BOARD.situation.title + size.h + BOARD.situation.foot + BOARD.situation.gap;
+  const inside = { x: x + pad, y: top + gap + head };
+  const situations = framed.map((situation, index) => ({
+    id: situation.id,
+    x: inside.x + (index % 2) * (size.w + BOARD.situation.gap),
+    y: inside.y + Math.floor(index / 2) * line + BOARD.situation.title,
+    ...size,
+  }));
+  const lines = Math.ceil(framed.length / 2);
+  const commonY = common.length ? inside.y + lines * line : undefined;
+  const content = framed.length > 1 ? size.w * 2 + BOARD.situation.gap : framed.length ? size.w : 0;
+  const width = Math.max(frameWidth, content + pad * 2);
+  const height =
+    head + lines * line + (common.length ? BOARD.common.lead + common.length * BOARD.common.line : 0) + pad;
+  return {
+    situations,
+    tray: { id: card.id, x, y: top + gap, w: width, h: height },
+    commonY,
+    width,
+    height: gap + height,
+  };
 }
 
 /** The height of a strip's label, "화면 없는 일", over its cards. */
@@ -302,9 +380,9 @@ export function route(
 ): { path: string; middle: Point } {
   const s = start ?? { x: from.x + from.w, y: from.y + Math.min(from.h / 2, 140) };
   const ey = to.y + Math.min(to.h / 2, 140);
-  const gutter = from.x + from.w + BOARD.columnGap / 2;
+  const gutter = from.x + (from.span ?? from.w) + BOARD.columnGap / 2;
   if (from.rowY === to.rowY && to.x >= from.x + from.w) {
-    const mid = Math.round((from.x + from.w + to.x) / 2);
+    const mid = Math.round((from.x + (from.span ?? from.w) + to.x) / 2);
     return { path: `M${s.x},${s.y} H${mid} V${ey} H${to.x}`, middle: { x: mid, y: (s.y + ey) / 2 } };
   }
   if (from.rowY === to.rowY) {

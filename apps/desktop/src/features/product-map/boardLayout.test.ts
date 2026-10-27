@@ -137,6 +137,33 @@ describe('the board (10-27: the map as one canvas)', () => {
   });
 });
 
+describe("a screen's situations on the board", () => {
+  const states: TreeCard['states'] = [
+    { id: 'empty', title: '빵이 없을 때' },
+    { id: 'sold-out', title: '다 팔렸을 때' },
+    { id: 'closed', title: '문 닫았을 때' },
+    { id: 'loading', title: '기다리는 동안' },
+  ];
+  const situated: TreeMap = { ...bakery, cards: { ...bakery.cards, pick: { ...bakery.cards.pick!, states } } };
+
+  it('stands its own ones under it two to a line, the common ones on a line after, and makes the row taller', () => {
+    const board = layoutBoard(situated, device);
+    const pick = board.nodes.pick!;
+    const [a, b, c] = pick.situations!;
+    expect(pick.situations!.map((one) => one.id)).toEqual(['empty', 'sold-out', 'closed']);
+    expect(a!.y).toBeGreaterThan(pick.y + pick.h);
+    expect(b!.y).toBe(a!.y);
+    expect(b!.x).toBeGreaterThan(a!.x + a!.w);
+    expect(c!.y).toBeGreaterThan(a!.y + a!.h);
+    expect(pick.commonY).toBeGreaterThan(c!.y + c!.h);
+    const row = board.lanes[0]!.rows[0]!;
+    expect(row.y + row.height).toBeGreaterThan(pick.commonY!);
+    expect(row.height).toBeGreaterThan(layoutBoard(bakery, device).lanes[0]!.rows[0]!.height);
+    // The next screen stands past the situations, which are wider than a phone.
+    expect(board.nodes.time!.x).toBeGreaterThan(b!.x + b!.w);
+  });
+});
+
 describe('a screen nothing leads to', () => {
   it('stands last in its row, after the ones the walk reaches', () => {
     const map: TreeMap = {
