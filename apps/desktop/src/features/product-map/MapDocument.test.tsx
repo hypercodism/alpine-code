@@ -56,16 +56,16 @@ describe('MapDocument decisions', () => {
         <MapDocument map={MAP} onShowOnBoard={vi.fn()} />
       </LocaleProvider>,
     );
-    // 3 distinct: the AI's pick on two screens, the person's pick, and the note.
-    expect(screen.getAllByText('결정 3개').length).toBeGreaterThan(0);
+    // 2 distinct: the same answer on three screens, whoever picked it, and the note.
+    expect(screen.getAllByText('결정 2개').length).toBeGreaterThan(0);
     const section = document.querySelector('[data-doc="decisions"]') as HTMLElement;
     const shown = within(section).getAllByText(ANSWER);
-    expect(shown).toHaveLength(2);
+    expect(shown).toHaveLength(1);
     const meta = shown[0]!.nextElementSibling!.textContent!;
     expect(meta).toContain('기록의 시작');
     expect(meta).toContain('RSS로 받아보기');
-    expect(meta).not.toContain('기록 읽기');
-    expect(meta).toContain('AI가 정함');
+    expect(meta).toContain('기록 읽기');
+    expect(meta).not.toContain('정함');
   });
 });
 

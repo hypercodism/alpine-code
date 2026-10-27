@@ -273,9 +273,9 @@ describe('보드 · 문서 · 앱 · 코드', () => {
     const promise = within(doc).getByText('마크다운으로 쓰면 바로 미리 보여요').closest('li')!;
     expect(promise.textContent).toContain('글 쓰기');
     expect(promise.textContent).toContain('통과');
-    // What was decided, and by whom.
+    // What was decided, without who decided it.
     expect(within(doc).getByRole('heading', { name: '결정 2개' })).toBeTruthy();
-    expect(within(doc).getByText('같이 지워요').closest('li')!.textContent).toContain('AI가 정함');
+    expect(within(doc).getByText('같이 지워요').closest('li')!.textContent).not.toContain('정함');
     // The contents lead to each part.
     const contents = screen.getByRole('navigation', { name: '목차' });
     expect(within(contents).getByRole('button', { name: '글 써서 올리기' })).toBeTruthy();

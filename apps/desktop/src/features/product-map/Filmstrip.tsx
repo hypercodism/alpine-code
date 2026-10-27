@@ -39,12 +39,10 @@ import { Avatar, RemovedNotice, useText, type PromiseTarget } from './treeParts'
 export interface FilmstripProps extends FlowTreeProps {
   /** While planning: the product decisions still open, listed beside the board. */
   undecided?: string[];
-  /** A product that began as a plan: what the AI decided shows under its screens, and a built card is real. */
+  /** A product that began as a plan: a built card is real. */
   planned?: boolean;
   /** The card being built now: it rises over a night sky with snow falling, and its row comes into view. */
   making?: string | null;
-  /** Opens what the AI decided on a card, to answer it again. */
-  onChangePick?: (cardId: string) => void;
 }
 
 /** The frames are pictures of a phone and a browser window, drawn to their own measure rather than the app's. */
@@ -71,7 +69,6 @@ interface Strip {
   seekJourney: (journeyId: string) => void;
   /** Plays a journey: its real screens one after another (흐름 재생). */
   play: (journeyId: string) => void;
-  onChangePick?: (cardId: string) => void;
 }
 
 /**
@@ -164,7 +161,6 @@ export function Filmstrip(props: FilmstripProps) {
     seek,
     seekJourney: (journeyId) => setTarget((current) => ({ journeyId, at: (current?.at ?? 0) + 1 })),
     play: setPlaying,
-    onChangePick: props.onChangePick,
   };
 
   return (
@@ -250,10 +246,7 @@ function BoardCanvas({ strip, device }: { strip: Strip; device: (journey: Journe
   const text = useText();
   const tree = useMessages(flowTreeMessages);
   const { map } = strip;
-  const board = useMemo(
-    () => layoutBoard(map, device, (id) => strip.planned && !!map.cards[id]?.picks?.some((one) => one.by === 'ai')),
-    [map, device, strip.planned],
-  );
+  const board = useMemo(() => layoutBoard(map, device), [map, device]);
   // The ways not drawn as arrows, by the card they leave: said under it.
   const back = new Map<string, BoardEdge[]>();
   for (const edge of board.edges)
@@ -666,7 +659,6 @@ function BoardCaption({
   const layout = useLayout(card.id);
   const missing = missingButtons(strip.map, card.id, layout);
   const counts = tally(card.promises);
-  const pick = strip.planned ? card.picks?.findLast((one) => one.by === 'ai') : undefined;
   return (
     <div data-caption className="flex flex-col gap-1 px-0.5 pt-2">
       <p className="flex items-center justify-between gap-2 text-meta">
@@ -713,21 +705,6 @@ function BoardCaption({
           {t.missingButton(stepTitle(strip.map, to))}
         </p>
       ))}
-      {pick && (
-        <div className="mt-1 -rotate-1 rounded-sm bg-note px-2.5 py-1.5 text-meta text-note-ink shadow-card">
-          <p className="opacity-70">{t.aiPicked}</p>
-          <p className="line-clamp-2">{pick.answer}</p>
-          {strip.onChangePick && (
-            <button
-              type="button"
-              onClick={() => strip.onChangePick!(card.id)}
-              className="mt-0.5 cursor-pointer underline underline-offset-2"
-            >
-              {t.change}
-            </button>
-          )}
-        </div>
-      )}
     </div>
   );
 }

@@ -863,19 +863,11 @@ function ScreenView({ screen, look }: { screen: CardScreen; look: string }) {
   );
 }
 
-/**
- * What was decided on a card, in one line under its title: the person's latest answer, or what the AI took on its own
- * ("AI가 정함 · 같이 지워요"), which the person can change from the card.
- */
+/** What was decided on a card, in one line under its title: the latest answer. */
 function PickLine({ card }: { card: TreeCard }) {
-  const t = useMessages(messages);
   const last = card.picks?.at(-1);
   if (!last) return null;
-  return (
-    <span className="shrink-0 truncate text-meta text-fg-muted">
-      {last.by === 'ai' ? `${t.aiPicked} · ${last.answer}` : last.answer}
-    </span>
-  );
+  return <span className="shrink-0 truncate text-meta text-fg-muted">{last.answer}</span>;
 }
 
 /** The card's screen at a glance: a real capture, a sketch marked as one, a planned screen, or room left for one. */

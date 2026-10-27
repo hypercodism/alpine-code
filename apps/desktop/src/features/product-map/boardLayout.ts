@@ -68,7 +68,6 @@ export const BOARD = {
   columnGap: 84,
   title: 24,
   caption: 96,
-  sticky: 72,
   phone: { w: 168, h: 336 },
   computer: { w: 380, h: 264 },
   system: { w: 196, h: 52 },
@@ -139,12 +138,8 @@ export function boardRanks(cards: string[], edges: BoardEdge[]): Map<string, num
   return rank;
 }
 
-/** Lays the map out as a board. `device` says what each journey is used on; `sticky` whether a card has a note. */
-export function layoutBoard(
-  map: TreeMap,
-  device: (journey: Journey) => Device,
-  sticky: (cardId: string) => boolean = () => false,
-): BoardLayout {
+/** Lays the map out as a board. `device` says what each journey is used on. */
+export function layoutBoard(map: TreeMap, device: (journey: Journey) => Device): BoardLayout {
   const people = map.people.filter((person) => person.journeys.some((journey) => journey.steps.length));
   // Each card once, in the first journey that walks it: a screen in the journey's row, the rest in the row's strip of
   // what has no screen, right under it.
@@ -212,7 +207,7 @@ export function layoutBoard(
       );
       const key = `${person.id}/${journey.id}`;
       const frame = Math.max(0, ...shown.map((id) => BOARD[kindOf(id)].h));
-      const above = shown.length ? BOARD.title + frame + BOARD.caption + (shown.some(sticky) ? BOARD.sticky : 0) : 0;
+      const above = shown.length ? BOARD.title + frame + BOARD.caption : 0;
       let next = left;
       for (const id of shown) {
         const kind = kindOf(id);

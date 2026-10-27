@@ -14,7 +14,6 @@ import {
 export interface DocDecision {
   answer: string;
   question: string;
-  by: 'person' | 'ai';
   cards: TreeCard[];
 }
 
@@ -58,12 +57,11 @@ export function readDocument(map: TreeMap, layout: BoardLayout): DocContent {
   const decisions: DocDecision[] = [];
   for (const card of ordered)
     for (const found of [
-      ...(card.decision ? [{ answer: card.decision, question: '', by: 'person' as const }] : []),
-      ...(card.picks ?? []).map((pick) => ({ answer: pick.answer, question: pick.question, by: pick.by })),
+      ...(card.decision ? [{ answer: card.decision, question: '' }] : []),
+      ...(card.picks ?? []).map((pick) => ({ answer: pick.answer, question: pick.question })),
     ]) {
       const same = decisions.find(
-        (decision) =>
-          decision.answer === found.answer && decision.question === found.question && decision.by === found.by,
+        (decision) => decision.answer === found.answer && decision.question === found.question,
       );
       if (!same) decisions.push({ ...found, cards: [card] });
       else if (!same.cards.includes(card)) same.cards.push(card);

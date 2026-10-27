@@ -1,4 +1,4 @@
-import type { FlowGetResult, FlowNode, TaskForceItem } from '@alpine/protocol';
+import type { FlowGetResult, TaskForceItem } from '@alpine/protocol';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -331,29 +331,6 @@ describe('a planned product on its map', () => {
     expect(request.mock.calls.some(([method]) => method === 'flow/prepare')).toBe(false);
   });
 
-  it('keeps another answer to an AI decision while the build works, and gives it to the build after (#5)', async () => {
-    const { connection, request } = mount(blog('building'), { buildItems: blogBuild('building') });
-    await connection.request('session/send', { sessionId: 'build-1', text: '이대로 만들어 주세요.' });
-    await screen.findByText('AI가 확인을 기다려요');
-    // The card's own "AI가 정함 · 바꾸기", in its panel.
-    const card = await waitFor(() => {
-      for (const more of screen.queryAllByRole('button', { name: /^화면 \d+개 더/ })) fireEvent.click(more);
-      return screen.getAllByRole('button', { name: '발행 열기', hidden: true })[0]!;
-    });
-    fireEvent.click(card);
-    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: '바꾸기' }));
-    // The card's panel is still open beside it, so the rest of the page is outside the dialog.
-    const review = await screen.findByRole('region', { name: '질문', hidden: true });
-    expect(within(review).getByText('만들다가 생긴 질문이에요. AI가 먼저 정하고 계속 만들고 있어요.')).toBeTruthy();
-    fireEvent.click(within(review).getByRole('button', { name: '댓글은 남겨 둬요', hidden: true }));
-    const waiting = await screen.findByRole('region', { name: 'AI가 지금 일을 마치면 전할게요', hidden: true });
-    expect(within(waiting).getByText(/답을 바꿀래요: 댓글은 남겨 둬요/)).toBeTruthy();
-    const open = await connection.request('session/open', { sessionId: 'build-1' });
-    const approval = open.active.find((item) => item.kind === 'approval');
-    await connection.request('session/answer', { sessionId: 'build-1', requestId: approval!.id, decision: 'allow' });
-    await waitFor(() => expect(sent(request, 'build-1').at(-1)).toMatch(/답을 바꿀래요: 댓글은 남겨 둬요/));
-  });
-
   it('says why a build stopped and offers what fixes it (#36)', async () => {
     const { onFixConnection } = mount(blog('stopped'), {
       buildItems: [
@@ -430,40 +407,6 @@ describe('a planned product on its map', () => {
         request: '글 목록에 검색 넣어 줘',
       }),
     );
-  });
-
-  it('goes through every AI decision one after another, and words in the input change the open one (#75, #76)', async () => {
-    const board = blog('built');
-    const nodes = board.document!.nodes!.map((node: FlowNode) =>
-      node.id === 'list'
-        ? {
-            ...node,
-            decisions: [{ question: '글을 몇 개씩 보여 줄까요?', options: ['10개', '20개'], answer: '10개', by: 'ai' }],
-          }
-        : node,
-    );
-    const { request } = mount({ ...board, document: { ...board.document, nodes } } as FlowGetResult);
-    fireEvent.click(await screen.findByRole('button', { name: 'AI가 정한 것 2개' }));
-    const first = await screen.findByRole('region', { name: '질문' });
-    expect(within(first).getByText('1/2')).toBeTruthy();
-    // The answer it already has sends nothing, and leads to the next one.
-    fireEvent.click(within(first).getByRole('button', { name: /AI가 고른 것/ }));
-    const second = await screen.findByRole('region', { name: '질문' });
-    expect(within(second).getByText('2/2')).toBeTruthy();
-    expect(request.mock.calls.some(([method]) => method === 'flow/prepare')).toBe(false);
-    // Words in the input answer the open question, with its card and question.
-    const question = within(second).getByText(/\?$/).textContent!;
-    write('직접 고를게요');
-    await waitFor(() => {
-      const prepared = request.mock.calls.find(([method]) => method === 'flow/prepare')?.[1] as {
-        action: string;
-        request: string;
-      };
-      expect(prepared.action).toBe('change');
-      expect(prepared.request).toContain(question);
-      expect(prepared.request).toContain('직접 고를게요');
-    });
-    await waitFor(() => expect(screen.queryByRole('region', { name: '질문' })).toBeNull());
   });
 });
 

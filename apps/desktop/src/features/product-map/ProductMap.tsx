@@ -53,7 +53,7 @@ import { hasScreenArea } from './flowTreeModel';
 import { flowTreeMessages } from './flowTreeMessages';
 import { JourneyMap } from './JourneyMap';
 import { useMapActionStore, useMapMenuStore } from './mapActions';
-import { Bar, CONNECTION, PlanBar, Working, type PlanReview, type PlanTeamAnswer } from './PlanBar';
+import { Bar, CONNECTION, PlanBar, Working, type PlanTeamAnswer } from './PlanBar';
 import { buildActivity, lastReply, pendingQuestion, planPhase, stopReason, TEAM_WORKING } from './planData';
 import { mapLookCss, type Device, type PickedLook, wornLook } from './planLook';
 import { planMessages } from './planMessages';
@@ -450,38 +450,6 @@ export function ProductMap({
     : (workActivity?.text ?? plan.activityThinking);
   const touchingKey = (activity ?? workActivity)?.touching.join(' ') ?? '';
   const touching = useMemo(() => new Set(touchingKey.split(' ').filter(Boolean)), [touchingKey]);
-  // A question the AI answered on its own, opened from its card to answer again; from the done line, one after
-  // another through every card the AI decided on.
-  const [reviewing, setReviewing] = useState<string | null>(null);
-  const aiPick = (cardId: string) => treeMap?.cards[cardId]?.picks?.findLast((pick) => pick.by === 'ai');
-  const aiPicked = Object.values(treeMap?.cards ?? {}).filter((card) => card.picks?.some((pick) => pick.by === 'ai'));
-  const reviewOrder = aiPicked.map((card) => card.id);
-  const reviewAt = reviewing ? reviewOrder.indexOf(reviewing) : -1;
-  const reviewPick = reviewing ? aiPick(reviewing) : undefined;
-  const pickReview: PlanReview | null =
-    reviewing && reviewPick
-      ? {
-          card: treeMap?.cards[reviewing]?.title ?? '',
-          picked: Math.max(reviewPick.options.indexOf(reviewPick.answer), 0),
-          question: {
-            id: `pick:${reviewing}`,
-            about: reviewing,
-            text: reviewPick.question,
-            options: (reviewPick.options.length ? reviewPick.options : [reviewPick.answer]).map((label) => ({ label })),
-          },
-          position: reviewAt >= 0 && reviewOrder.length > 1 ? { index: reviewAt + 1, total: reviewOrder.length } : null,
-        }
-      : null;
-  const nextReview = () => setReviewing(reviewAt >= 0 ? (reviewOrder[reviewAt + 1] ?? null) : null);
-  // Another answer to a question the AI decided: while building it goes to the build, which redoes that part; once
-  // built it is a change to that card, like a card's own "부탁하기".
-  const changeDecision = (answer: string) => {
-    if (!pickReview || !reviewing) return;
-    const words = plan.changeDecisionMessage(pickReview.card, pickReview.question.text, answer);
-    if (phase !== 'built') say(words);
-    else if (anyActive || busy) later.add(null, words, reviewing);
-    else void start('change', { node: nodeOf(reviewing), request: words });
-  };
   // "이대로 만들기" starts the build in a new conversation that reads only the map; 이어서 만들기 continues that one.
   const startBuild = async (request: string) => {
     if (!data || lock.current) return;
@@ -923,11 +891,6 @@ export function ProductMap({
             return false;
           },
         );
-    if (pickReview && text) {
-      changeDecision(text);
-      nextReview();
-      return true;
-    }
     // A card's 부탁하기 names its card; looking at a screen in the app view names that screen (flow-spec 5.3).
     const looking = lookingAt(cwd);
     const about = aboutCard ? nodeOf(aboutCard) : looking ? nodeOf(looking) : null;
@@ -1353,7 +1316,6 @@ export function ProductMap({
                 asked={phase === 'asking' ? (question?.about ?? null) : null}
                 planned={planned}
                 making={making}
-                onChangePick={planned ? setReviewing : undefined}
                 view={view}
                 onShowOnBoard={(cardId) => {
                   onShowBoard?.();
@@ -1383,16 +1345,6 @@ export function ProductMap({
                     extras: (
                       <>
                         {!!mine?.removedPromises?.length && <PromiseMore {...promiseProps(node)} only={REMOVED} />}
-                        {planned && aiPick(cardId) && (
-                          <p className="flex flex-wrap items-baseline gap-x-1.5 rounded-md bg-canvas-sunken px-2 py-1 text-meta">
-                            <span className="min-w-0 grow text-fg-muted">
-                              {plan.aiDecided} · {aiPick(cardId)!.answer}
-                            </span>
-                            <LinkButton className="min-h-5 px-0.5" onClick={() => setReviewing(cardId)}>
-                              {plan.change}
-                            </LinkButton>
-                          </p>
-                        )}
                         {docked ? (
                           <p className="flex flex-wrap gap-2">
                             {/* The card closes: the input is beside the map, under the conversation. */}
@@ -1465,11 +1417,9 @@ export function ProductMap({
                   activity={activity}
                   waiting={workInfo?.status === 'waiting'}
                   left={data?.undecided?.length ?? 0}
-                  review={pickReview}
                   built={{
                     checked: promisesAll.filter((p) => p.status === 'passed').length,
                     total: promisesAll.length,
-                    aiPicks: aiPicked.length,
                     cards: cardCount,
                     done: builtCount,
                     screens: Object.values(treeMap?.cards ?? {}).filter(hasScreenArea).length,
@@ -1520,15 +1470,6 @@ export function ProductMap({
                   onDecideRest={() => say(plan.decideRestMessage)}
                   onAskOn={() => say(plan.askOnMessage)}
                   onDrawOn={() => say(plan.drawOnMessage)}
-                  onDecide={(option) => {
-                    const label = pickReview?.question.options[option]?.label;
-                    // The answer it already has needs nothing sent.
-                    if (label && option !== pickReview?.picked) changeDecision(label);
-                    nextReview();
-                  }}
-                  onCloseReview={() => setReviewing(null)}
-                  onNextReview={nextReview}
-                  onReviewPicks={() => reviewOrder[0] && setReviewing(reviewOrder[0])}
                   onFix={(cardId, promiseId) => {
                     const node = nodeOf(cardId);
                     const broken = node?.conditions?.find((condition) => condition.id === promiseId)?.expectation;

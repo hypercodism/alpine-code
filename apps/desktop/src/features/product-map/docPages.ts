@@ -79,7 +79,7 @@ export function documentMarkdown(map: TreeMap, doc: DocContent, layout: BoardLay
     lines.push('', `## ${t.decisions(doc.decisions.length)}`, '');
     for (const decision of doc.decisions)
       lines.push(
-        `- ${decision.answer} — ${decision.question ? `${decision.question} · ` : ''}${decision.cards.map((card) => card.title).join(' · ')} · ${decision.by === 'ai' ? t.byAi : t.byPerson}`,
+        `- ${decision.answer} — ${decision.question ? `${decision.question} · ` : ''}${decision.cards.map((card) => card.title).join(' · ')}`,
       );
   }
   if (w.undecided.length) {
@@ -163,7 +163,7 @@ export function documentPage(
       (decision) =>
         `<li>${esc(decision.answer)}<div class="meta">${decision.question ? `${esc(decision.question)} · ` : ''}${esc(
           decision.cards.map((card) => card.title).join(' · '),
-        )} · ${esc(decision.by === 'ai' ? t.byAi : t.byPerson)}</div></li>`,
+        )}</div></li>`,
     )
     .join('');
   const undecided = w.undecided.map((question) => `<li>${esc(question)}</li>`).join('');

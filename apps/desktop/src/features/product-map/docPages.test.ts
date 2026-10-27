@@ -85,7 +85,7 @@ describe('the document as Markdown', () => {
     expect(promises.indexOf('품절은 못 골라요')).toBeLessThan(promises.indexOf('예약 번호가 보여요'));
     expect(promises.indexOf('예약 번호가 보여요')).toBeLessThan(promises.indexOf('고른 빵이 담겨요'));
     // A decision two screens carry is written once, naming both.
-    expect(markdown).toContain('## 결정 1개\n\n- 하루 전 — 얼마나 미리? · 빵 고르기 · 예약 끝 <확인> · AI가 정함');
+    expect(markdown).toContain('## 결정 1개\n\n- 하루 전 — 얼마나 미리? · 빵 고르기 · 예약 끝 <확인>');
     expect(markdown).toContain('## 정할 것 1개\n\n- 문 닫는 날은?');
   });
 });

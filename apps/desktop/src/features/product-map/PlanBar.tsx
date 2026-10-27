@@ -10,15 +10,6 @@ import type { PlanActivity, PlanPhase, PlanQuestion } from './planData';
 import { SCREEN_WIDTH, screenPage } from './planLook';
 import { planMessages as messages } from './planMessages';
 
-/** A question the AI answered on its own, opened from its card to pick another answer. */
-export interface PlanReview {
-  card: string;
-  question: PlanQuestion;
-  picked: number;
-  /** Where it is among the AI's own picks (1-based), when there are several to go through. */
-  position: { index: number; total: number } | null;
-}
-
 /** The build's TF while it waits for the person: its yes (`proposed`), or more agents than planned (`over`). */
 export interface PlanTeam {
   status: 'proposed' | 'over';
@@ -53,11 +44,10 @@ export interface PlanOpenPromise {
   failed: boolean;
 }
 
-/** The product once built: its screens, its promises and how many hold, what the AI decided, what is still open. */
+/** The product once built: its screens, its promises and how many hold, what is still open. */
 export interface PlanBuilt {
   checked: number;
   total: number;
-  aiPicks: number;
   cards: number;
   done: number;
   screens: number;
@@ -76,8 +66,7 @@ export const CONNECTION = new Set<RunStoppedItem['reason']>(['signed_out', 'cred
  * What a planned map says just above its input, from facts only: the question the AI waits on (on the card it
  * changes), that everything is decided (이대로 만들기 itself is in the top bar), what the AI does now while it builds
  * (with 멈추기, and a call to look when it waits for my OK), and once built, the completion card: what was checked,
- * each broken promise with 바로 고치기, the ones to check again with one 다시 확인, and 인터넷에 올리기. A question the AI answered while building can be
- * opened from its card and answered again here, one after another.
+ * each broken promise with 바로 고치기, the ones to check again with one 다시 확인, and 인터넷에 올리기.
  */
 export function PlanBar({
   docked = false,
@@ -90,7 +79,6 @@ export function PlanBar({
   activity,
   waiting,
   left,
-  review,
   built,
   team,
   stop,
@@ -100,10 +88,6 @@ export function PlanBar({
   onDecideRest,
   onAskOn,
   onDrawOn,
-  onDecide,
-  onCloseReview,
-  onNextReview,
-  onReviewPicks,
   onFix,
   onRecheck,
   onOpenInApp,
@@ -136,7 +120,6 @@ export function PlanBar({
   waiting: boolean;
   /** How many product decisions are still open. */
   left: number;
-  review: PlanReview | null;
   built: PlanBuilt;
   /** The build's TF while it waits for the person. */
   team: PlanTeam | null;
@@ -150,10 +133,6 @@ export function PlanBar({
   onAskOn: () => void;
   /** Asks the AI to go on drawing a plan that stopped before its first card. */
   onDrawOn: () => void;
-  onDecide: (option: number) => void;
-  onCloseReview: () => void;
-  onNextReview: () => void;
-  onReviewPicks: () => void;
   /** Asks the AI to fix one promise the built product does not keep, as a request about its card. */
   onFix: (cardId: string, promiseId: string) => void;
   /** Asks the AI to check these cards' promises (again). */
@@ -174,23 +153,6 @@ export function PlanBar({
   busy?: boolean;
 }) {
   const t = useMessages(messages);
-  if (review)
-    return (
-      <Question
-        key={`review-${review.card}`}
-        question={review.question}
-        about={review.card}
-        lead={phase === 'building' ? t.decidedWhileBuilding : t.decidedAfterBuilding}
-        picked={review.picked}
-        preview={0}
-        sample={sample}
-        position={review.position}
-        onAnswer={onDecide}
-        onPreview={onPreview}
-        onClose={onCloseReview}
-        onNext={onNextReview}
-      />
-    );
   if (docked && (phase === 'building' || phase === 'drawing' || thinking)) return null;
   if (waiting && (phase === 'building' || phase === 'drawing' || thinking))
     return (
@@ -297,7 +259,6 @@ export function PlanBar({
         key={busy ? 'busy' : 'rest'}
         built={built}
         folded={busy}
-        onReviewPicks={onReviewPicks}
         onFix={onFix}
         onRecheck={onRecheck}
         onOpenInApp={onOpenInApp}
@@ -319,7 +280,6 @@ const OPEN_ROWS = 5;
 function Done({
   built,
   folded: startFolded = false,
-  onReviewPicks,
   onFix,
   onRecheck,
   onOpenInApp,
@@ -328,7 +288,6 @@ function Done({
   built: PlanBuilt;
   /** Starts as one line (new work began after it): the conversation and what it asks stay in view. */
   folded?: boolean;
-  onReviewPicks: () => void;
   onFix: (cardId: string, promiseId: string) => void;
   onRecheck: (cardIds: string[]) => void;
   onOpenInApp?: (cardId: string) => boolean | void;
@@ -371,17 +330,7 @@ function Done({
         </LinkButton>
       </div>
       <div className="-mt-3 flex flex-col">
-        <p className="text-meta text-fg-muted">
-          {t.builtCounts(built.screens, built.total, built.checked)}
-          {built.aiPicks > 0 && (
-            <>
-              {' · '}
-              <LinkButton className="min-h-5 px-0.5" onClick={onReviewPicks}>
-                {t.aiPicks(built.aiPicks)}
-              </LinkButton>
-            </>
-          )}
-        </p>
+        <p className="text-meta text-fg-muted">{t.builtCounts(built.screens, built.total, built.checked)}</p>
       </div>
       {built.tries.length > 0 && (
         <section aria-label={t.howToTry} className="flex flex-col gap-1.5 border-t border-line-subtle pt-3">
@@ -459,55 +408,39 @@ export function Bar({ title, hint, children }: { title: string; hint?: string; c
 }
 
 /**
- * One question: what it is about, the question, the answers. While planning the AI's pick comes first, marked; for a
- * question the AI answered while building, the answer it went with is marked instead and the question can be closed.
+ * One question: what it is about, the question, the answers, the AI's pick first and marked.
  * A look question shows every option on the same screen, and looking at one restyles the whole map.
  */
 function Question({
   question,
   about,
   lead,
-  picked,
   preview,
   sample,
-  position,
   onAnswer,
   onPreview,
   onHoverLook,
   onDecideRest,
-  onClose,
-  onNext,
 }: {
   question: PlanQuestion;
   about: string | null;
   lead?: string;
-  picked?: number;
   preview: number;
   sample: string;
-  /** Where this one is among several to go through. */
-  position?: { index: number; total: number } | null;
   onAnswer: (option: number) => void;
   onPreview: (option: number) => void;
   onHoverLook?: (option: number | null) => void;
   onDecideRest?: () => void;
-  onClose?: () => void;
-  onNext?: () => void;
 }) {
   const t = useMessages(messages);
   const looks = question.options.every((o) => o.look);
-  const marked = (i: number) => (picked === undefined ? !!question.options[i]?.recommended : picked === i);
   return (
     <section
       aria-label={t.question}
       className="pointer-events-auto motion-step flex flex-col gap-3 rounded-xl border border-line bg-canvas-raised p-3 shadow-overlay"
     >
       <div className="flex flex-col">
-        {(about || position) && (
-          <p className="flex gap-2 text-meta text-fg-muted">
-            <span className="min-w-0 grow">{about}</span>
-            {position && <span className="tabular-nums">{t.position(position.index, position.total)}</span>}
-          </p>
-        )}
+        {about && <p className="text-meta text-fg-muted">{about}</p>}
         <p className="text-reading text-fg">{question.text}</p>
         {lead && <p className="text-meta text-fg-muted">{lead}</p>}
       </div>
@@ -554,7 +487,6 @@ function Question({
         // well beside the conversation.
         <div className="flex flex-col gap-1.5">
           {question.options.map((option, i) => {
-            const tag = picked === undefined ? option.recommended && t.recommended : picked === i && t.aiWentWith;
             return (
               <button
                 key={option.label}
@@ -562,14 +494,14 @@ function Question({
                 onClick={() => onAnswer(i)}
                 className={clsx(
                   'flex min-h-8 w-full cursor-pointer flex-col gap-0.5 rounded-lg border px-3 py-1.5 text-left text-body',
-                  marked(i)
+                  option.recommended
                     ? 'border-interactive bg-selected text-interactive hover:bg-hover'
                     : 'border-line bg-canvas-raised text-fg hover:bg-hover',
                 )}
               >
                 <span className="flex items-baseline gap-1.5">
                   <span className="min-w-0">{option.label}</span>
-                  {tag && <span className="shrink-0 text-meta">{tag}</span>}
+                  {option.recommended && <span className="shrink-0 text-meta">{t.recommended}</span>}
                 </span>
                 {option.detail && <span className="text-meta text-fg-muted">{option.detail}</span>}
               </button>
@@ -583,13 +515,6 @@ function Question({
           <Button variant="primary" onClick={() => onAnswer(preview)}>
             {t.lookPick}
           </Button>
-        ) : onClose ? (
-          <>
-            {position && position.index < position.total && onNext && (
-              <LinkButton onClick={onNext}>{t.next}</LinkButton>
-            )}
-            <LinkButton onClick={onClose}>{t.close}</LinkButton>
-          </>
         ) : (
           onDecideRest && <LinkButton onClick={onDecideRest}>{t.decideRest}</LinkButton>
         )}

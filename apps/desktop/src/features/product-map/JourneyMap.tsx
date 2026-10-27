@@ -43,7 +43,6 @@ export function JourneyMap({
   waitNote,
   planned = false,
   making = null,
-  onChangePick,
   view = 'board',
   onShowOnBoard,
 }: {
@@ -77,8 +76,6 @@ export function JourneyMap({
   planned?: boolean;
   /** The card the build works on now. */
   making?: string | null;
-  /** Opens what the AI decided on a card, to answer it again. */
-  onChangePick?: (cardId: string) => void;
   /** The board, or the same map read as a document (the 문서 tab), over the board kept as it was. */
   view?: 'board' | 'doc';
   /** A screen pressed in the document: the board shows it. */
@@ -128,7 +125,6 @@ export function JourneyMap({
             undecided={board.undecided ?? []}
             planned={planned}
             making={making}
-            onChangePick={onChangePick}
             drawing={drawing}
             lit={lit}
             reveal={reveal}

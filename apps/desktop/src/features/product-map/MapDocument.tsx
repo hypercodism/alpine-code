@@ -264,8 +264,7 @@ export function MapDocument({
                     <span className="text-body">{decision.answer}</span>
                     <span className="text-meta text-fg-muted">
                       {decision.question && `${decision.question} · `}
-                      {decision.cards.map((card) => card.title).join(' · ')} ·{' '}
-                      {decision.by === 'ai' ? t.byAi : t.byPerson}
+                      {decision.cards.map((card) => card.title).join(' · ')}
                     </span>
                   </li>
                 ))}
