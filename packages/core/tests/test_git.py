@@ -54,3 +54,23 @@ def test_ci_state_from_the_check_rollup():
     assert _checks([{"status": "COMPLETED", "conclusion": "SUCCESS"}]) == "passing"
     assert _checks([{"status": "IN_PROGRESS", "conclusion": ""}, {"state": "SUCCESS"}]) == "pending"
     assert _checks([{"status": "IN_PROGRESS"}, {"state": "FAILURE"}]) == "failing"
+
+
+def test_diff_is_what_git_diff_head_shows_plus_new_files(tmp_path, origin):
+    from alpine_core.git import diff
+
+    assert diff(tmp_path) is None
+    assert diff(origin).files == []
+    (origin / "a.txt").write_text("hello\nthere\n")
+    (origin / "new.txt").write_text("one\ntwo\n")
+    (origin / "blob.bin").write_bytes(b"\0\1")
+    git("add", "new.txt", cwd=origin)  # staged counts too
+    (origin / "later.txt").write_text("x\n")
+    found = {f.path: f for f in diff(origin).files}
+    assert set(found) == {"a.txt", "new.txt", "blob.bin", "later.txt"}
+    assert (found["a.txt"].status, found["a.txt"].added, found["a.txt"].deleted) == ("modified", 2, 1)
+    assert found["a.txt"].patch.startswith("diff --git a/a.txt b/a.txt")
+    assert "+there" in found["a.txt"].patch
+    assert (found["new.txt"].status, found["new.txt"].added) == ("added", 2)
+    assert (found["later.txt"].status, found["later.txt"].added) == ("untracked", 1)
+    assert found["blob.bin"].binary and found["blob.bin"].patch == ""

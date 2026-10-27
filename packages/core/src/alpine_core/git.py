@@ -82,6 +82,63 @@ def _base(folder: Path) -> str:
 _EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
 
+@dataclass(frozen=True)
+class FileDiff:
+    path: str
+    status: Literal["modified", "added", "deleted", "renamed", "untracked"]
+    added: int
+    deleted: int
+    patch: str
+    """The file's part of ``git diff``, from its ``diff --git`` line; empty for a binary file or one cut off."""
+    binary: bool = False
+
+
+@dataclass(frozen=True)
+class Diff:
+    files: list[FileDiff]
+    truncated: bool
+    """Some patches were left out because the whole diff was over ``_MAX_PATCH``."""
+
+
+#: How much patch text one diff carries; the files past it keep their counts and lose their patch.
+_MAX_PATCH = 2_000_000
+
+
+def diff(folder: Path) -> Diff | None:
+    """What a developer's ``git diff HEAD`` shows (uncommitted work, staged or not), plus new files git does not track
+    yet, or ``None`` outside a repository."""
+    if _git(folder, "rev-parse", "--is-inside-work-tree") != "true":
+        return None
+    base = "HEAD" if _git(folder, "rev-parse", "--verify", "--quiet", "HEAD") else _EMPTY_TREE
+    statuses = {"M": "modified", "A": "added", "D": "deleted", "R": "renamed"}
+    names: list[tuple[str, str]] = []
+    fields = (_raw(folder, "diff", "--name-status", "-z", "-M", base) or "").split("\0")
+    while len(fields) > 1:
+        code = fields.pop(0)
+        if code.startswith("R") or code.startswith("C"):
+            fields.pop(0)  # the old name
+        names.append((fields.pop(0), statuses.get(code[:1], "modified")))
+    untracked = _raw(folder, "ls-files", "--others", "--exclude-standard", "-z") or ""
+    names += [(name, "untracked") for name in untracked.split("\0") if name]
+    files: list[FileDiff] = []
+    used = 0
+    for name, state in names:
+        if state == "untracked":
+            # git diff --no-index exits 1 when the files differ, so its output is read whatever the code.
+            patch = _raw(folder, "diff", "--no-index", "--", "/dev/null", name, ok=(0, 1)) or ""
+        else:
+            patch = _raw(folder, "diff", "-M", base, "--", name) or ""
+        binary = "\nBinary files " in patch or patch.startswith("Binary files ")
+        lines = patch.splitlines()
+        body = [line for line in lines if not line.startswith(("+++", "---"))]
+        added = sum(1 for line in body if line.startswith("+"))
+        deleted = sum(1 for line in body if line.startswith("-"))
+        keep = not binary and used + len(patch) <= _MAX_PATCH
+        used += len(patch) if keep else 0
+        files.append(FileDiff(name, state, added, deleted, patch if keep else "", binary))  # type: ignore[arg-type]
+    return Diff(files, any(not f.patch and not f.binary and (f.added or f.deleted) for f in files))
+
+
 def pull_request(folder: Path) -> PullRequest | None:
     """The open pull request of the checked-out branch, through ``gh``. ``None`` without one, or without ``gh``."""
     try:
@@ -112,6 +169,21 @@ def _checks(rollup: list[dict[str, str]]) -> Literal["passing", "failing", "pend
     if any(c.get("status", "COMPLETED") != "COMPLETED" or c.get("state") in {"PENDING", "EXPECTED"} for c in rollup):
         return "pending"
     return "passing"
+
+
+def _raw(folder: Path, *args: str, ok: tuple[int, ...] = (0,)) -> str | None:
+    """git's output as it is (not stripped, so patches and NUL lists stay whole), or ``None`` when it fails."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(folder), "-c", "core.quotepath=off", *args],
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=20,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return result.stdout if result.returncode in ok else None
 
 
 def _git(folder: Path, *args: str) -> str | None:

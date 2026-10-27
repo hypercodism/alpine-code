@@ -4550,6 +4550,18 @@ export interface ProcessesStopParams {
 }
 /**
  * This interface was referenced by `AlpineProtocol`'s JSON-Schema
+ * via the `definition` "ProjectDiffFile".
+ */
+export interface ProjectDiffFile {
+  path: string;
+  status: 'modified' | 'added' | 'deleted' | 'renamed' | 'untracked';
+  added: number;
+  deleted: number;
+  patch: string;
+  binary?: boolean;
+}
+/**
+ * This interface was referenced by `AlpineProtocol`'s JSON-Schema
  * via the `definition` "ProjectInfo".
  */
 export interface ProjectInfo {
@@ -4683,6 +4695,24 @@ export interface ProjectsDeleteParams {
  * via the `definition` "ProjectsDeleteResult".
  */
 export interface ProjectsDeleteResult {}
+/**
+ * This interface was referenced by `AlpineProtocol`'s JSON-Schema
+ * via the `definition` "ProjectsDiffParams".
+ */
+export interface ProjectsDiffParams {
+  path: string;
+}
+/**
+ * What ``git diff HEAD`` shows, plus new files git does not track yet (the 코드 tab's 바뀐 파일).
+ *
+ * This interface was referenced by `AlpineProtocol`'s JSON-Schema
+ * via the `definition` "ProjectsDiffResult".
+ */
+export interface ProjectsDiffResult {
+  git: boolean;
+  files: ProjectDiffFile[];
+  truncated?: boolean;
+}
 /**
  * This interface was referenced by `AlpineProtocol`'s JSON-Schema
  * via the `definition` "ProjectsGitParams".
@@ -5829,6 +5859,7 @@ export interface Methods {
   'projects/gitTools': { params: ProjectsGitToolsParams; result: ProjectsGitToolsResult };
   'projects/installGitTools': { params: ProjectsInstallGitToolsParams; result: ProjectsInstallGitToolsResult };
   'projects/git': { params: ProjectsGitParams; result: ProjectsGitResult };
+  'projects/diff': { params: ProjectsDiffParams; result: ProjectsDiffResult };
   'projects/judge': { params: ProjectsJudgeParams; result: ProjectsJudgeResult };
   'projects/create': { params: ProjectsCreateParams; result: ProjectsCreateResult };
   'tools/list': { params: ToolsListParams; result: ToolsListResult };

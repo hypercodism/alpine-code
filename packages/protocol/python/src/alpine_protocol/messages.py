@@ -592,6 +592,29 @@ class ProjectsGitResult(Message):
     """``None`` outside a git repository."""
 
 
+class ProjectDiffFile(Message):
+    path: str
+    status: Literal["modified", "added", "deleted", "renamed", "untracked"]
+    added: int
+    deleted: int
+    patch: str
+    """The file's part of ``git diff``; empty for a binary file or one left out (see ``truncated``)."""
+    binary: bool = False
+
+
+class ProjectsDiffParams(Message):
+    path: str
+
+
+class ProjectsDiffResult(Message):
+    """What ``git diff HEAD`` shows, plus new files git does not track yet (the 코드 tab's 바뀐 파일)."""
+
+    git: bool
+    """``False`` outside a git repository (``files`` is then empty)."""
+    files: list[ProjectDiffFile]
+    truncated: bool = False
+
+
 # Tools: built-in ones, the user's Python files, and agents that choose which a session gets.
 
 ToolAsk = Literal["never", "edit", "ask"]
@@ -2373,6 +2396,7 @@ METHODS: dict[str, tuple[type[Message], type[Message]]] = {
     "projects/gitTools": (ProjectsGitToolsParams, ProjectsGitToolsResult),
     "projects/installGitTools": (ProjectsInstallGitToolsParams, ProjectsInstallGitToolsResult),
     "projects/git": (ProjectsGitParams, ProjectsGitResult),
+    "projects/diff": (ProjectsDiffParams, ProjectsDiffResult),
     "projects/judge": (ProjectsJudgeParams, ProjectsJudgeResult),
     "projects/create": (ProjectsCreateParams, ProjectsCreateResult),
     "tools/list": (ToolsListParams, ToolsListResult),

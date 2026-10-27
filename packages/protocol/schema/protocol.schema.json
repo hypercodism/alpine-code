@@ -363,6 +363,10 @@
       "params": "ProjectsGitParams",
       "result": "ProjectsGitResult"
     },
+    "projects/diff": {
+      "params": "ProjectsDiffParams",
+      "result": "ProjectsDiffResult"
+    },
     "projects/judge": {
       "params": "ProjectsJudgeParams",
       "result": "ProjectsJudgeResult"
@@ -6577,6 +6581,45 @@
       "title": "ProductMap",
       "type": "object"
     },
+    "ProjectDiffFile": {
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "modified",
+            "added",
+            "deleted",
+            "renamed",
+            "untracked"
+          ],
+          "type": "string"
+        },
+        "added": {
+          "type": "integer"
+        },
+        "deleted": {
+          "type": "integer"
+        },
+        "patch": {
+          "type": "string"
+        },
+        "binary": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "path",
+        "status",
+        "added",
+        "deleted",
+        "patch"
+      ],
+      "title": "ProjectDiffFile",
+      "type": "object"
+    },
     "ProjectInfo": {
       "properties": {
         "path": {
@@ -6906,6 +6949,42 @@
     "ProjectsDeleteResult": {
       "properties": {},
       "title": "ProjectsDeleteResult",
+      "type": "object"
+    },
+    "ProjectsDiffParams": {
+      "properties": {
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "ProjectsDiffParams",
+      "type": "object"
+    },
+    "ProjectsDiffResult": {
+      "description": "What ``git diff HEAD`` shows, plus new files git does not track yet (the 코드 tab's 바뀐 파일).",
+      "properties": {
+        "git": {
+          "type": "boolean"
+        },
+        "files": {
+          "items": {
+            "$ref": "#/$defs/ProjectDiffFile"
+          },
+          "type": "array"
+        },
+        "truncated": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "git",
+        "files"
+      ],
+      "title": "ProjectsDiffResult",
       "type": "object"
     },
     "ProjectsGitParams": {
