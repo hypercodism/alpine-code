@@ -208,7 +208,8 @@ export function Filmstrip(props: FilmstripProps) {
           }}
         />
       )}
-      <ZoomControls zoom={zoom} />
+      {/* The playback covers the board: the board's zoom is not for it. */}
+      {!playing && <ZoomControls zoom={zoom} />}
       <SituationCheck map={map} />
       {notice > 0 && (
         <RemovedNotice

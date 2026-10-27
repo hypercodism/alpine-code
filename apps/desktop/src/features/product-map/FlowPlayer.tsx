@@ -127,14 +127,11 @@ export function FlowPlayer({
           </span>
         )}
         <span className="grow" />
-        <button
-          type="button"
-          aria-label={t.closePlayer}
-          onClick={onClose}
-          className="flex size-8 cursor-pointer items-center justify-center rounded-md text-fg-muted hover:bg-hover hover:text-fg"
-        >
-          <X size={16} aria-hidden />
-        </button>
+        <span className="shrink-0 text-meta text-fg-faint">{t.escToClose}</span>
+        <Button onClick={onClose}>
+          <X size={14} aria-hidden />
+          {t.backToBoard}
+        </Button>
       </header>
       {!step || !card ? (
         <p className="m-auto text-fg-muted">{t.nothingToPlay}</p>
@@ -219,15 +216,19 @@ export function FlowPlayer({
             {t.previous}
           </Button>
           {last ? (
-            <Button
-              variant="primary"
-              onClick={() => {
-                go(0);
-                setPlaying(true);
-              }}
-            >
-              {t.fromStart}
-            </Button>
+            <>
+              <Button
+                onClick={() => {
+                  go(0);
+                  setPlaying(true);
+                }}
+              >
+                {t.fromStart}
+              </Button>
+              <Button variant="primary" onClick={onClose}>
+                {t.backToBoard}
+              </Button>
+            </>
           ) : (
             <Button variant="primary" onClick={() => setPlaying(!playing)}>
               {playing ? <Pause size={14} aria-hidden /> : <Play size={14} aria-hidden />}
