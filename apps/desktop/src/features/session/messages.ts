@@ -4,7 +4,7 @@ import { defineMessages } from '@/shared/i18n';
 
 export const messages = defineMessages({
   ko: {
-    productMapContext: '작업에 연결된 지도 정보',
+    productMapContext: '작업에 연결된 보드 정보',
     untitled: '제목 없는 대화',
     conversation: '대화',
     notFound: '이 대화를 찾을 수 없어요. 지워졌을 수 있어요',
@@ -80,7 +80,7 @@ export const messages = defineMessages({
     waitingHere: '확인을 기다려요',
     waitingBelow: '아래 카드에서 답해 주세요',
     waitingFrom: (who: string) => `${who} · 확인을 기다려요`,
-    whoMap: '지도 대화',
+    whoMap: '보드 대화',
     whoBuild: '만들기',
     whoOther: '다른 대화',
     insteadSaid: '대신 이렇게 해 달라고 했어요',

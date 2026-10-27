@@ -1,6 +1,6 @@
 import { defineMessages } from '@/shared/i18n';
 
-/** The window's frame around the map: the project menu, the ⋯ menu, 지도 | 앱 and the developer tools beside it. */
+/** The window's frame around the map: the project menu, the ⋯ menu, 보드 | 앱 and the developer tools beside it. */
 export const shellMessages = defineMessages({
   ko: {
     projectMenu: '다른 프로젝트로',
@@ -22,7 +22,7 @@ export const shellMessages = defineMessages({
     memory: '기억',
     pastConversations: '지난 대화',
     devTools: '개발 도구',
-    mapGroup: '지도',
+    mapGroup: '보드',
     changes: '바뀐 파일',
     backToConversation: '대화',
     viewSwitch: '보드, 문서, 앱, 코드',
@@ -31,8 +31,8 @@ export const shellMessages = defineMessages({
     app: '앱',
     code: '코드',
     lookingAt: (title: string) => `${title} 화면을 보면서 말하는 중`,
-    backToMap: (name: string) => `${name} 지도`,
-    toMap: '지도로',
+    backToMap: (name: string) => `${name} 보드`,
+    toMap: '보드로',
   },
   en: {
     projectMenu: 'Other projects',

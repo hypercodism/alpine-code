@@ -34,7 +34,7 @@ function mount(path: string) {
       sessionScript({
         sessions: [
           {
-            info: sessionInfo({ id: 'map-1', cwd, purpose: 'map', title: '지도' }),
+            info: sessionInfo({ id: 'map-1', cwd, purpose: 'map', title: '보드' }),
             items: [{ id: 'u1', kind: 'user_message', text: '개발 블로그 만들어 줘' }],
           },
           {
@@ -100,9 +100,9 @@ describe("the map's conversation beside it (#6)", () => {
     mount(board('old'));
     const side = await dock();
     expect(await within(side).findByText('예전에 한 부탁')).toBeTruthy();
-    expect(within(side).getByText('지금 지도 대화가 아닌 다른 대화를 보고 있어요')).toBeTruthy();
-    fireEvent.click(within(side).getByRole('button', { name: '지도 대화로 돌아가기' }));
+    expect(within(side).getByText('지금 보드 대화가 아닌 다른 대화를 보고 있어요')).toBeTruthy();
+    fireEvent.click(within(side).getByRole('button', { name: '보드 대화로 돌아가기' }));
     expect(await within(await dock()).findByText('이대로 만들어 주세요.')).toBeTruthy();
-    expect(screen.queryByText('지금 지도 대화가 아닌 다른 대화를 보고 있어요')).toBeNull();
+    expect(screen.queryByText('지금 보드 대화가 아닌 다른 대화를 보고 있어요')).toBeNull();
   });
 });

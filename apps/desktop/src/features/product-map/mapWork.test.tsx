@@ -65,7 +65,7 @@ interface Talk {
 function mount(board: FlowGetResult, talk: Talk = {}, extra: Script = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const sessions = [
-    { info: sessionInfo({ id: 'map-1', cwd, purpose: 'map', title: '지도', ...talk.map }), items: talk.mapItems ?? [] },
+    { info: sessionInfo({ id: 'map-1', cwd, purpose: 'map', title: '보드', ...talk.map }), items: talk.mapItems ?? [] },
     ...(board.buildSession
       ? [
           {
@@ -115,7 +115,7 @@ const sent = (request: { mock: { calls: unknown[][] } }, sessionId: string) =>
       ([method, params]) => method === 'session/send' && (params as { sessionId: string }).sessionId === sessionId,
     )
     .map(([, params]) => (params as { text: string }).text);
-const input = () => screen.getByRole('textbox', { name: '지도에 부탁하기' });
+const input = () => screen.getByRole('textbox', { name: '보드에 부탁하기' });
 const write = (text: string) => {
   fireEvent.change(input(), { target: { value: text } });
   fireEvent.keyDown(input(), { key: 'Enter' });
@@ -144,7 +144,7 @@ describe('work asked of a map that exists (#4, #9, #10)', () => {
       {},
       { results: { 'files/list': { entries: [], nextOffset: 0, hasMore: false } } },
     );
-    await screen.findByRole('button', { name: '지도 메뉴' });
+    await screen.findByRole('button', { name: '보드 메뉴' });
     write('결제 버튼 색 바꿔 줘');
     await waitFor(() => expect(sent(request, 'map-1')).toEqual(['[map] request: 결제 버튼 색 바꿔 줘']));
     // The scripted turn asks before running a command: the map says so, and opens the conversation where it asks.
@@ -189,7 +189,7 @@ describe('work asked of a map that exists (#4, #9, #10)', () => {
       JSON.stringify([
         { id: 'w1', to: 'old', text: '첫 번째 말' },
         { id: 'w2', to: 'old', text: '두 번째 말' },
-        { id: 'w3', to: 'map-1', text: '지도 대화에 할 말' },
+        { id: 'w3', to: 'map-1', text: '보드 대화에 할 말' },
       ]),
     );
     const refusing: Script = {
@@ -201,13 +201,13 @@ describe('work asked of a map that exists (#4, #9, #10)', () => {
       },
     };
     const { request } = mount(bookingBoard(), { others: [{ id: 'old', title: '예전 대화' }] }, refusing);
-    await waitFor(() => expect(sent(request, 'map-1')).toEqual(['지도 대화에 할 말']));
+    await waitFor(() => expect(sent(request, 'map-1')).toEqual(['보드 대화에 할 말']));
     const waiting = await screen.findByRole('region', { name: 'AI가 지금 일을 마치면 전할게요' });
     // The first could not go and says so; the one after it to the same place waits behind it, and is shown too.
     await waitFor(() => expect(within(waiting).getByText('보내지 못했어요')).toBeTruthy());
     expect(within(waiting).getByText('첫 번째 말')).toBeTruthy();
     expect(within(waiting).getByText('두 번째 말')).toBeTruthy();
-    expect(within(waiting).queryByText('지도 대화에 할 말')).toBeNull();
+    expect(within(waiting).queryByText('보드 대화에 할 말')).toBeNull();
     expect(sent(request, 'old')).toEqual(['첫 번째 말']);
   });
 
@@ -258,7 +258,7 @@ describe('a planned product on its map', () => {
       buildSession: null,
     });
     const { request } = mount(empty, { map: { status: 'running' } });
-    expect(await screen.findByText('한 줄을 보고 지도를 그리는 중이에요')).toBeTruthy();
+    expect(await screen.findByText('한 줄을 보고 보드를 그리는 중이에요')).toBeTruthy();
     expect(screen.queryByText(/코드를 살펴보는 중이에요/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '멈추기' }));
     await waitFor(() =>
@@ -485,7 +485,7 @@ describe('an empty folder (#79)', () => {
 
   it('does not offer to start over a folder with other hidden files, which 새 프로젝트 would refuse', async () => {
     mount(nothing, {}, folder('.git', '.env', '.vscode'));
-    expect(await screen.findByRole('textbox', { name: '지도에 부탁하기' })).toBeTruthy();
+    expect(await screen.findByRole('textbox', { name: '보드에 부탁하기' })).toBeTruthy();
     expect(screen.queryByText('빈 폴더예요')).toBeNull();
   });
 
@@ -509,6 +509,6 @@ describe('an empty folder (#79)', () => {
       },
     );
     expect(await screen.findByText('빈 폴더예요')).toBeTruthy();
-    expect(screen.queryByRole('textbox', { name: '지도에 부탁하기' })).toBeNull();
+    expect(screen.queryByRole('textbox', { name: '보드에 부탁하기' })).toBeNull();
   });
 });

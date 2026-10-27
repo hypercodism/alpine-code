@@ -8,7 +8,7 @@ export const messages = defineMessages({
     loadFailed: '기억을 불러오지 못했어요',
     loading: '기억을 불러오는 중…',
     retry: '다시 시도',
-    toMap: '← 지도로',
+    toMap: '← 보드로',
     pending: '기다리는 제안',
     empty: '아직 기억한 게 없어요',
     emptyLead: '대화하다 고쳐 말한 것이나 오래 걸린 문제를 Alpine이 기억해 두자고 제안해요.',

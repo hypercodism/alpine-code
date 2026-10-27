@@ -22,7 +22,7 @@ export const docMessages = defineMessages({
     code: '코드',
     codeList: '화면별 파일',
     allFiles: '모든 파일',
-    noScreenFiles: '지도에 화면별 파일이 아직 없어요',
+    noScreenFiles: '보드에 화면별 파일이 아직 없어요',
     sharedFiles: '여러 화면이 함께 쓰는 파일',
     screensUsing: (count: number) => `화면 ${count}개`,
     onlyShared: '함께 쓰는 파일만 써요',

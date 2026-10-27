@@ -158,7 +158,7 @@ describe('nothing connected (#14, #26, #15)', () => {
         },
       },
     });
-    const input = await screen.findByRole('textbox', { name: '지도에 부탁하기' });
+    const input = await screen.findByRole('textbox', { name: '보드에 부탁하기' });
     fireEvent.change(input, { target: { value: '결제 흐름을 더해 줘' } });
     fireEvent.click(screen.getByRole('button', { name: '보내기' }));
     expect(await screen.findByRole('dialog')).toBeTruthy();
@@ -176,7 +176,7 @@ describe('nothing connected (#14, #26, #15)', () => {
         },
       },
     });
-    const input = await screen.findByRole('textbox', { name: '지도에 부탁하기' });
+    const input = await screen.findByRole('textbox', { name: '보드에 부탁하기' });
     fireEvent.change(input, { target: { value: '결제 흐름을 더해 줘' } });
     fireEvent.click(screen.getByRole('button', { name: '보내기' }));
     const line = await screen.findByText('AI가 일할 모델이 준비되지 않았어요. 모델 연결을 확인해 주세요.');

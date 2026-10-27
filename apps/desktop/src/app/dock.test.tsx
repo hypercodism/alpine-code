@@ -239,9 +239,9 @@ describe('right dock on the routes', () => {
       within(dock)
         .getAllByRole('textbox')
         .map((box) => box.getAttribute('aria-label')),
-    ).toEqual(['지도에 부탁하기']);
+    ).toEqual(['보드에 부탁하기']);
     expect(
-      within(screen.getByRole('main', { name: '제품 지도' })).queryByRole('textbox', { name: '지도에 부탁하기' }),
+      within(screen.getByRole('main', { name: '제품 보드' })).queryByRole('textbox', { name: '보드에 부탁하기' }),
     ).toBeNull();
     fireEvent.click(within(dock).getByRole('button', { name: '더 보기' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: '개발 도구' }));
@@ -249,7 +249,7 @@ describe('right dock on the routes', () => {
     expect(await within(dock).findByRole('button', { name: /Cart\.tsx/ })).toBeTruthy();
     expect(within(dock).getByRole('heading', { name: '바뀐 파일' })).toBeTruthy();
     // The input stays under the tool; ← 대화 brings the conversation back.
-    expect(within(dock).getByRole('textbox', { name: '지도에 부탁하기' })).toBeTruthy();
+    expect(within(dock).getByRole('textbox', { name: '보드에 부탁하기' })).toBeTruthy();
     fireEvent.click(within(dock).getByRole('button', { name: '대화' }));
     await waitFor(() => expect(within(dock).queryByRole('button', { name: /Cart\.tsx/ })).toBeNull());
     expect(within(dock).queryByRole('heading', { name: '바뀐 파일' })).toBeNull();
@@ -322,8 +322,8 @@ describe('right dock on the routes', () => {
       flowScript(() => STUDIO_MAP),
     );
     fireEvent.click(await screen.findByRole('button', { name: '더 보기' }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: /^지도 기록/ }));
-    const panel = await screen.findByRole('complementary', { name: '지도 기록' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: /^보드 기록/ }));
+    const panel = await screen.findByRole('complementary', { name: '보드 기록' });
     expect(panel.closest('[data-overlay]') !== null).toBe(overlaid);
     expect(screen.getByRole('complementary', { name: '오른쪽 창' })).toBeTruthy();
   });

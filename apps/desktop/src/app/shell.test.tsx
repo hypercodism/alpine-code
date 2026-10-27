@@ -73,7 +73,7 @@ function mount(
       devServersScript({ upMs: 0 }),
       sessionScript({
         sessions: [
-          { info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '지도' }) },
+          { info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '보드' }) },
           ...sessions.map((info) => ({ info })),
         ],
       }),
@@ -96,7 +96,7 @@ function mount(
 }
 
 const projectMenu = async () => {
-  await screen.findByRole('main', { name: '제품 지도' });
+  await screen.findByRole('main', { name: '제품 보드' });
   fireEvent.click(screen.getByRole('button', { name: /다른 프로젝트로/ }));
   return screen.findByRole('list', { name: '최근 프로젝트' });
 };
@@ -155,7 +155,7 @@ describe('the project menu, where the rail was', () => {
 
   it('has no orange dot when only the project on screen waits', async () => {
     mount('/board' + q(app), { sessions: [sessionInfo({ id: 'app-build', cwd: app, status: 'waiting' })] });
-    await screen.findByRole('main', { name: '제품 지도' });
+    await screen.findByRole('main', { name: '제품 보드' });
     expect(screen.getByRole('button', { name: 'alpine-code · 다른 프로젝트로' })).toBeTruthy();
   });
 
@@ -213,7 +213,7 @@ describe('⋯ beside the conversation', () => {
     fireEvent.click(await screen.findByRole('menuitem', { name: '터미널' }));
     expect(within(right).getByRole('heading', { name: '터미널' })).toBeTruthy();
     // The map's input stays under the tool.
-    expect(within(right).getByRole('textbox', { name: '지도에 부탁하기' })).toBeTruthy();
+    expect(within(right).getByRole('textbox', { name: '보드에 부탁하기' })).toBeTruthy();
     fireEvent.click(within(right).getByRole('button', { name: '대화' }));
     expect(within(right).queryByRole('heading', { name: '터미널' })).toBeNull();
   });
@@ -255,10 +255,10 @@ describe('보드 · 문서 · 앱 · 코드', () => {
     expect((await frame()).src).toBe('http://localhost:5173/');
     expect(screen.getByText('앱이 열려 있어요 · 이 컴퓨터에서만 보여요')).toBeTruthy();
     // The map is still there, out of sight, for 보드.
-    expect(screen.getByRole('main', { name: '제품 지도', hidden: true })).toBeTruthy();
+    expect(screen.getByRole('main', { name: '제품 보드', hidden: true })).toBeTruthy();
     fireEvent.click(within(toggle).getByRole('button', { name: '보드' }));
     expect(screen.queryByTitle('alpine-code 앱')).toBeNull();
-    expect(screen.getByRole('main', { name: '제품 지도' })).toBeTruthy();
+    expect(screen.getByRole('main', { name: '제품 보드' })).toBeTruthy();
   });
 
   it('reads the board as a planning document: people, journeys with their screens, promises, decisions', async () => {
@@ -311,7 +311,7 @@ describe('보드 · 문서 · 앱 · 코드', () => {
     expect(await screen.findByText('export function Write() {}')).toBeTruthy();
     expect(request).toHaveBeenCalledWith('files/read', expect.objectContaining({ path: 'src/routes/write.tsx' }));
     // The conversation stays beside it: no developer tool took its place.
-    expect(within(await side()).getByRole('textbox', { name: '지도에 부탁하기' })).toBeTruthy();
+    expect(within(await side()).getByRole('textbox', { name: '보드에 부탁하기' })).toBeTruthy();
     // 모든 파일 shows the whole tree.
     fireEvent.click(within(list).getByRole('button', { name: '모든 파일' }));
     expect(await screen.findByRole('tree')).toBeTruthy();

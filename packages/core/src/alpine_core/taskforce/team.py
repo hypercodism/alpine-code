@@ -928,7 +928,7 @@ audit found only 77% of its promises exact):
 - Keep agents off each other's files: work on one file goes to one agent, or runs in order.
 
 Args:
-    title: What the TF does, in the user's words and language, e.g. "지도 그리기".
+    title: What the TF does, in the user's words and language, e.g. "보드 그리기".
     steps: The plan the card shows, in order: [{{"title": "조사", "count": 1, "model": "..."}}, ...].
     minutes: Expected minutes.
     script: The script.

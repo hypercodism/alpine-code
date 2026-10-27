@@ -150,7 +150,7 @@ describe('새 프로젝트, as the audit walked it', () => {
     fireEvent.click(within(setups).getByRole('radio', { name: /빈 프로젝트/ }));
     expect(screen.queryByText(/인터넷에 올릴/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '만들기' }));
-    await screen.findByRole('button', { name: '지도로 가기' });
+    await screen.findByRole('button', { name: '보드로 가기' });
     expect(screen.queryByText('Alpine 계정')).toBeNull();
     expect(sent('projects/create')).toEqual([expect.objectContaining({ template: 'blank' })]);
   });
@@ -164,7 +164,7 @@ describe('새 프로젝트, as the audit walked it', () => {
     await settle();
     await go(router, '/');
     expect(await screen.findByRole('heading', { name: /만드는 중이에요|프로젝트를 만들었어요/ })).toBeTruthy();
-    fireEvent.click(await screen.findByRole('button', { name: '지도로 가기' }, { timeout: 3000 }));
+    fireEvent.click(await screen.findByRole('button', { name: '보드로 가기' }, { timeout: 3000 }));
     await waitFor(() => expect(router.state.location.pathname).toBe('/board'));
     // Done with: the next 새 프로젝트 starts empty.
     await go(router, '/');
@@ -175,7 +175,7 @@ describe('새 프로젝트, as the audit walked it', () => {
     const { router } = mount();
     await send();
     fireEvent.click(await screen.findByRole('button', { name: '만들기' }));
-    await screen.findByRole('button', { name: '지도로 가기' });
+    await screen.findByRole('button', { name: '보드로 가기' });
     await act(() => router.navigate({ to: '/board', search: { project: PROJECTS[0]!.path } }));
     await settle();
     await go(router, '/');
@@ -195,7 +195,7 @@ describe('새 프로젝트, as the audit walked it', () => {
     act(() => useNavigation.getState().rememberProject('/Users/me/AlpineCode/craft-booking'));
     await go(router, '/');
     expect(await screen.findByRole('heading', { name: '무엇을 만들어 볼까요?' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: '지도로 가기' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '보드로 가기' })).toBeNull();
   });
 
   it('#20: leaving while the setups are shown keeps the idea and the setup I chose', async () => {
@@ -242,7 +242,7 @@ describe('새 프로젝트, as the audit walked it', () => {
     await send();
     fireEvent.click(await screen.findByRole('button', { name: '만들기' }));
     answer();
-    await screen.findByRole('button', { name: '지도로 가기' });
+    await screen.findByRole('button', { name: '보드로 가기' });
     expect(sent('projects/create')).toEqual([expect.objectContaining({ folder: '/Users/me/Developments/devlog' })]);
   });
 
@@ -303,7 +303,7 @@ describe('새 프로젝트, as the audit walked it', () => {
     fireEvent.click(await screen.findByRole('button', { name: '만들기' }));
     expect(await screen.findByRole('heading', { name: '프로젝트는 만들었어요' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '다시 시작' }));
-    fireEvent.click(await screen.findByRole('button', { name: '지도로 가기' }));
+    fireEvent.click(await screen.findByRole('button', { name: '보드로 가기' }));
     await waitFor(() => expect(router.state.location.pathname).toBe('/board'));
     const [made] = sent('flow/prepare');
     expect(made).toEqual(expect.objectContaining({ action: 'plan', request: IDEA }));

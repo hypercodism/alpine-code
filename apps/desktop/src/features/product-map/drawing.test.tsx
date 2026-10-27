@@ -61,7 +61,7 @@ describe('drawing the map in place', () => {
     );
     expect(await screen.findByText(/코드를 살펴보는 중이에요/)).toBeTruthy();
     // While it draws, the map's input waits.
-    expect((screen.getByRole('button', { name: '지도 그리기' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: '보드 그리기' }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(within(screen.getByRole('status')).getByRole('button', { name: '멈추기' }));
     await waitFor(() =>
       expect(request.mock.calls.find(([method]) => method === 'session/cancel')?.[1]).toEqual({ sessionId: 'draw' }),
@@ -73,7 +73,7 @@ describe('drawing the map in place', () => {
     const team: TaskForceItem = {
       id: 'tf1',
       kind: 'taskforce',
-      title: '지도 그리기',
+      title: '보드 그리기',
       steps: [{ title: '부분별로 그리기', count: 3, model: 'm' }],
       minutes: 10,
       status: 'running',
@@ -93,7 +93,7 @@ describe('drawing the map in place', () => {
       },
       <ProductMap cwd={cwd} sessionId="draw" onSession={vi.fn()} />,
     );
-    expect(await screen.findByText(/지도를 그리는 중/)).toBeTruthy();
+    expect(await screen.findByText(/보드를 그리는 중/)).toBeTruthy();
     fireEvent.click(within(screen.getByRole('status')).getByRole('button', { name: '멈추기' }));
     await waitFor(() =>
       expect(request.mock.calls.find(([method]) => method === 'taskforce/stop')?.[1]).toEqual({
@@ -105,7 +105,7 @@ describe('drawing the map in place', () => {
 
   it('offers one button and folds the folders away when nothing is drawn yet', async () => {
     wrap({ results: empty }, <ProductMap cwd={cwd} onSession={vi.fn()} />);
-    expect(await screen.findByRole('button', { name: '지도 그리기' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: '보드 그리기' })).toBeTruthy();
     expect(screen.getByText('살펴볼 폴더 고르기').closest('details')?.open).toBe(false);
   });
 });
@@ -114,18 +114,18 @@ describe('small map', () => {
   it('draws the map small and opens it when pressed', async () => {
     const onOpen = vi.fn();
     wrap({}, <MiniMap cwd={cwd} onOpen={onOpen} />);
-    fireEvent.click(await screen.findByRole('button', { name: '제품 지도 크게 보기' }));
+    fireEvent.click(await screen.findByRole('button', { name: '제품 보드 크게 보기' }));
     expect(onOpen).toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: '작은 지도 접기' }));
-    expect(screen.queryByRole('button', { name: '제품 지도 크게 보기' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '작은 보드 접기' }));
+    expect(screen.queryByRole('button', { name: '제품 보드 크게 보기' })).toBeNull();
     expect(localStorage.getItem('alpine.mini-map.folded')).toBe('true');
   });
 
   it('offers to draw a map the project does not have yet', async () => {
     const onOpen = vi.fn();
     wrap({ results: empty }, <MiniMap cwd={cwd} onOpen={onOpen} />);
-    expect(await screen.findByText('아직 지도가 없어요')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '지도 그리기' }));
+    expect(await screen.findByText('아직 보드가 없어요')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '보드 그리기' }));
     expect(onOpen).toHaveBeenCalled();
   });
 });
@@ -143,7 +143,7 @@ describe('asking the map', () => {
       },
       <ProductMap cwd={cwd} onSession={vi.fn()} />,
     );
-    const input = await screen.findByRole('textbox', { name: '지도에 부탁하기' });
+    const input = await screen.findByRole('textbox', { name: '보드에 부탁하기' });
     fireEvent.change(input, { target: { value: '손님 쪽부터 그려 줘' } });
     fireEvent.keyDown(input, { key: 'Enter' });
     await waitFor(() =>
@@ -153,7 +153,7 @@ describe('asking the map', () => {
       }),
     );
     expect(request.mock.calls.find(([method]) => method === 'session/new')?.[1]).toMatchObject({ purpose: 'map' });
-    expect(await screen.findByText('지도를 그리기 시작했어요')).toBeTruthy();
+    expect(await screen.findByText('보드를 그리기 시작했어요')).toBeTruthy();
   });
 
   it('keeps going in the project map conversation instead of making another', async () => {
@@ -166,7 +166,7 @@ describe('asking the map', () => {
       },
       <ProductMap cwd={cwd} onSession={vi.fn()} />,
     );
-    const input = await screen.findByRole('textbox', { name: '지도에 부탁하기' });
+    const input = await screen.findByRole('textbox', { name: '보드에 부탁하기' });
     fireEvent.change(input, { target: { value: '운영자 쪽도 그려 줘' } });
     fireEvent.keyDown(input, { key: 'Enter' });
     await waitFor(() =>
@@ -183,8 +183,8 @@ it('keeps the map menu, with deleting the map, before its first card', async () 
     { results: { 'flow/get': { document: { flows: [], nodes: [], edges: [] }, revision: 'r', exists: true } } },
     <ProductMap cwd={cwd} onSession={vi.fn()} />,
   );
-  fireEvent.click(await screen.findByRole('button', { name: '지도 메뉴' }));
-  expect(await screen.findByRole('menuitem', { name: '지도 삭제' })).toBeTruthy();
+  fireEvent.click(await screen.findByRole('button', { name: '보드 메뉴' }));
+  expect(await screen.findByRole('menuitem', { name: '보드 삭제' })).toBeTruthy();
 });
 
 it('starts over when the map is deleted: its conversation is put away and let go of', async () => {
@@ -200,10 +200,10 @@ it('starts over when the map is deleted: its conversation is put away and let go
     },
     <ProductMap cwd={cwd} onSession={onSession} />,
   );
-  fireEvent.click(await screen.findByRole('button', { name: '지도 메뉴' }));
-  fireEvent.click(await screen.findByRole('menuitem', { name: '지도 삭제' }));
+  fireEvent.click(await screen.findByRole('button', { name: '보드 메뉴' }));
+  fireEvent.click(await screen.findByRole('menuitem', { name: '보드 삭제' }));
   fireEvent.click(
-    within(await screen.findByRole('region', { name: '지도 삭제' })).getByRole('button', { name: '삭제' }),
+    within(await screen.findByRole('region', { name: '보드 삭제' })).getByRole('button', { name: '삭제' }),
   );
   await waitFor(() =>
     expect(request.mock.calls.find(([method]) => method === 'session/setDetails')?.[1]).toEqual({
@@ -219,7 +219,7 @@ it('opens the right panel when a TF is proposed, and not again for the same one'
   const proposed: TaskForceItem = {
     id: 'tf2',
     kind: 'taskforce',
-    title: '지도 그리기',
+    title: '보드 그리기',
     steps: [{ title: '부분별로 그리기', count: 4, model: 'm' }],
     minutes: 10,
     status: 'proposed',

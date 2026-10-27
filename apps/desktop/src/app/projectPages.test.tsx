@@ -64,15 +64,15 @@ describe('project pages', () => {
   it('has no page links under the project or in the top bar: the project name opens its map', async () => {
     mount('/memory' + q(cwd));
     const name = await screen.findByRole('button', { name: 'alpine-code 열기' });
-    expect(screen.queryByRole('link', { name: '지도' })).toBeNull();
+    expect(screen.queryByRole('link', { name: '보드' })).toBeNull();
     expect(screen.queryByRole('link', { name: '기억' })).toBeNull();
     fireEvent.click(name);
-    expect(await screen.findByRole('main', { name: '제품 지도' })).toBeTruthy();
+    expect(await screen.findByRole('main', { name: '제품 보드' })).toBeTruthy();
   });
 
   it('opens the memory from the project menu', async () => {
     const router = mount('/board' + q(cwd));
-    await screen.findByRole('main', { name: '제품 지도' });
+    await screen.findByRole('main', { name: '제품 보드' });
     fireEvent.click(await screen.findByRole('button', { name: /^alpine-code · 다른 프로젝트로/ }));
     fireEvent.click(await screen.findByRole('button', { name: 'alpine-code 메뉴' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: '기억 열기' }));

@@ -2,8 +2,8 @@ import { defineMessages } from '@/shared/i18n';
 
 export const messages = defineMessages({
   ko: {
-    productMap: '제품 지도',
-    openMapOf: (name: string) => `${name} 지도로 가기`,
+    productMap: '제품 보드',
+    openMapOf: (name: string) => `${name} 보드로 가기`,
     showSidebar: '사이드바 열기',
     hideSidebar: '사이드바 닫기',
     back: '뒤로',
@@ -17,14 +17,14 @@ export const messages = defineMessages({
     terminal: '터미널',
     servers: '개발 서버',
     processes: 'AI가 실행한 명령',
-    mapWorkDone: 'AI가 지도의 일을 마쳤어요. 열어서 확인해 보세요.',
-    mapStopped: 'AI가 지도의 일을 하다 멈췄어요. 열어서 이유를 확인해 보세요.',
+    mapWorkDone: 'AI가 보드의 일을 마쳤어요. 열어서 확인해 보세요.',
+    mapStopped: 'AI가 보드의 일을 하다 멈췄어요. 열어서 이유를 확인해 보세요.',
     mapAsks: 'AI가 물어볼 게 있어요. 열어서 답해 주면 이어서 해요.',
     mapNeedsYes: 'AI가 허락을 기다려요. 열어서 확인해 주세요.',
     waitingOn: (project: string) => `확인을 기다려요 · ${project}`,
     waitingOpen: '열기',
     engineStopped: '앱 엔진이 멈췄어요.',
-    engineStoppedHint: '다시 시작하면 프로젝트와 지도, 대화는 그대로 있어요. 하던 AI 작업은 다시 부탁해 주세요.',
+    engineStoppedHint: '다시 시작하면 프로젝트와 보드, 대화는 그대로 있어요. 하던 AI 작업은 다시 부탁해 주세요.',
     engineRestart: '다시 시작',
     engineRestartFailed: '다시 시작하지 못했어요. 앱을 끄고 다시 열어 주세요.',
     droppedFileTitle: '이 파일은 받을 수 없어요',

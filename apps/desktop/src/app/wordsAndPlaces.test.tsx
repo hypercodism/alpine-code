@@ -72,11 +72,11 @@ function mount(path: string, { sessions = [], importable = [], plan, extra = {} 
 const calls = (request: { mock: { calls: unknown[][] } }, method: string) =>
   request.mock.calls.filter(([name]) => name === method).map(([, params]) => params as Record<string, unknown>);
 const mapMenu = async () => {
-  // The map's menu is the "지도" part of the window's ⋯: the map's page has one ⋯.
+  // The map's menu is the "보드" part of the window's ⋯: the map's page has one ⋯.
   fireEvent.click(await screen.findByRole('button', { name: '더 보기' }));
   return screen.findByRole('menu');
 };
-const mapInput = () => screen.getByRole('textbox', { name: '지도에 부탁하기' });
+const mapInput = () => screen.getByRole('textbox', { name: '보드에 부탁하기' });
 const write = (text: string) => {
   fireEvent.change(mapInput(), { target: { value: text } });
   fireEvent.keyDown(mapInput(), { key: 'Enter' });
@@ -126,7 +126,7 @@ describe('what can not start now says why (#30)', () => {
     expect(within(menu).getByRole('menuitem', { name: '기능 더 찾기' }).getAttribute('aria-disabled')).toBe('true');
     fireEvent.keyDown(menu, { key: 'Escape' });
     // A check from a person's panel: it used to be ignored without a word.
-    const map = screen.getByRole('main', { name: '제품 지도' });
+    const map = screen.getByRole('main', { name: '제품 보드' });
     // A person's name over their rows opens their details.
     const first = within(map)
       .getAllByRole('region')
@@ -146,10 +146,10 @@ describe('a plan shows only what fits a plan (#32)', () => {
   it('has no code checks, and puts a new journey to the plan in planning words', async () => {
     const { request } = mount('/board' + q(app), {
       plan: 'asking',
-      sessions: [{ info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '지도' }) }],
+      sessions: [{ info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '보드' }) }],
     });
     const menu = await mapMenu();
-    for (const name of ['기능 더 찾기', '매일 자동으로 확인', '지도 범위 바꾸기'])
+    for (const name of ['기능 더 찾기', '매일 자동으로 확인', '보드 범위 바꾸기'])
       expect(within(menu).queryByRole('menuitem', { name })).toBeNull();
     expect(within(menu).queryByRole('menuitemcheckbox')).toBeNull();
     fireEvent.keyDown(menu, { key: 'Escape' });
@@ -173,17 +173,17 @@ describe('a plan once its build began is code (#32)', () => {
   it('keeps the code checks after a build stopped halfway', async () => {
     mount('/board' + q(app), {
       plan: 'stopped',
-      sessions: [{ info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '지도' }) }],
+      sessions: [{ info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '보드' }) }],
     });
     expect(await screen.findByText('만들기가 멈췄어요')).toBeTruthy();
     const menu = await mapMenu();
-    for (const name of ['기능 더 찾기', '지도 범위 바꾸기'])
+    for (const name of ['기능 더 찾기', '보드 범위 바꾸기'])
       expect(within(menu).getByRole('menuitem', { name })).toBeTruthy();
   });
 });
 
 const building = (items: Item[] = []) => [
-  { info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '지도' }) },
+  { info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '보드' }) },
   { info: sessionInfo({ id: 'build-1', cwd: app, purpose: 'build', title: 'Build the planned product' }), items },
 ];
 
@@ -215,14 +215,14 @@ describe('a call of another conversation beside the map waits above the map’s 
     open.unmount();
     const { connection, request, router } = mount('/board' + q(app), {
       sessions: [
-        { info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '지도' }) },
+        { info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '보드' }) },
         { info: sessionInfo({ id: 'old', cwd: app, title: 'README 다시 쓰기' }) },
       ],
     });
     await connection.request('session/send', { sessionId: 'old', text: 'README를 고쳐 줘' });
     await router.navigate({ to: '/board', search: { project: app, session: 'old' } });
     const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
-    expect(await within(dock).findByText('지금 지도 대화가 아닌 다른 대화를 보고 있어요')).toBeTruthy();
+    expect(await within(dock).findByText('지금 보드 대화가 아닌 다른 대화를 보고 있어요')).toBeTruthy();
     const held = await within(dock).findByRole('region', { name: '확인을 기다려요' });
     expect(within(held).getByText('README 다시 쓰기 · 확인을 기다려요')).toBeTruthy();
     const card = within(held).getByRole('region', { name: '승인 요청' });
@@ -275,7 +275,7 @@ describe('memory is reached from the map (#69, #82)', () => {
     fireEvent.click(await screen.findByRole('button', { name: '기억할까요? 2' }));
     await waitFor(() => expect(router.state.location.pathname).toBe('/memory'));
     expect(await screen.findByText('기다리는 제안')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '← 지도로' }));
+    fireEvent.click(screen.getByRole('button', { name: '← 보드로' }));
     await waitFor(() => expect(router.state.location.pathname).toBe('/board'));
     expect(router.state.location.search).toEqual({ project: app });
     // The map's menu has it too, and the memory page's project name goes back to the map.
@@ -308,20 +308,20 @@ describe('a deleted map starts over from the code (#72)', () => {
   it('says what goes, draws the map again from the code, and leads to 새 프로젝트 for something new', async () => {
     const { request, router } = mount('/board' + q(app), {
       plan: 'built',
-      sessions: [{ info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '지도' }) }],
+      sessions: [{ info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '보드' }) }],
     });
-    fireEvent.click(within(await mapMenu()).getByRole('menuitem', { name: '지도 삭제' }));
-    const strip = await screen.findByRole('region', { name: '지도 삭제' });
+    fireEvent.click(within(await mapMenu()).getByRole('menuitem', { name: '보드 삭제' }));
+    const strip = await screen.findByRole('region', { name: '보드 삭제' });
     expect(within(strip).getByText(/기획 때 정한 답과 화면 스케치/)).toBeTruthy();
     expect(within(strip).getByText(/폴더의 코드와 파일은 그대로 남아요/)).toBeTruthy();
     fireEvent.click(within(strip).getByRole('button', { name: '삭제' }));
-    expect(await screen.findByText(/지도를 지웠어요/)).toBeTruthy();
+    expect(await screen.findByText(/보드를 지웠어요/)).toBeTruthy();
     // No second way to start something new here (map-first 39): the folder has code, so the map is drawn from it.
     expect(screen.queryByRole('button', { name: '처음부터 다시 기획하기' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '새 프로젝트로 시작하기' }));
     await waitFor(() => expect(router.state.location.pathname).toBe('/'));
     await router.navigate({ to: '/board', search: { project: app } });
-    await screen.findByRole('heading', { name: '이 프로젝트를 지도로 펼쳐볼게요' });
+    await screen.findByRole('heading', { name: '이 프로젝트를 보드로 펼쳐볼게요' });
     write('');
     await waitFor(() =>
       expect(calls(request, 'flow/prepare')).toContainEqual(expect.objectContaining({ action: 'discover' })),
@@ -330,17 +330,17 @@ describe('a deleted map starts over from the code (#72)', () => {
 });
 
 describe("the map's page has one ⋯", () => {
-  it("puts the map's own items in the window's ⋯, under 지도", async () => {
+  it("puts the map's own items in the window's ⋯, under 보드", async () => {
     mount('/board' + q(app), {
       plan: 'built',
-      sessions: [{ info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '지도' }) }],
+      sessions: [{ info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '보드' }) }],
     });
     const menu = await mapMenu();
-    expect(within(menu).getByText('지도')).toBeTruthy();
+    expect(within(menu).getByText('보드')).toBeTruthy();
     expect(within(menu).getByRole('menuitem', { name: /^설정/ })).toBeTruthy();
-    expect(within(menu).getByRole('menuitem', { name: '지도 삭제' })).toBeTruthy();
+    expect(within(menu).getByRole('menuitem', { name: '보드 삭제' })).toBeTruthy();
     expect(within(menu).getAllByRole('menuitem', { name: '기억' })).toHaveLength(1);
-    expect(screen.queryByRole('button', { name: '지도 메뉴' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '보드 메뉴' })).toBeNull();
     expect(screen.getAllByRole('button', { name: '더 보기' })).toHaveLength(1);
   });
 });
@@ -434,12 +434,12 @@ describe('words kept for a conversation that is gone (#34, edge)', () => {
 describe('a call waiting for my OK is never hidden (dogfood 2, 4, 15)', () => {
   it('stays above the input with a developer tool open, and is answered there', async () => {
     const { connection, request } = mount('/board' + q(app), {
-      sessions: [{ info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '지도' }) }],
+      sessions: [{ info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '보드' }) }],
     });
     await connection.request('session/send', { sessionId: 'map-1', text: 'README를 고쳐 줘' });
     const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
     const held = await within(dock).findByRole('region', { name: '확인을 기다려요' });
-    expect(within(held).getByText('지도 대화 · 확인을 기다려요')).toBeTruthy();
+    expect(within(held).getByText('보드 대화 · 확인을 기다려요')).toBeTruthy();
     // A developer tool takes the conversation's place; the card does not go with it.
     fireEvent.click(within(dock).getByRole('button', { name: '더 보기' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: '개발 도구' }));
@@ -458,7 +458,7 @@ describe('a call waiting for my OK is never hidden (dogfood 2, 4, 15)', () => {
 
   it('is said on every other page, with the way to its map', async () => {
     const { connection, router } = mount('/settings', {
-      sessions: [{ info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '지도' }) }],
+      sessions: [{ info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '보드' }) }],
     });
     await connection.request('session/send', { sessionId: 'map-1', text: 'README를 고쳐 줘' });
     fireEvent.click(await screen.findByRole('button', { name: /확인을 기다려요 · alpine-code/ }));
@@ -471,7 +471,7 @@ describe('a call waiting for my OK is never hidden (dogfood 2, 4, 15)', () => {
 describe('the bar over the map stays (dogfood 17)', () => {
   it('has no part of the window around it that can be scrolled, even by a script', async () => {
     mount('/board' + q(app), {
-      sessions: [{ info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '지도' }) }],
+      sessions: [{ info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '보드' }) }],
     });
     // A card brought into view, or a screen in a frame focusing a field, scrolls every ancestor that can scroll: one
     // that only hides its overflow then stays scrolled, taking the bar with it, with no way back.

@@ -82,7 +82,7 @@ export const filmMessages = defineMessages({
     noWayIn: '이 화면으로 오는 버튼이 아직 없어요',
     waysOut: '나가는 길',
     noWayOut: '다른 화면으로 가는 버튼이 없어요',
-    offMap: (label: string) => `지도에 없는 길 · ${label}`,
+    offMap: (label: string) => `보드에 없는 길 · ${label}`,
     noButton: '버튼이 없어요',
     missingButton: (title: string) => `${towards(title)} 가는 버튼이 없어요`,
     zoomIn: '크게',

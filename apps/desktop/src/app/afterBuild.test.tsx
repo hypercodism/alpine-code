@@ -68,7 +68,7 @@ function mount(
       devServersScript({ upMs: 0 }),
       sessionScript({
         sessions: [
-          { info: sessionInfo({ id: 'map-1', cwd, purpose: 'map', title: '지도' }), items: mapItems },
+          { info: sessionInfo({ id: 'map-1', cwd, purpose: 'map', title: '보드' }), items: mapItems },
           { info: sessionInfo({ id: 'build-1', cwd, purpose: 'build', title: '만들기', ...build }) },
         ],
         ...(reply === undefined ? {} : { reply }),
@@ -98,7 +98,7 @@ function mount(
 
 /** Opens the app from a built screen's card (앱에서 보기). */
 async function openApp() {
-  await screen.findByRole('main', { name: '제품 지도' });
+  await screen.findByRole('main', { name: '제품 보드' });
   fireEvent.click(await screen.findByRole('button', { name: '글 쓰기 열기' }));
   fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: '앱에서 보기' }));
 }
@@ -137,7 +137,7 @@ describe('앱 열기 (#7)', () => {
   it('starts the project the way it runs and shows it in the app view, with no command to type', async () => {
     const { request } = mount('built');
     fireEvent.click(await screen.findByRole('button', { name: '앱' }));
-    // The app takes the map's place, large, with the top bar's 지도 | 앱 on 앱.
+    // The app takes the map's place, large, with the top bar's 보드 | 앱 on 앱.
     expect(await screen.findByTitle('alpine-code 앱', {}, { timeout: 3000 })).toBeTruthy();
     expect(screen.getByText('앱이 열려 있어요 · 이 컴퓨터에서만 보여요')).toBeTruthy();
     expect(screen.getByRole('button', { name: '앱', pressed: true })).toBeTruthy();
@@ -180,7 +180,7 @@ describe('words sent while the app shows a screen', () => {
     await openApp();
     await screen.findByText(/화면을 보면서 말하는 중/, {}, { timeout: 3000 });
     const dock = screen.getByRole('complementary', { name: '오른쪽 창' });
-    fireEvent.change(within(dock).getByRole('textbox', { name: '지도에 부탁하기' }), {
+    fireEvent.change(within(dock).getByRole('textbox', { name: '보드에 부탁하기' }), {
       target: { value: '버튼을 더 크게 해 줘' },
     });
     fireEvent.click(within(dock).getByRole('button', { name: '보내기' }));
@@ -279,7 +279,7 @@ describe('after the build', () => {
     await done();
     const dock = screen.getByRole('complementary', { name: '오른쪽 창' });
     const line = await within(dock).findByRole('button', { name: /만들기 · 18분 걸렸어요/ });
-    expect(within(dock).queryByText('지금 지도 대화가 아닌 다른 대화를 보고 있어요')).toBeNull();
+    expect(within(dock).queryByText('지금 보드 대화가 아닌 다른 대화를 보고 있어요')).toBeNull();
     fireEvent.click(line);
     const back = await within(dock).findByRole('button', { name: '← 대화로 돌아가기' });
     expect(within(dock).queryByRole('button', { name: /만들기 · 18분/ })).toBeNull();
@@ -412,7 +412,7 @@ describe('a plan stays quiet until it is built', () => {
       },
     );
     await done();
-    expect(screen.queryByText('지도에 아직 담기지 않은 코드')).toBeNull();
+    expect(screen.queryByText('보드에 아직 담기지 않은 코드')).toBeNull();
   });
 
   it('shows no 바뀐 카드 while it is being built: every card is the AI changing it', async () => {
@@ -448,8 +448,8 @@ describe('one place to talk (map-first 43)', () => {
       within(dock)
         .getAllByRole('textbox')
         .map((box) => box.getAttribute('aria-label')),
-    ).toEqual(['지도에 부탁하기']);
-    const map = screen.getByRole('main', { name: '제품 지도' });
+    ).toEqual(['보드에 부탁하기']);
+    const map = screen.getByRole('main', { name: '제품 보드' });
     expect(within(map).queryByRole('button', { name: /^누구나/ })).toBeNull();
     expect(within(map).queryByRole('textbox')).toBeNull();
   });
@@ -464,10 +464,10 @@ describe('a plan stopped before its first card', () => {
         board: (b) => ({ ...b, document: { nodes: [], flows: [], edges: [] }, screens: {}, undecided: [] }),
       },
     );
-    expect(await screen.findByText('지도를 그리다 멈췄어요')).toBeTruthy();
+    expect(await screen.findByText('보드를 그리다 멈췄어요')).toBeTruthy();
     expect(screen.getByRole('button', { name: '이어서 그려 줘' })).toBeTruthy();
-    expect(screen.queryByText('이 프로젝트를 지도로 펼쳐볼게요')).toBeNull();
-    expect(screen.queryByPlaceholderText('어떤 지도를 그릴까요? 비워 두고 보내면 바로 그려요')).toBeNull();
+    expect(screen.queryByText('이 프로젝트를 보드로 펼쳐볼게요')).toBeNull();
+    expect(screen.queryByPlaceholderText('어떤 보드를 그릴까요? 비워 두고 보내면 바로 그려요')).toBeNull();
   });
 });
 
@@ -479,7 +479,7 @@ describe('the top bar on the map (#10)', () => {
     ['built', {}, '다 만들었어요'],
   ] as const)('says where a plan stands: %s %o is %s', async (moment, build, word) => {
     mount(moment, {}, { build });
-    await screen.findByRole('main', { name: '제품 지도' });
+    await screen.findByRole('main', { name: '제품 보드' });
     const bar = screen.getByRole('button', { name: /다른 프로젝트로/ }).parentElement!;
     expect(await within(bar).findByText(word)).toBeTruthy();
   });

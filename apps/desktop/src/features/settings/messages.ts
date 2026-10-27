@@ -9,7 +9,7 @@ export const messages = defineMessages({
     connection: '모델 연결',
     language: '언어',
     safety: '기본 안전',
-    safetyLead: '새로 시작하는 대화부터 이대로 해요. AI가 이미 일하던 지도는 지도 입력창의 안전 칩을 따라요.',
+    safetyLead: '새로 시작하는 대화부터 이대로 해요. AI가 이미 일하던 보드는 보드 입력창의 안전 칩을 따라요.',
     cloneFolder: '프로젝트를 두는 곳',
     cloneFolderLead: '새로 만드는 프로젝트와 받은 프로젝트가 이 폴더 안에 생겨요.',
     cloneFolderPick: '프로젝트를 둘 폴더 고르기',
