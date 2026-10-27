@@ -146,21 +146,21 @@ describe("a screen's situations on the board", () => {
   ];
   const situated: TreeMap = { ...bakery, cards: { ...bakery.cards, pick: { ...bakery.cards.pick!, states } } };
 
-  it('stands its own ones under it two to a line, the common ones on a line after, and makes the row taller', () => {
+  it('stands its own ones in its column, as large as it, one under another, the common ones after', () => {
     const board = layoutBoard(situated, device);
     const pick = board.nodes.pick!;
     const [a, b, c] = pick.situations!;
     expect(pick.situations!.map((one) => one.id)).toEqual(['empty', 'sold-out', 'closed']);
+    for (const one of [a!, b!, c!]) expect([one.x, one.w, one.h]).toEqual([pick.x, pick.w, pick.h]);
     expect(a!.y).toBeGreaterThan(pick.y + pick.h);
-    expect(b!.y).toBe(a!.y);
-    expect(b!.x).toBeGreaterThan(a!.x + a!.w);
-    expect(c!.y).toBeGreaterThan(a!.y + a!.h);
+    expect(b!.y).toBeGreaterThan(a!.y + a!.h);
+    expect(c!.y).toBeGreaterThan(b!.y + b!.h);
     expect(pick.commonY).toBeGreaterThan(c!.y + c!.h);
     const row = board.lanes[0]!.rows[0]!;
     expect(row.y + row.height).toBeGreaterThan(pick.commonY!);
     expect(row.height).toBeGreaterThan(layoutBoard(bakery, device).lanes[0]!.rows[0]!.height);
-    // The next screen stands past the situations, which are wider than a phone.
-    expect(board.nodes.time!.x).toBeGreaterThan(b!.x + b!.w);
+    // Across stays the walk: the next screen stands where it did.
+    expect(board.nodes.time!.x).toBe(layoutBoard(bakery, device).nodes.time!.x);
   });
 });
 

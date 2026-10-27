@@ -1,9 +1,10 @@
 import type { ScreenSituation, TreeCard } from './flowTreeModel';
 
 /*
- * A screen's situations on the board (10-27): each one that belongs to this screen drawn under it as a small real
- * screen of its own, and the ones every screen that loads something has (waiting, could not load, offline) folded into
- * one line of names, so the board shows what is particular to the product rather than the same spinner five times.
+ * A screen's situations on the board (10-27): each one that belongs to this screen drawn under it, as large as it, as
+ * a real screen of its own, and the ones every screen that loads something has (waiting, could not load, offline)
+ * folded into a list of names, so the board shows what is particular to the product rather than the same spinner
+ * five times.
  */
 
 /** Waiting and connection, as the situations skill words them: the first load, slow, offline, the server fails. */
@@ -16,7 +17,7 @@ const COMMON_TITLE =
 export const isCommonSituation = (situation: ScreenSituation) =>
   COMMON_ID.test(situation.id) || COMMON_TITLE.test(situation.title);
 
-/** What the board draws for a screen's situations: small screens (its own, then proposals), and the common ones named. */
+/** What the board draws for a screen's situations: screens (its own, then proposals), and the common ones named. */
 export function boardSituations(card: TreeCard): { framed: ScreenSituation[]; common: ScreenSituation[] } {
   const states = card.kind === 'screen' ? (card.states ?? []) : [];
   const framed = states.filter((one) => !isCommonSituation(one));

@@ -687,8 +687,9 @@ function BoardCard({
 }
 
 /**
- * A screen's situations under it on the board: its own ones as small real screens (a proposal the code does not handle
- * yet dashed, with nothing to show), and the ones every screen has named on one line. Pressing one opens the card at it.
+ * A screen's situations under it on the board: its own ones as real screens as large as it, one under another (a
+ * proposal the code does not handle yet dashed, with nothing to show), and the ones every screen has, named. Pressing
+ * one opens the card at it.
  */
 function BoardSituations({ node, card, strip }: { node: BoardNode; card: TreeCard; strip: Strip }) {
   const t = useMessages(messages);
@@ -775,7 +776,7 @@ function CommonSituation({
   );
 }
 
-/** A situation's small screen: its name over it (with how it stands), the real screen at it, a way back under it. */
+/** A situation's screen under its screen: its name over it (with how it stands), the real screen at it, a way back under it. */
 function SituationTile({
   node,
   box,
@@ -847,14 +848,14 @@ function SituationTile({
         style={{
           width: box.w,
           height: box.h,
-          padding: TILE_PAD,
-          borderRadius: phone ? 16 : 8,
+          padding: FRAME_PAD,
+          borderRadius: phone ? PHONE_RADIUS - 4 : 12,
           boxShadow: proposal ? undefined : phone ? PHONE_SHADOW : BROWSER_SHADOW,
         }}
       >
         <span
           className="relative block size-full overflow-clip bg-canvas-raised"
-          style={{ borderRadius: phone ? 12 : 5 }}
+          style={{ borderRadius: phone ? PHONE_RADIUS - 10 : 8 }}
         >
           {proposal ? (
             <span className="flex size-full items-center justify-center p-2 text-center text-meta text-interactive">
@@ -866,7 +867,7 @@ function SituationTile({
               path={card.path}
               state={situation.id}
               device={device}
-              ratio={(box.h - TILE_PAD * 2) / (box.w - TILE_PAD * 2)}
+              ratio={(box.h - FRAME_PAD * 2) / (box.w - FRAME_PAD * 2)}
               title={`${card.title} · ${situation.title}`}
               fallback={name}
             />
@@ -885,9 +886,6 @@ function SituationTile({
     </div>
   );
 }
-
-/** The frame's edge around a situation's small screen. */
-const TILE_PAD = 3;
 
 /**
  * Where a situation's real screen leads: its buttons to other screens that the usual day does not have (the menu every
@@ -919,19 +917,19 @@ const NO_EXITS = { forward: [], back: [] };
 const BoardNodes = createContext<Record<string, BoardNode>>({});
 const useBoardNodes = () => useContext(BoardNodes);
 
-/** The arrows out of a situation's small screen: from the real button, blue like every button that leads on. */
+/** The arrows out of a situation's screen, to the right as any step's: from the real button, blue like every button that leads on. */
 function SituationArrows({ node, box, board }: { node: BoardNode; box: BoardSituation; board: BoardLayout }) {
   const exits = useSituationExits(node, box);
   if (!exits.forward.length) return null;
-  const from: BoardNode = { ...node, x: box.x, y: box.y, w: box.w, h: box.h, span: undefined };
-  const scale = (box.w - TILE_PAD * 2) / screenWidthFor(node.kind === 'computer' ? 'computer' : 'phone');
+  const from: BoardNode = { ...node, x: box.x, y: box.y, w: box.w, h: box.h };
+  const scale = (box.w - FRAME_PAD * 2) / screenWidthFor(node.kind === 'computer' ? 'computer' : 'phone');
   return (
     <>
       {exits.forward.map((target) => {
         const to = board.nodes[target.to]!;
-        const y = box.y + TILE_PAD + (target.y + target.h / 2) * scale;
+        const y = box.y + FRAME_PAD + (target.y + target.h / 2) * scale;
         const start =
-          y > box.y && y < box.y + box.h ? { x: box.x + TILE_PAD + (target.x + target.w) * scale, y } : undefined;
+          y > box.y && y < box.y + box.h ? { x: box.x + FRAME_PAD + (target.x + target.w) * scale, y } : undefined;
         const { path, middle } = route(from, to, start);
         return (
           <g key={target.to} role="img" aria-label={target.label} className={edgeTone.checked}>
