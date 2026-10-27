@@ -104,6 +104,7 @@ export function Filmstrip(props: FilmstripProps) {
   const wall = useRef<HTMLDivElement>(null);
   const zoom = useWallZoom(wall);
   const device = useBoardDevice(map);
+  const board = useMemo(() => layoutBoard(map, device), [map, device]);
   const fresh = useJustBuilt(map);
 
   const where = (cardId: string) => {
@@ -189,11 +190,11 @@ export function Filmstrip(props: FilmstripProps) {
       >
         <WallZoom.Provider value={zoom.level}>
           <div style={zoom.level === 1 ? undefined : { zoom: zoom.level }}>
-            <BoardCanvas strip={strip} device={device} />
+            <BoardCanvas strip={strip} board={board} />
           </div>
         </WallZoom.Provider>
       </div>
-      <FlowsPanel strip={strip} undecided={props.undecided ?? []} />
+      <FlowsPanel strip={strip} board={board} undecided={props.undecided ?? []} />
       {playing && (
         <FlowPlayer
           map={map}
@@ -255,12 +256,10 @@ const FRAME_PAD = 6;
  * rest, each screen once with its number, and an arrow for every way between them, out of the button that leads on
  * when the real screen shows it. Pressing a screen opens its card, as before.
  */
-function BoardCanvas({ strip, device }: { strip: Strip; device: (journey: Journey) => Device }) {
+function BoardCanvas({ strip, board }: { strip: Strip; board: BoardLayout }) {
   const t = useMessages(messages);
   const text = useText();
   const tree = useMessages(flowTreeMessages);
-  const { map } = strip;
-  const board = useMemo(() => layoutBoard(map, device), [map, device]);
   // The ways not drawn as arrows, by the card they leave: said under it.
   const back = new Map<string, BoardEdge[]>();
   for (const edge of board.edges)
@@ -984,18 +983,20 @@ function BoardCaption({ card, strip, back }: { card: TreeCard; strip: Strip; bac
 }
 
 /**
- * Over the board's corner, the map in a list: each person's journeys with how many screens they hold, what has no
- * screen, and what is still to decide. Folded to one button until it is wanted, so the board keeps its whole width
- * and height; pressing a journey brings its lane into view and folds it again.
+ * Over the board's corner, the map as a table of contents: each person's journeys in full, each with its screens by
+ * their numbers on the board, what has no screen, and what is still to decide. Folded to one button until it is
+ * wanted, so the board keeps its whole width and height. A journey or a screen brings it into view and folds the list;
+ * 흐름 재생 plays the journey.
  */
-function FlowsPanel({ strip, undecided }: { strip: Strip; undecided: string[] }) {
+function FlowsPanel({ strip, board, undecided }: { strip: Strip; board: BoardLayout; undecided: string[] }) {
   const t = useMessages(messages);
   const text = useText();
   const [open, setOpen] = useState(false);
   const { map } = strip;
   const screens = Object.values(map.cards).filter(hasScreenArea).length;
   const system = Object.values(map.cards).filter((card) => !hasScreenArea(card)).length;
-  const journeys = map.people.filter((person) => person.id !== UNPLACED).flatMap((person) => person.journeys).length;
+  const people = map.people.filter((person) => person.id !== UNPLACED);
+  const journeys = people.flatMap((person) => person.journeys).length;
   if (!open)
     return (
       <button
@@ -1011,59 +1012,88 @@ function FlowsPanel({ strip, undecided }: { strip: Strip; undecided: string[] })
         )}
       </button>
     );
+  const go = (then: () => void) => {
+    then();
+    setOpen(false);
+  };
   return (
     <nav
       aria-label={t.flows}
-      className="absolute top-3 left-3 z-10 flex max-h-[calc(100%-24px)] w-56 flex-col gap-3 overflow-y-auto rounded-xl border border-line bg-canvas-raised p-3 text-body shadow-overlay"
+      className="absolute top-3 left-3 z-10 flex max-h-[calc(100%-24px)] w-88 flex-col gap-4 overflow-y-auto rounded-xl border border-line bg-canvas-raised p-4 text-body shadow-overlay"
     >
       <p className="flex items-center justify-between text-meta text-fg-muted">
-        <span>{t.flows}</span>
-        <span className="flex items-center gap-2">
-          {t.screenCount(screens)}
-          <button
-            type="button"
-            aria-label={t.hidePanel}
-            onClick={() => setOpen(false)}
-            className="cursor-pointer rounded-sm px-1 text-fg-faint hover:bg-hover hover:text-fg"
-          >
-            ‹
-          </button>
+        <span>
+          <span className="text-fg">{t.flows}</span> ·{' '}
+          <span className="tabular-nums">{t.flowsFolded(journeys, screens)}</span>
         </span>
+        <button
+          type="button"
+          aria-label={t.hidePanel}
+          onClick={() => setOpen(false)}
+          className="cursor-pointer rounded-sm px-1 text-fg-faint hover:bg-hover hover:text-fg"
+        >
+          ‹
+        </button>
       </p>
-      {map.people
-        .filter((person) => person.id !== UNPLACED)
-        .map((person) => (
-          <div key={person.id} className="flex flex-col gap-0.5">
-            <p className="text-meta text-fg-muted">{text(person.name)}</p>
-            {person.journeys.map((journey) => (
-              <span key={journey.id} className="group flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    strip.seekJourney(journey.id);
-                    setOpen(false);
-                  }}
-                  className="flex min-w-0 grow cursor-pointer items-center justify-between gap-2 rounded-md px-2 py-1 text-left hover:bg-hover"
-                >
-                  <span className="min-w-0 truncate">{text(journey.title)}</span>
-                  <span className="shrink-0 text-meta text-fg-faint tabular-nums">
-                    {journey.steps.filter((id) => map.cards[id] && hasScreenArea(map.cards[id]!)).length}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  aria-label={t.playJourney(text(journey.title))}
-                  onClick={() => strip.play(journey.id)}
-                  className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-fg-faint hover:bg-hover hover:text-interactive"
-                >
-                  <Play size={11} aria-hidden className="fill-current" />
-                </button>
-              </span>
-            ))}
-          </div>
-        ))}
+      {people.map((person) => (
+        <section key={person.id} aria-label={text(person.name)} className="flex flex-col gap-2">
+          <p className="flex items-center gap-1.5 text-meta text-fg-muted">
+            <Avatar person={person} small />
+            {text(person.name)}
+          </p>
+          {person.journeys.map((journey) => {
+            const shown = [...new Set(journey.steps)].filter((id) => map.cards[id] && hasScreenArea(map.cards[id]!));
+            return (
+              <div key={journey.id} className="flex flex-col gap-1 rounded-lg bg-canvas-sunken/60 p-2">
+                <div className="flex items-start gap-2">
+                  <button
+                    type="button"
+                    onClick={() => go(() => strip.seekJourney(journey.id))}
+                    className="min-w-0 grow cursor-pointer rounded-md px-1 text-left font-medium break-keep hover:bg-hover"
+                  >
+                    {text(journey.title)}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={t.playJourney(text(journey.title))}
+                    onClick={() => go(() => strip.play(journey.id))}
+                    className="flex h-6 shrink-0 cursor-pointer items-center gap-1 rounded-full border border-line bg-canvas-raised px-2 text-meta text-fg-muted transition-colors hover:border-interactive hover:text-fg"
+                  >
+                    <Play size={10} aria-hidden className="fill-current" />
+                    {t.playFlow}
+                  </button>
+                </div>
+                {text(journey.goal) && <p className="px-1 text-meta text-fg-muted">{text(journey.goal)}</p>}
+                <ol aria-label={t.playerSteps} className="flex flex-col">
+                  {shown.map((id) => {
+                    const card = map.cards[id]!;
+                    const situations = card.states?.length ?? 0;
+                    return (
+                      <li key={id}>
+                        <button
+                          type="button"
+                          onClick={() => go(() => strip.seek(id))}
+                          className="flex w-full cursor-pointer items-baseline gap-2 rounded-md px-1 py-0.5 text-left hover:bg-hover"
+                        >
+                          <span className="w-5 shrink-0 text-meta text-fg-faint tabular-nums">
+                            {board.nodes[id]?.number}
+                          </span>
+                          <span className="min-w-0 grow break-keep">{card.title}</span>
+                          {situations > 0 && (
+                            <span className="shrink-0 text-meta text-fg-faint">{t.situationCount(situations)}</span>
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </div>
+            );
+          })}
+        </section>
+      ))}
       {system > 0 && (
-        <p className="flex justify-between px-2 text-meta text-fg-muted">
+        <p className="flex justify-between px-1 text-meta text-fg-muted">
           <span>{t.noScreenLane}</span>
           <span className="tabular-nums">{system}</span>
         </p>
