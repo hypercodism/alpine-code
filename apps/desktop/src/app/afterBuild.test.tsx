@@ -523,9 +523,9 @@ describe('되돌리기 from the data (#49)', () => {
   it('opens the restore points from the live data, and goes back to the data', async () => {
     mount('built', {}, { account: { signedIn: true, data: 'live' } });
     const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
-    fireEvent.click(await within(dock).findByRole('button', { name: '더 보기' }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: '개발 도구' }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: '데이터' }));
+    fireEvent.click(
+      await within(screen.getByRole('navigation', { name: '도구' })).findByRole('button', { name: '데이터' }),
+    );
     fireEvent.click(await within(dock).findByRole('button', { name: '되돌리기 지점' }));
     expect(await within(dock).findByRole('radiogroup', { name: '되돌리기 지점' })).toBeTruthy();
     fireEvent.click(within(dock).getByRole('button', { name: '데이터' }));

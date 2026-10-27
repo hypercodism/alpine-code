@@ -104,9 +104,9 @@ export function WorkspaceDock({
 }
 
 /**
- * A project's developer tools, in the dock's order: 터미널, 바뀐 파일 (the work result), 파일, then the rarer 데이터 (only
- * with Alpine Cloud and a data source) and AI가 실행한 명령. The session page shows them as dock tabs; the map opens
- * them one at a time in the conversation's place. `enabled` asks for the data sources only while they can be shown.
+ * A session page's developer tools, in the dock's order: 터미널, 바뀐 파일 (the work result), 파일, then the rarer
+ * 데이터 (only with Alpine Cloud and a data source) and 명령. A project's window has them on its rail and in its 코드
+ * tab instead. `enabled` asks for the data sources only while they can be shown.
  */
 export function useProjectTools({
   cwd,
@@ -163,7 +163,7 @@ export function useProjectTools({
  * The 데이터 place: the data, and from the live data its restore points (the same view as in the 올리기 sheet), so the
  * points its read-only note promises are one press away; Pro's longer window opens the plans.
  */
-function DataPlace({ cwd }: { cwd: string }) {
+export function DataPlace({ cwd }: { cwd: string }) {
   const t = useMessages(messages);
   const [view, setView] = useState<'data' | 'restore' | 'upgrade'>('data');
   if (view === 'data') return <DataPanel cwd={cwd} onRestorePoints={() => setView('restore')} />;

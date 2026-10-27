@@ -186,17 +186,20 @@ describe('the project menu, where the rail was', () => {
   });
 });
 
-describe('⋯ beside the conversation', () => {
-  it('holds 설정, 에이전트, 기억, 지난 대화 and the developer tools', async () => {
+describe('the rail beside the conversation', () => {
+  const rail = () => screen.findByRole('navigation', { name: '도구' });
+
+  it('ends with 더 보기: 설정, 에이전트, 기억, 지난 대화, and no developer tools any more', async () => {
     const { router } = mount('/board' + q(app));
-    fireEvent.click(within(await side()).getByRole('button', { name: '더 보기' }));
-    for (const name of [/설정/, '에이전트', '기억', '지난 대화', '개발 도구'])
+    fireEvent.click(within(await rail()).getByRole('button', { name: '더 보기' }));
+    for (const name of [/설정/, '에이전트', '기억', '지난 대화'])
       expect(await screen.findByRole('menuitem', { name })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: '개발 도구' })).toBeNull();
     fireEvent.click(screen.getByRole('menuitem', { name: '지난 대화' }));
     expect(await screen.findByRole('dialog', { name: '프로젝트와 대화 찾기' })).toBeTruthy();
     fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    fireEvent.click(within(await side()).getByRole('button', { name: '더 보기' }));
+    fireEvent.click(within(await rail()).getByRole('button', { name: '더 보기' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: '기억' }));
     await waitFor(() => expect(router.state.location.href).toBe('/memory' + q(app)));
     // Away from the map, its name leads back.
@@ -204,17 +207,15 @@ describe('⋯ beside the conversation', () => {
     await waitFor(() => expect(router.state.location.href).toBe('/board' + q(app)));
   });
 
-  it('opens a developer tool in the conversation’s place, and ← 대화 brings the conversation back', async () => {
+  it('opens 터미널 in the conversation’s place, and 대화 brings the conversation back', async () => {
     mount('/board' + q(app));
     const right = await side();
     expect(within(right).queryByRole('tablist')).toBeNull();
-    fireEvent.click(within(right).getByRole('button', { name: '더 보기' }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: '개발 도구' }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: '터미널' }));
-    expect(within(right).getByRole('heading', { name: '터미널' })).toBeTruthy();
-    // The map's input stays under the tool.
+    fireEvent.click(within(await rail()).getByRole('button', { name: '터미널' }));
+    expect(await within(right).findByRole('heading', { name: '터미널' })).toBeTruthy();
+    // The map's input stays under the place.
     expect(within(right).getByRole('textbox', { name: '보드에 부탁하기' })).toBeTruthy();
-    fireEvent.click(within(right).getByRole('button', { name: '대화' }));
+    fireEvent.click(within(await rail()).getByRole('button', { name: '대화' }));
     expect(within(right).queryByRole('heading', { name: '터미널' })).toBeNull();
   });
 });
@@ -224,7 +225,14 @@ const TABS = '보드, 문서, 앱, 코드';
 /** The project's files, for the 코드 tab. */
 const files: Script = {
   results: {
-    'files/list': () => ({ entries: [{ name: 'src', path: 'src', kind: 'directory' }], nextOffset: 1, hasMore: false }),
+    'files/list': ({ path = '' }) => ({
+      entries:
+        path === ''
+          ? [{ name: 'src', path: 'src', kind: 'directory' }]
+          : [{ name: 'write.tsx', path: 'src/routes/write.tsx', kind: 'file' }],
+      nextOffset: 1,
+      hasMore: false,
+    }),
     'files/read': ({ path }) => ({
       path: `${app}/${path}`,
       relativePath: path,
@@ -302,50 +310,61 @@ describe('보드 · 문서 · 앱 · 코드', () => {
     expect(within(doc).getByText('댓글을 받을까요')).toBeTruthy();
   });
 
-  it('shows the code by screen, and opens a file there without leaving the conversation', async () => {
+  it('shows the files as an editor does, and opens one there without leaving the conversation', async () => {
     const { request } = mount('/board' + q(app), { extra: files });
     fireEvent.click(within(await screen.findByRole('group', { name: TABS })).getByRole('button', { name: '코드' }));
-    const list = await screen.findByRole('navigation', { name: '화면별 파일' });
-    const writing = within(list).getByRole('region', { name: '글 써서 올리기' });
-    expect(within(writing).getByText('글 쓰기')).toBeTruthy();
-    fireEvent.click(within(writing).getByRole('button', { name: /write\.tsx/ }));
+    expect(await screen.findByText('왼쪽에서 파일을 고르면 여기 보여요.')).toBeTruthy();
+    const tree = await screen.findByRole('tree');
+    fireEvent.click(within(tree).getByRole('treeitem', { name: 'src' }));
+    fireEvent.click(await within(tree).findByRole('treeitem', { name: 'write.tsx' }));
     expect(await screen.findByText('export function Write() {}')).toBeTruthy();
     expect(request).toHaveBeenCalledWith('files/read', expect.objectContaining({ path: 'src/routes/write.tsx' }));
-    // The conversation stays beside it: no developer tool took its place.
+    // The tree stays beside the file, and the conversation beside both.
+    expect(screen.getByRole('tree')).toBeTruthy();
     expect(within(await side()).getByRole('textbox', { name: '보드에 부탁하기' })).toBeTruthy();
-    // 모든 파일 shows the whole tree.
-    fireEvent.click(within(list).getByRole('button', { name: '모든 파일' }));
-    expect(await screen.findByRole('tree')).toBeTruthy();
   });
 });
 
 describe('the 코드 tab', () => {
-  it('lists a file several screens name once, above them, and under each screen only its own', async () => {
-    const own: Record<string, string[]> = {
-      list: ['src/App.tsx', 'src/routes/index.tsx'],
-      read: ['src/App.tsx', 'src/routes/post.tsx'],
-      write: ['src/App.tsx'],
-    };
+  it('shows 바뀐 파일 as git diff shows it', async () => {
     mount('/board' + q(app), {
-      extra: files,
-      board: (b) => ({
-        ...b,
-        document: {
-          ...b.document,
-          nodes: (b.document?.nodes ?? []).map((node) => (own[node.id] ? { ...node, sources: own[node.id] } : node)),
+      extra: {
+        results: {
+          ...files.results,
+          'projects/diff': {
+            git: true,
+            truncated: false,
+            files: [
+              {
+                path: 'src/routes/write.tsx',
+                status: 'modified',
+                added: 1,
+                deleted: 1,
+                binary: false,
+                patch: 'diff --git a/src/routes/write.tsx b/src/routes/write.tsx\n@@ -1 +1 @@\n-old\n+new',
+              },
+              { path: 'notes.md', status: 'untracked', added: 2, deleted: 0, binary: false, patch: '' },
+            ],
+          },
         },
-      }),
+      },
     });
     fireEvent.click(within(await screen.findByRole('group', { name: TABS })).getByRole('button', { name: '코드' }));
-    const list = await screen.findByRole('navigation', { name: '화면별 파일' });
-    const shared = within(list).getByRole('region', { name: '여러 화면이 함께 쓰는 파일' });
-    expect(within(shared).getByRole('button', { name: /App\.tsx/ }).textContent).toContain('화면 3개');
-    const reading = within(list).getByRole('region', { name: '글 찾아 읽기' });
-    expect(within(reading).queryByRole('button', { name: /App\.tsx/ })).toBeNull();
-    expect(within(reading).getByRole('button', { name: /post\.tsx/ })).toBeTruthy();
-    expect(
-      within(within(list).getByRole('region', { name: '글 써서 올리기' })).getByText('함께 쓰는 파일만 써요'),
-    ).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: '바뀐 파일 2' }));
+    const changes = await screen.findByRole('list', { name: '바뀐 파일' });
+    expect(within(changes).getByRole('button', { name: /notes\.md/ }).textContent).toContain('+2');
+    fireEvent.click(within(changes).getByRole('button', { name: /write\.tsx/ }));
+    const diff = await screen.findByRole('region', { name: 'src/routes/write.tsx' });
+    expect(within(diff).getByText('+new')).toBeTruthy();
+    expect(within(diff).getByText('-old')).toBeTruthy();
+    expect(within(diff).getByText('바뀜')).toBeTruthy();
+  });
+
+  it('says so when the project has no git', async () => {
+    mount('/board' + q(app), { extra: { results: { ...files.results, 'projects/diff': { git: false, files: [] } } } });
+    fireEvent.click(within(await screen.findByRole('group', { name: TABS })).getByRole('button', { name: '코드' }));
+    fireEvent.click(await screen.findByRole('button', { name: '바뀐 파일' }));
+    expect(await screen.findByText('이 프로젝트는 git을 쓰지 않아서 바뀐 것을 비교할 수 없어요.')).toBeTruthy();
   });
 });
 

@@ -372,15 +372,18 @@ describe('the same words everywhere (#47, #54, #67, #74, #77, #80, #84, #89)', (
     expect(screen.queryByText(/프로토콜/)).toBeNull();
   });
 
-  it('names the developer tools in plain words under ⋯ beside the map', async () => {
+  it('names the places on the rail in plain words, each word under its icon', async () => {
     mount('/board' + q(app));
+    const rail = await screen.findByRole('navigation', { name: '도구' });
+    expect(
+      within(rail)
+        .getAllByRole('button')
+        .map((item) => item.textContent),
+    ).toEqual(['대화', '명령', '터미널', '로그', '브라우저', '더 보기']);
+    fireEvent.click(within(rail).getByRole('button', { name: '명령' }));
     const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
-    fireEvent.click(within(dock).getByRole('button', { name: '더 보기' }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: '개발 도구' }));
-    for (const name of ['터미널', '바뀐 파일', '파일', 'AI가 실행한 명령'])
-      expect(await screen.findByRole('menuitem', { name })).toBeTruthy();
-    fireEvent.click(screen.getByRole('menuitem', { name: 'AI가 실행한 명령' }));
-    expect(await within(dock).findByText('AI가 실행한 명령이 없어요.')).toBeTruthy();
+    expect(await within(dock).findByText('AI나 Alpine이 띄운 명령이 없어요.')).toBeTruthy();
+    expect(within(dock).getByText(/Alpine 밖에서 띄운 것은 여기 보이지 않아요/)).toBeTruthy();
   });
 
   it('shows no 준비 중 places on the agents screen', async () => {
@@ -432,7 +435,7 @@ describe('words kept for a conversation that is gone (#34, edge)', () => {
 });
 
 describe('a call waiting for my OK is never hidden (dogfood 2, 4, 15)', () => {
-  it('stays above the input with a developer tool open, and is answered there', async () => {
+  it('stays above the input with another place open, and is answered there', async () => {
     const { connection, request } = mount('/board' + q(app), {
       sessions: [{ info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '보드' }) }],
     });
@@ -440,11 +443,9 @@ describe('a call waiting for my OK is never hidden (dogfood 2, 4, 15)', () => {
     const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
     const held = await within(dock).findByRole('region', { name: '확인을 기다려요' });
     expect(within(held).getByText('보드 대화 · 확인을 기다려요')).toBeTruthy();
-    // A developer tool takes the conversation's place; the card does not go with it.
-    fireEvent.click(within(dock).getByRole('button', { name: '더 보기' }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: '개발 도구' }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'AI가 실행한 명령' }));
-    expect(await within(dock).findByRole('heading', { name: 'AI가 실행한 명령' })).toBeTruthy();
+    // Another place takes the conversation's place; the card does not go with it.
+    fireEvent.click(within(screen.getByRole('navigation', { name: '도구' })).getByRole('button', { name: '명령' }));
+    expect(await within(dock).findByRole('heading', { name: '명령' })).toBeTruthy();
     fireEvent.click(
       within(within(dock).getByRole('region', { name: '확인을 기다려요' })).getByRole('button', { name: '허용' }),
     );

@@ -1,21 +1,24 @@
 import { LinkButton, PanelResizer, usePanelWidth } from '@alpine/ui/primitives';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
-import { ArrowLeft } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { Database, FileText, Globe, ListChecks, MessageSquare, SquareTerminal } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
 
 import { useAppPeople, useHasApp } from '@/app/appScreens';
-import { MoreMenu } from '@/app/MoreMenu';
 import { shellMessages } from '@/app/shellMessages';
 import { ProjectCode } from '@/app/ProjectCode';
 import { MapTopBar, StartTopBar } from '@/app/ShellTopBar';
 import { UpdateButton } from '@/app/TopBar';
-import { CHANGES_TAB, SUMMARY_TAB, useProjectTools } from '@/app/WorkspaceDock';
+import { ToolRail, type RailPlace } from '@/app/ToolRail';
+import { DataPlace, SUMMARY_TAB } from '@/app/WorkspaceDock';
 import { AppView } from '@/features/app-view/AppView';
-import { showApp, showMap, useAppCard, useLookingAt, useProjectView } from '@/features/app-view/state';
+import { showApp, showMap, showView, useAppCard, useLookingAt, useProjectView } from '@/features/app-view/state';
+import { DeployLogs } from '@/features/deploy-logs/DeployLogs';
 import { messages as serverMessages } from '@/features/development-servers/messages';
 import { messages as dockMessages } from '@/features/dock/messages';
-import { showDockTab, useDockTab } from '@/features/dock/state';
+import { pickRailPlace, setRailProject, showDockTab, useRail } from '@/features/dock/state';
+import { ProcessControl, useCommands } from '@/features/process-control';
 import { askMapFor } from '@/features/product-map/askRequest';
 import { useMapActions } from '@/features/product-map/mapActions';
 import { useMapTalk } from '@/features/product-map/mapTalk';
@@ -29,10 +32,18 @@ import { RecordItems } from '@/features/session/RecordItems';
 import { Session } from '@/features/session/Session';
 import { WaitingApprovals } from '@/features/session/WaitingApprovals';
 import { useTaskForceTab } from '@/features/taskforce/useTaskForceTab';
-import { useWorkResultTab } from '@/features/work-result/useWorkResultTab';
+import { Terminal } from '@/features/terminal';
 import { FileNavigationProvider } from '@/shared/files';
 import { useMessages } from '@/shared/i18n';
-import { useCloudEnabled, useProductMap, useProjects, useSession, type Item } from '@/shared/server';
+import {
+  useCloudEnabled,
+  useDataSources,
+  useProductMap,
+  useProjects,
+  usePublishStatus,
+  useSession,
+  type Item,
+} from '@/shared/server';
 
 export const Route = createFileRoute('/board')({
   validateSearch: (search: Record<string, unknown>): { project?: string; session?: string } => ({
@@ -48,8 +59,9 @@ function renderRecord(items: Item[]) {
 
 /**
  * A project's window (flow-spec, 화면의 뼈대): the bar over the left (the project menu, 보드 · 문서 · 앱 · 코드, the
- * map's actions), the board, its document, the app or the code under it, and on the right the conversation, where a developer tool from ⋯ opens in its place with
- * ← 대화 back. Everything said to the map sits under the conversation (map-first 43).
+ * map's actions), the board, its document, the app or the code under it; on the right the icon rail (2c) and beside it
+ * the place it picked: the conversation, 명령, 터미널, 로그 or 데이터, folded away when its icon is pressed again.
+ * Everything said to the map sits under the place, whichever it is (map-first 43).
  */
 function BoardRoute() {
   const { project: chosen, session: asked } = Route.useSearch();
@@ -66,7 +78,6 @@ function BoardRoute() {
   const [buildShownFor, setBuildShownFor] = useState<string | null>(null);
   const navigate = useNavigate();
   const attached = useSession(session ?? null);
-  const resultTab = useWorkResultTab(session ?? null, chosen);
   const cloud = useCloudEnabled();
   const t = useMessages(dockMessages);
   const m = useMessages(mapMessages);
@@ -96,16 +107,31 @@ function BoardRoute() {
   const lookingTitle = showingApp
     ? people.flatMap((p) => p.journeys.flatMap((j) => j.screens)).find((screen) => screen.id === looking)?.title
     : undefined;
-  const [chosenTool] = useDockTab();
-  const tools = useProjectTools({
-    cwd,
-    sessionId: attachedHere ? session : undefined,
-    changes: { ...resultTab, label: s.changes },
-    enabled: !!project,
-  });
-  // A developer tool takes the conversation's place; anything else picked (대화, or a session page's tab) is the
-  // conversation.
-  const tool = tools.find((each) => each.id === chosenTool) ?? null;
+  const rail = useRail(cwd);
+  // `showDockTab` (a card's 명령, the AI 팀) opens a place of this window while it shows.
+  useEffect(() => {
+    setRailProject(cwd || null);
+    return () => setRailProject(null);
+  }, [cwd]);
+  const client = useQueryClient();
+  const running =
+    useCommands(cwd).data?.processes.filter((p) => p.kind !== 'shell' && p.status === 'running').length ?? 0;
+  // The 데이터 place is Alpine Cloud's, and only once there is data to show.
+  const hasData = useDataSources(cwd, cloud && !!project).data?.sources.some((source) => source.available) ?? false;
+  const published = !!usePublishStatus(cwd, cloud && !!project).data?.lastPublishedAt;
+  const places: RailPlace[] = [
+    { id: SUMMARY_TAB, label: s.conversation, icon: MessageSquare },
+    { id: 'processes', label: s.commands, icon: ListChecks, badge: running },
+    { id: 'terminal', label: s.terminal, icon: SquareTerminal },
+    { id: 'logs', label: s.logs, icon: FileText },
+    ...(hasData ? [{ id: 'data', label: s.data, icon: Database }] : []),
+    { id: 'browser', label: s.browser, icon: Globe, later: true },
+  ];
+  // A place that is not here (데이터 without data, or an id another page used) shows the conversation.
+  const place = places.some((each) => each.id === rail.place && !each.later) ? rail.place : SUMMARY_TAB;
+  // The terminal starts once its place is first opened, and keeps its shells while another place shows.
+  const [terminalFor, setTerminalFor] = useState<string | null>(null);
+  if (place === 'terminal' && terminalFor !== cwd) setTerminalFor(cwd);
   const width = usePanelWidth({ storageKey: 'alpine.work-result.width', initial: 400, min: 320, max: 720 });
   const teamShown = !!team && teamOf === session;
   // Opens the app at one screen: 앱에서 보기 on a map card, or a screen picked beside the app.
@@ -217,12 +243,8 @@ function BoardRoute() {
   );
 
   return (
-    <FileNavigationProvider
-      key={cwd}
-      cwd={cwd}
-      onOpen={() => showDockTab('source')}
-      onReturnToChanges={() => showDockTab(CHANGES_TAB)}
-    >
+    // A file opened anywhere in the window (a link in the conversation) shows in the 코드 tab.
+    <FileNavigationProvider key={cwd} cwd={cwd} onOpen={() => showView(cwd, 'code')}>
       {/* Neither side ever scrolls as a whole (overflow: clip): the bar over the map and the conversation's header
           stay, whatever inside them is brought into view. */}
       <div className="flex min-h-0 min-w-0 grow overflow-clip">
@@ -231,10 +253,14 @@ function BoardRoute() {
             cwd={cwd}
             hasApp={hasApp}
             end={
-              publishable && (
-                // A plan's completion card has 인터넷에 올리기; the sheet still opens from there (openPublish).
-                <PublishButton cwd={cwd} name={project.name} sessionId={talkTo} sheetOnly={planned} />
-              )
+              <>
+                {/* The restart-to-update button, which sat by ⋯ before ⋯ went down to the rail. */}
+                <UpdateButton />
+                {publishable && (
+                  // A plan's completion card has 인터넷에 올리기; the sheet still opens from there (openPublish).
+                  <PublishButton cwd={cwd} name={project.name} sessionId={talkTo} sheetOnly={planned} />
+                )}
+              </>
             }
           />
           <div className="relative min-h-0 grow overflow-clip">
@@ -306,34 +332,78 @@ function BoardRoute() {
           </div>
         </section>
         <aside
-          // Named as the dock it replaces: the right side of the window, which holds the conversation.
+          // The place the rail picked; folded, it is not shown and the board takes the room.
           aria-label={t.title}
+          hidden={rail.folded}
           style={{ width: width.width }}
-          className="relative flex min-h-0 shrink-0 flex-col border-l border-line bg-canvas"
+          className={clsx(
+            'relative min-h-0 shrink-0 flex-col border-l border-line bg-canvas',
+            rail.folded ? 'hidden' : 'flex',
+          )}
         >
           <PanelResizer panel={width} edge="left" label={t.resize} />
-          <header data-tauri-drag-region className="flex h-12 shrink-0 items-center gap-2 pr-3.5 pl-4">
-            {tool && (
-              <>
-                <LinkButton className="min-h-6 gap-1 px-0.5" onClick={() => showDockTab(SUMMARY_TAB)}>
-                  <ArrowLeft size={14} strokeWidth={1.6} aria-hidden="true" />
-                  {s.backToConversation}
-                </LinkButton>
-                <span aria-hidden="true" className="h-4 w-px bg-line" />
-                <h2 className="truncate text-body font-medium">{tool.label}</h2>
-              </>
-            )}
-            <span data-tauri-drag-region className="grow self-stretch" />
-            <UpdateButton />
-            <MoreMenu project={cwd} tools={tools} onTool={showDockTab} />
-          </header>
-          {tool && (
-            <ToolPlace id={tool.id} bare={tool.bare}>
-              {tool.content}
-            </ToolPlace>
+          {place === SUMMARY_TAB ? (
+            <PlaceHeader>
+              {/* The conversations of the project will sit here as tabs; for now the board's own. */}
+              <span className="rounded-md bg-hover px-2.5 py-1 text-body font-medium text-fg">
+                {s.conversationWithBoard}
+              </span>
+            </PlaceHeader>
+          ) : place === 'processes' ? null : (
+            <PlaceHeader>
+              <h2 className="text-body font-semibold">{places.find((each) => each.id === place)?.label}</h2>
+            </PlaceHeader>
           )}
-          {/* The conversation stays mounted behind a tool, so coming back finds it where it was. */}
-          <div className={clsx('min-h-0 grow flex-col', tool ? 'hidden' : 'flex')}>{conversation}</div>
+          {place === 'processes' && (
+            <ProcessControl
+              key={cwd}
+              cwd={cwd}
+              onInspectProcess={(processId) => {
+                client.setQueryData(['terminal-selection', cwd], processId);
+                showDockTab('terminal');
+              }}
+              onAskAI={(text) => {
+                askMapFor(cwd, text);
+                showDockTab(SUMMARY_TAB);
+              }}
+              renderHeader={(count, actions) => (
+                <PlaceHeader>
+                  <h2 className="text-body font-semibold">{s.commands}</h2>
+                  {count}
+                  <span data-tauri-drag-region className="grow self-stretch" />
+                  {actions}
+                </PlaceHeader>
+              )}
+            />
+          )}
+          {/* The terminal keeps its shells while another place shows. */}
+          {terminalFor === cwd && (
+            <div className={clsx('min-h-0 grow flex-col', place === 'terminal' ? 'flex' : 'hidden')}>
+              <Terminal
+                key={cwd}
+                cwd={cwd}
+                sessionId={attachedHere ? session : undefined}
+                onOpenDevelopmentServer={() => showApp(cwd)}
+              />
+            </div>
+          )}
+          {place === 'logs' && (
+            <div className="min-h-0 grow overflow-y-auto">
+              <DeployLogs
+                published={published}
+                onPublish={publishable ? () => openPublish(cwd) : undefined}
+                onShowCommands={() => pickRailPlace(cwd, 'processes')}
+                onShowTerminal={() => pickRailPlace(cwd, 'terminal')}
+              />
+            </div>
+          )}
+          {place === 'data' && (
+            <div className="flex min-h-0 grow flex-col">
+              <DataPlace key={cwd} cwd={cwd} />
+            </div>
+          )}
+          {/* The conversation stays mounted behind another place, so coming back finds it where it was. */}
+          <div className={clsx('min-h-0 grow flex-col', place === SUMMARY_TAB ? 'flex' : 'hidden')}>{conversation}</div>
           {/* Every call of the project waiting for my OK, whatever shows above: never behind a card or another view. */}
           <WaitingApprovals cwd={cwd} />
           {lookingTitle && (
@@ -344,6 +414,13 @@ function BoardRoute() {
           )}
           <div ref={setTalkSlot} className="contents" />
         </aside>
+        <ToolRail
+          project={cwd}
+          places={places}
+          current={place}
+          folded={rail.folded}
+          onPick={(id) => pickRailPlace(cwd, id)}
+        />
       </div>
     </FileNavigationProvider>
   );
@@ -367,14 +444,14 @@ function builtAt(info: { id: string; updatedAt: string }, done: boolean): string
   return info.updatedAt;
 }
 
-/** A developer tool in the conversation's place: the ones that scroll and pad themselves fill it edge to edge. */
-function ToolPlace({ id, bare, children }: { id: string; bare?: boolean; children: ReactNode }) {
+/** The head of the place beside the board: its name, or the conversation's tab, and what acts on it. */
+function PlaceHeader({ children }: { children: ReactNode }) {
   return (
-    <div
-      id={`dock-panel-${id}`}
-      className={clsx('motion-content flex min-h-0 grow flex-col', !bare && 'overflow-y-auto px-5 pb-5')}
+    <header
+      data-tauri-drag-region
+      className="flex h-12 shrink-0 items-center gap-2 border-b border-line-subtle pr-3.5 pl-4"
     >
       {children}
-    </div>
+    </header>
   );
 }
