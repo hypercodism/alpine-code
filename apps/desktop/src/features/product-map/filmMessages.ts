@@ -35,6 +35,8 @@ export const filmMessages = defineMessages({
     flows: '흐름',
     screenCount: (n: number) => `화면 ${n}`,
     hidePanel: '흐름 목록 접기',
+    flowsFolded: (journeys: number, screens: number) => `${journeys}개 · 화면 ${screens}`,
+    toDecideCount: (n: number) => `정할 것 ${n}`,
     toDecide: '정할 것',
     throughJourney: '다른 흐름',
     stateSketch: '그림',
@@ -123,6 +125,9 @@ export const filmMessages = defineMessages({
     flows: 'Flows',
     screenCount: (n: number) => `${n} ${n === 1 ? 'screen' : 'screens'}`,
     hidePanel: 'Hide the flows',
+    flowsFolded: (journeys: number, screens: number) =>
+      `${journeys} · ${screens} ${screens === 1 ? 'screen' : 'screens'}`,
+    toDecideCount: (n: number) => `${n} to decide`,
     toDecide: 'To decide',
     throughJourney: 'Another flow',
     stateSketch: 'Sketch',

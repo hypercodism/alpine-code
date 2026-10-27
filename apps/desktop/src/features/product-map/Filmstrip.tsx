@@ -184,8 +184,8 @@ export function Filmstrip(props: FilmstripProps) {
         role="region"
         aria-label={t.label}
         style={DOTTED}
-        // A board on dotted paper; the flows panel floats over its top left corner, so the board starts past it.
-        className="min-h-0 min-w-0 grow overflow-auto bg-canvas-sunken pt-3 pb-20 pl-62 text-body text-fg"
+        // A board on dotted paper; the flows button sits over its top left corner, so the board starts under it.
+        className="min-h-0 min-w-0 grow overflow-auto bg-canvas-sunken pt-12 pb-20 text-body text-fg"
       >
         <WallZoom.Provider value={zoom.level}>
           <div style={zoom.level === 1 ? undefined : { zoom: zoom.level }}>
@@ -984,24 +984,31 @@ function BoardCaption({ card, strip, back }: { card: TreeCard; strip: Strip; bac
 }
 
 /**
- * Beside the board, the map in a list: each person's journeys with how many screens they hold, what has no screen,
- * and what is still to decide. Pressing a journey brings its lane into view.
+ * Over the board's corner, the map in a list: each person's journeys with how many screens they hold, what has no
+ * screen, and what is still to decide. Folded to one button until it is wanted, so the board keeps its whole width
+ * and height; pressing a journey brings its lane into view and folds it again.
  */
 function FlowsPanel({ strip, undecided }: { strip: Strip; undecided: string[] }) {
   const t = useMessages(messages);
   const text = useText();
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const { map } = strip;
   const screens = Object.values(map.cards).filter(hasScreenArea).length;
   const system = Object.values(map.cards).filter((card) => !hasScreenArea(card)).length;
+  const journeys = map.people.filter((person) => person.id !== UNPLACED).flatMap((person) => person.journeys).length;
   if (!open)
     return (
       <button
         type="button"
+        aria-expanded={false}
         onClick={() => setOpen(true)}
-        className="absolute top-3 left-3 z-10 cursor-pointer rounded-lg border border-line bg-canvas-raised px-3 py-1.5 text-meta text-fg-muted shadow-overlay hover:text-fg"
+        className="absolute top-3 left-3 z-10 flex cursor-pointer items-center gap-2 rounded-lg border border-line bg-canvas-raised px-3 py-1 text-meta text-fg-muted shadow-overlay hover:text-fg"
       >
-        {t.flows}
+        <span className="text-fg">{t.flows}</span>
+        <span className="tabular-nums">{t.flowsFolded(journeys, screens)}</span>
+        {undecided.length > 0 && (
+          <span className="text-attention tabular-nums">{t.toDecideCount(undecided.length)}</span>
+        )}
       </button>
     );
   return (
@@ -1032,7 +1039,10 @@ function FlowsPanel({ strip, undecided }: { strip: Strip; undecided: string[] })
               <span key={journey.id} className="group flex items-center gap-1">
                 <button
                   type="button"
-                  onClick={() => strip.seekJourney(journey.id)}
+                  onClick={() => {
+                    strip.seekJourney(journey.id);
+                    setOpen(false);
+                  }}
                   className="flex min-w-0 grow cursor-pointer items-center justify-between gap-2 rounded-md px-2 py-1 text-left hover:bg-hover"
                 >
                   <span className="min-w-0 truncate">{text(journey.title)}</span>

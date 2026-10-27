@@ -1549,6 +1549,7 @@ describe('flows that call another flow (decision 19)', () => {
     );
     await loaded();
     expect(document.querySelectorAll('svg path[marker-end]').length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: /^흐름/ }));
     const flows = screen.getByRole('navigation', { name: '흐름' });
     const [link] = within(flows).getAllByRole('button', { name: new RegExp(`^${calledTitle}`) });
     const scrolled = vi.mocked(Element.prototype.scrollIntoView);
