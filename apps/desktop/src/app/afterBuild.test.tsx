@@ -484,6 +484,33 @@ describe('the top bar on the map (#10)', () => {
     expect(await within(bar).findByText(word)).toBeTruthy();
   });
 
+  it.each([
+    ['recheck', '다시 확인할 약속'],
+    ['failed', '고칠 약속'],
+  ] as const)('once built, says the same open promises as the completion card: %s', async (status, words) => {
+    mount(
+      'built',
+      {},
+      {
+        board: (b) => ({
+          ...b,
+          states: {
+            ...b.states,
+            list: {
+              ...b.states!.list!,
+              promises: { [Object.keys(b.states!.list!.promises ?? {})[0]!]: { status } },
+            },
+          },
+        }),
+      },
+    );
+    await screen.findByRole('main', { name: '제품 보드' });
+    const bar = screen.getByRole('button', { name: /다른 프로젝트로/ }).parentElement!;
+    const word = await within(bar).findByText(new RegExp(`^${words} \\d+개$`));
+    expect(within(bar).queryByText('다 만들었어요')).toBeNull();
+    expect(await screen.findByText(`다 만들었어요 · ${word.textContent}`)).toBeTruthy();
+  });
+
   it("keeps the map's conversation on the right with no row of tabs (#88)", async () => {
     mount('built');
     const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });

@@ -54,7 +54,7 @@ import { flowTreeMessages } from './flowTreeMessages';
 import { JourneyMap } from './JourneyMap';
 import { useMapActionStore, useMapMenuStore } from './mapActions';
 import { Bar, CONNECTION, PlanBar, Working, type PlanTeamAnswer } from './PlanBar';
-import { buildActivity, lastReply, pendingQuestion, planPhase, stopReason, TEAM_WORKING } from './planData';
+import { buildActivity, lastReply, openPromises, pendingQuestion, planPhase, stopReason, TEAM_WORKING } from './planData';
 import { mapLookCss, type Device, type PickedLook, wornLook } from './planLook';
 import { planMessages } from './planMessages';
 import { useMapRequest } from './askRequest';
@@ -1426,22 +1426,7 @@ export function ProductMap({
                     tries: Object.values(treeMap?.cards ?? {})
                       .filter((card) => card.howToTry?.trim())
                       .map((card) => ({ cardId: card.id, card: card.title, text: card.howToTry!.trim() })),
-                    open: Object.values(treeMap?.cards ?? {}).flatMap((card) =>
-                      card.promises
-                        .filter((promise) => promise.status !== 'passed')
-                        .map((promise) => {
-                          // Broken stays broken while the AI works on its card (shown there as being checked).
-                          const failed = data?.states?.[card.id]?.promises?.[promise.id]?.status === 'failed';
-                          return {
-                            cardId: card.id,
-                            card: card.title,
-                            promiseId: promise.id,
-                            text: promise.then,
-                            note: failed ? promise.note : '',
-                            failed,
-                          };
-                        }),
-                    ),
+                    open: openPromises(treeMap, data),
                   }}
                   team={
                     buildTeam?.status === 'proposed' || buildTeam?.status === 'over'

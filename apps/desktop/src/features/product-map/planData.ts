@@ -4,6 +4,9 @@ import { ASK_USER, lookCss, pageOf, readQuestion } from '@/shared/questions';
 import type { Item } from '@/shared/server';
 import { toolKind } from '@/shared/tool-calls';
 
+import type { TreeMap } from './flowTreeModel';
+import type { PlanOpenPromise } from './PlanBar';
+
 /** A question about the product, as the map shows it above its input. */
 export interface PlanQuestion {
   id: string;
@@ -186,4 +189,26 @@ export function lastReply(
   if (turn.some((item) => item.kind === 'tool_call' && item.name === ASK_USER)) return null;
   const reply = turn.findLast((item) => item.kind === 'agent_message' && !!item.text.trim());
   return reply?.kind === 'agent_message' ? { id: reply.id, text: reply.text.trim() } : null;
+}
+
+/**
+ * The promises a built product still has open, as the completion card lists them and the top bar counts them: every
+ * one not passed, broken when its last check failed (it stays broken while the AI works on its card).
+ */
+export function openPromises(map: TreeMap | null, board: FlowGetResult | undefined): PlanOpenPromise[] {
+  return Object.values(map?.cards ?? {}).flatMap((card) =>
+    card.promises
+      .filter((promise) => promise.status !== 'passed')
+      .map((promise) => {
+        const failed = board?.states?.[card.id]?.promises?.[promise.id]?.status === 'failed';
+        return {
+          cardId: card.id,
+          card: card.title,
+          promiseId: promise.id,
+          text: promise.then,
+          note: failed ? promise.note : '',
+          failed,
+        };
+      }),
+  );
 }
