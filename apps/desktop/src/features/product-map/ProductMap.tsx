@@ -113,6 +113,8 @@ export function ProductMap({
   onShowTalk,
   onOpenInApp,
   menuInWindow = false,
+  view = 'board',
+  onShowBoard,
 }: {
   cwd: string;
   sessionId?: string | null;
@@ -146,6 +148,10 @@ export function ProductMap({
   onShowTalk?: () => void;
   /** Opens the running app at a built screen's address (its card's `path`). */
   onOpenInApp?: (cardId: string) => void;
+  /** The board, or the same map read as a document (the 문서 tab, 10-25 design canvas D). */
+  view?: 'board' | 'doc';
+  /** Goes back to the board, where a screen pressed in the document opens. */
+  onShowBoard?: () => void;
   /**
    * The window has a ⋯ of its own (the map's page): the map's menu is its "지도" part instead of a second ⋯ on the
    * map (useMapMenuStore).
@@ -824,7 +830,7 @@ export function ProductMap({
     const editable = (el: Element | null) =>
       !!el && (el.matches('input, textarea, select') || (el as HTMLElement).isContentEditable);
     const onKey = (event: KeyboardEvent) => {
-      if (hidden || event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (hidden || view === 'doc' || event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
       if (event.key === '/' && !editable(globalThis.document.activeElement) && search.current) {
         event.preventDefault();
         search.current.focus();
@@ -1053,7 +1059,8 @@ export function ProductMap({
       )}
       {/* Over the filmstrip, quiet: the search (a plan being decided has nothing to search yet), what wants a look
           only when something does, and the map's menu. */}
-      {hasMap && data && (
+      {/* The document reads the whole map: nothing on it to search or light. */}
+      {hasMap && data && view === 'board' && (
         <div className="flex min-h-11 shrink-0 flex-wrap items-center gap-2 bg-canvas-sunken px-10 py-1.5">
           {/* Every screen wears the look being tried: the map says whose. */}
           {tryingLook && (
@@ -1336,6 +1343,11 @@ export function ProductMap({
               planned={planned}
               making={making}
               onChangePick={planned ? setReviewing : undefined}
+              view={view}
+              onShowOnBoard={(cardId) => {
+                onShowBoard?.();
+                setReveal({ cardId, seq: Date.now() });
+              }}
               onPlan={planning ? (words) => void say(words) : undefined}
               // A plan takes words while it works; checks and fixes wait until the AI is free, and say so.
               waitNote={!planning && anyActive ? t.busyNote : null}

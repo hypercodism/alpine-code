@@ -4,10 +4,13 @@ import { useCallback, useRef, type ReactNode } from 'react';
 import { useMessages } from '@/shared/i18n';
 import { useEditFlow, useServer, useSetActor, useSetFlow } from '@/shared/server';
 
+import clsx from 'clsx';
+
 import { Filmstrip } from './Filmstrip';
 import type { StepParts } from './FlowTree';
 import { flowTreeMessages } from './flowTreeMessages';
 import { BlankAppNotice, LiveAppProvider, useBoardApp } from './liveScreens';
+import { MapDocument } from './MapDocument';
 import { usePacedMap } from './pacedMap';
 import type { TreeMap } from './flowTreeModel';
 
@@ -41,6 +44,8 @@ export function JourneyMap({
   planned = false,
   making = null,
   onChangePick,
+  view = 'board',
+  onShowOnBoard,
 }: {
   cwd: string;
   /** `board` read person first (`toTreeMap`). */
@@ -74,6 +79,10 @@ export function JourneyMap({
   making?: string | null;
   /** Opens what the AI decided on a card, to answer it again. */
   onChangePick?: (cardId: string) => void;
+  /** The board, or the same map read as a document (the 문서 tab), over the board kept as it was. */
+  view?: 'board' | 'doc';
+  /** A screen pressed in the document: the board shows it. */
+  onShowOnBoard?: (cardId: string) => void;
 }) {
   const t = useMessages(flowTreeMessages);
   const edit = useEditFlow();
@@ -97,103 +106,119 @@ export function JourneyMap({
 
   return (
     <LiveAppProvider value={app?.boardUrl ?? null}>
-      <div className="flex min-h-0 min-w-0 grow flex-col">
-        <BlankAppNotice app={app} />
-        <Filmstrip
-          map={map}
-          undecided={board.undecided ?? []}
-          planned={planned}
-          making={making}
-          onChangePick={onChangePick}
-          drawing={drawing}
-          lit={lit}
-          reveal={reveal}
-          stepParts={stepParts}
-          promiseExtras={promiseExtras}
-          look={look}
-          touching={touching}
-          asked={asked}
-          seenAt={seenAt ?? undefined}
-          readSource={readSource}
-          planning={!!onPlan}
-          waitNote={waitNote}
-          onCheck={
-            onPlan
-              ? undefined
-              : (targets) => void start('verify', { nodeIds: [...new Set(targets.map((target) => target.cardId))] })
-          }
-          onFix={(targets) => {
-            const cardId = targets[0]?.cardId;
-            const card = cardId ? map.cards[cardId] : undefined;
-            if (!card) return;
-            const broken = targets
-              .filter((target) => target.cardId === cardId)
-              .map((target) => card.promises.find((promise) => promise.id === target.promiseId)?.then)
-              .filter(Boolean)
-              .join(' / ');
-            void start('change', { node: nodeOf(card.id), request: t.fixRequest(card.title, broken) });
-          }}
-          onAddPromise={(cardId, when, then) =>
-            !readOnly &&
-            edit.mutate({
-              cwd,
-              nodeId: cardId,
-              field: 'promise',
-              conditionId: null,
-              // Either part may be left empty; only both together read "when, then".
-              value: when.trim() && then.trim() ? `${when.trim()}, ${then.trim()}` : when.trim() || then.trim(),
-            })
-          }
-          onRemovePromise={({ cardId, promiseId }) => {
-            if (readOnly) return;
-            const text = map.cards[cardId]?.promises.find((promise) => promise.id === promiseId)?.then ?? '';
-            removed.current = { cardId, text };
-            edit.mutate({ cwd, nodeId: cardId, field: 'promise', conditionId: promiseId, value: '' });
-          }}
-          onUndoRemove={() => {
-            const last = removed.current;
-            removed.current = null;
-            if (last?.text)
-              edit.mutate({ cwd, nodeId: last.cardId, field: 'promise', conditionId: null, value: last.text });
-          }}
-          onAddJourney={(_, title, goal) =>
-            onPlan
-              ? onPlan(t.planJourneyRequest(title, goal))
-              : void start('extend', { request: t.addJourneyRequest(title, goal) })
-          }
-          onFindSteps={(journeyId) => {
-            const journey = map.people.flatMap((person) => person.journeys).find((item) => item.id === journeyId);
-            const title = journey?.title.ko ?? journeyId;
-            if (onPlan) onPlan(t.planStepsRequest(title));
-            else void start('extend', { flowId: journeyId, request: t.findStepsRequest(title) });
-          }}
-          onAddPerson={(name) =>
-            onPlan ? onPlan(t.planPersonRequest(name)) : void start('reshape', { request: t.addPersonRequest(name) })
-          }
-          // A map from a newer Alpine is read only: no decisions to write (the decision chips are not shown).
-          onDecide={
-            readOnly ? undefined : (cardId, field, value) => decide.mutate({ cwd, nodeId: cardId, field, value })
-          }
-          onOpenSession={onSession}
-          onSituation={(cardId, situationId, act) => {
-            const card = map.cards[cardId];
-            const situation = card?.states?.find((one) => one.id === situationId);
-            if (!card || !situation || readOnly) return;
-            if (act === 'drop') {
-              edit.mutate({ cwd, nodeId: cardId, field: 'state', conditionId: situationId, value: '' });
-              return;
+      <div className="relative flex min-h-0 min-w-0 grow flex-col">
+        {view === 'doc' && (
+          <div className="absolute inset-0 z-10 flex">
+            <MapDocument
+              map={map}
+              undecided={board.undecided ?? []}
+              look={look}
+              onShowOnBoard={(cardId) => onShowOnBoard?.(cardId)}
+            />
+          </div>
+        )}
+        <div
+          className={clsx('flex min-h-0 min-w-0 grow flex-col', view === 'doc' && 'invisible')}
+          aria-hidden={view === 'doc'}
+          inert={view === 'doc'}
+        >
+          <BlankAppNotice app={app} />
+          <Filmstrip
+            map={map}
+            undecided={board.undecided ?? []}
+            planned={planned}
+            making={making}
+            onChangePick={onChangePick}
+            drawing={drawing}
+            lit={lit}
+            reveal={reveal}
+            stepParts={stepParts}
+            promiseExtras={promiseExtras}
+            look={look}
+            touching={touching}
+            asked={asked}
+            seenAt={seenAt ?? undefined}
+            readSource={readSource}
+            planning={!!onPlan}
+            waitNote={waitNote}
+            onCheck={
+              onPlan
+                ? undefined
+                : (targets) => void start('verify', { nodeIds: [...new Set(targets.map((target) => target.cardId))] })
             }
-            const request =
-              act === 'make'
-                ? t.makeSituationRequest(card.title, situation.title, situation.why ?? '')
-                : t.fixSituationRequest(card.title, situation.title);
-            if (onPlan) onPlan(request);
-            else void start('change', { node: nodeOf(cardId), request });
-          }}
-          onSetActor={(flowIds, actor) =>
-            flowIds.length && setActor.mutate({ cwd, flowIds: flowIds as [string, ...string[]], actor })
-          }
-        />
+            onFix={(targets) => {
+              const cardId = targets[0]?.cardId;
+              const card = cardId ? map.cards[cardId] : undefined;
+              if (!card) return;
+              const broken = targets
+                .filter((target) => target.cardId === cardId)
+                .map((target) => card.promises.find((promise) => promise.id === target.promiseId)?.then)
+                .filter(Boolean)
+                .join(' / ');
+              void start('change', { node: nodeOf(card.id), request: t.fixRequest(card.title, broken) });
+            }}
+            onAddPromise={(cardId, when, then) =>
+              !readOnly &&
+              edit.mutate({
+                cwd,
+                nodeId: cardId,
+                field: 'promise',
+                conditionId: null,
+                // Either part may be left empty; only both together read "when, then".
+                value: when.trim() && then.trim() ? `${when.trim()}, ${then.trim()}` : when.trim() || then.trim(),
+              })
+            }
+            onRemovePromise={({ cardId, promiseId }) => {
+              if (readOnly) return;
+              const text = map.cards[cardId]?.promises.find((promise) => promise.id === promiseId)?.then ?? '';
+              removed.current = { cardId, text };
+              edit.mutate({ cwd, nodeId: cardId, field: 'promise', conditionId: promiseId, value: '' });
+            }}
+            onUndoRemove={() => {
+              const last = removed.current;
+              removed.current = null;
+              if (last?.text)
+                edit.mutate({ cwd, nodeId: last.cardId, field: 'promise', conditionId: null, value: last.text });
+            }}
+            onAddJourney={(_, title, goal) =>
+              onPlan
+                ? onPlan(t.planJourneyRequest(title, goal))
+                : void start('extend', { request: t.addJourneyRequest(title, goal) })
+            }
+            onFindSteps={(journeyId) => {
+              const journey = map.people.flatMap((person) => person.journeys).find((item) => item.id === journeyId);
+              const title = journey?.title.ko ?? journeyId;
+              if (onPlan) onPlan(t.planStepsRequest(title));
+              else void start('extend', { flowId: journeyId, request: t.findStepsRequest(title) });
+            }}
+            onAddPerson={(name) =>
+              onPlan ? onPlan(t.planPersonRequest(name)) : void start('reshape', { request: t.addPersonRequest(name) })
+            }
+            // A map from a newer Alpine is read only: no decisions to write (the decision chips are not shown).
+            onDecide={
+              readOnly ? undefined : (cardId, field, value) => decide.mutate({ cwd, nodeId: cardId, field, value })
+            }
+            onOpenSession={onSession}
+            onSituation={(cardId, situationId, act) => {
+              const card = map.cards[cardId];
+              const situation = card?.states?.find((one) => one.id === situationId);
+              if (!card || !situation || readOnly) return;
+              if (act === 'drop') {
+                edit.mutate({ cwd, nodeId: cardId, field: 'state', conditionId: situationId, value: '' });
+                return;
+              }
+              const request =
+                act === 'make'
+                  ? t.makeSituationRequest(card.title, situation.title, situation.why ?? '')
+                  : t.fixSituationRequest(card.title, situation.title);
+              if (onPlan) onPlan(request);
+              else void start('change', { node: nodeOf(cardId), request });
+            }}
+            onSetActor={(flowIds, actor) =>
+              flowIds.length && setActor.mutate({ cwd, flowIds: flowIds as [string, ...string[]], actor })
+            }
+          />
+        </div>
       </div>
     </LiveAppProvider>
   );

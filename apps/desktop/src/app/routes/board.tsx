@@ -7,11 +7,12 @@ import { useState, type ReactNode } from 'react';
 import { useAppPeople, useHasApp } from '@/app/appScreens';
 import { MoreMenu } from '@/app/MoreMenu';
 import { shellMessages } from '@/app/shellMessages';
+import { ProjectCode } from '@/app/ProjectCode';
 import { MapTopBar, StartTopBar } from '@/app/ShellTopBar';
 import { UpdateButton } from '@/app/TopBar';
 import { CHANGES_TAB, SUMMARY_TAB, useProjectTools } from '@/app/WorkspaceDock';
 import { AppView } from '@/features/app-view/AppView';
-import { showApp, useAppCard, useLookingAt, useProjectView } from '@/features/app-view/state';
+import { showApp, showMap, useAppCard, useLookingAt, useProjectView } from '@/features/app-view/state';
 import { messages as serverMessages } from '@/features/development-servers/messages';
 import { messages as dockMessages } from '@/features/dock/messages';
 import { showDockTab, useDockTab } from '@/features/dock/state';
@@ -46,8 +47,8 @@ function renderRecord(items: Item[]) {
 }
 
 /**
- * A project's window (flow-spec, 화면의 뼈대): the bar over the left (the project menu, 지도 | 앱, the map's actions),
- * the map or the app under it, and on the right the conversation, where a developer tool from ⋯ opens in its place with
+ * A project's window (flow-spec, 화면의 뼈대): the bar over the left (the project menu, 보드 · 문서 · 앱 · 코드, the
+ * map's actions), the board, its document, the app or the code under it, and on the right the conversation, where a developer tool from ⋯ opens in its place with
  * ← 대화 back. Everything said to the map sits under the conversation (map-first 43).
  */
 function BoardRoute() {
@@ -84,7 +85,11 @@ function BoardRoute() {
   const unbuilt = !!board?.planned && planPhase(board, false, false) !== 'built';
   const publishable = usePublishable(cwd, cloud && !!project && !unbuilt);
   const hasApp = useHasApp(cwd);
-  const showingApp = useProjectView(cwd) === 'app' && hasApp;
+  const view = useProjectView(cwd);
+  const showingApp = view === 'app' && hasApp;
+  // The code tab covers the map like the app does; the document is the map itself, read another way.
+  const showingCode = view === 'code';
+  const mapCovered = showingApp || showingCode;
   const cardId = useAppCard(cwd);
   const looking = useLookingAt(cwd);
   const people = useAppPeople(cwd, project?.name ?? '');
@@ -235,9 +240,9 @@ function BoardRoute() {
           <div className="relative min-h-0 grow overflow-clip">
             {/* The map stays mounted under the app, so going back finds it where it was. */}
             <div
-              className={clsx('absolute inset-0 flex min-w-0', showingApp && 'invisible')}
-              aria-hidden={showingApp}
-              inert={showingApp}
+              className={clsx('absolute inset-0 flex min-w-0', mapCovered && 'invisible')}
+              aria-hidden={mapCovered}
+              inert={mapCovered}
             >
               <ProductMap
                 key={cwd}
@@ -245,7 +250,9 @@ function BoardRoute() {
                 sessionId={session ?? null}
                 dockOpen
                 menuInWindow
-                hidden={showingApp}
+                hidden={mapCovered}
+                view={view === 'doc' ? 'doc' : 'board'}
+                onShowBoard={() => showMap(cwd)}
                 talkSlot={talkSlot}
                 onShowTalk={() => showDockTab(SUMMARY_TAB)}
                 demo={!('__TAURI_INTERNALS__' in window)}
@@ -268,6 +275,11 @@ function BoardRoute() {
                 }
               />
             </div>
+            {showingCode && (
+              <div className="absolute inset-0 flex min-w-0">
+                <ProjectCode key={cwd} cwd={cwd} />
+              </div>
+            )}
             {showingApp && (
               <div className="absolute inset-0 flex min-w-0">
                 <AppView

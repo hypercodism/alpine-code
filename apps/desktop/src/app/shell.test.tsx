@@ -25,7 +25,8 @@ import { routeTree } from './routeTree.gen';
 
 /**
  * The window around the map without the rail (flow-spec, 화면의 뼈대): the project's name ⌄, ⋯ with the developer
- * tools in the conversation's place, 지도 | 앱 once there is an app, and the app view beside its screens.
+ * tools in the conversation's place, the tabs 보드 · 문서 · 앱 · 코드 (앱 once there is an app), and the app view beside
+ * its screens.
  */
 
 vi.mock('@/features/terminal/TerminalScreen', () => ({
@@ -218,24 +219,132 @@ describe('⋯ beside the conversation', () => {
   });
 });
 
-describe('지도 | 앱', () => {
-  it.each([['asking'], ['building']] as const)('is not there while the plan is %s', async (moment) => {
+const TABS = '보드, 문서, 앱, 코드';
+
+/** The project's files, for the 코드 tab. */
+const files: Script = {
+  results: {
+    'files/list': () => ({ entries: [{ name: 'src', path: 'src', kind: 'directory' }], nextOffset: 1, hasMore: false }),
+    'files/read': ({ path }) => ({
+      path: `${app}/${path}`,
+      relativePath: path,
+      content: 'export function Write() {}',
+      startLine: 1,
+      totalLines: 1,
+      line: 1,
+      truncated: false,
+    }),
+  },
+};
+
+describe('보드 · 문서 · 앱 · 코드', () => {
+  it.each([['asking'], ['building']] as const)('are there while the plan is %s, without 앱', async (moment) => {
     mount('/board' + q(app), { moment });
-    await screen.findByRole('main', { name: '제품 지도' });
-    expect(screen.queryByRole('group', { name: '지도와 앱' })).toBeNull();
+    const tabs = await screen.findByRole('group', { name: TABS });
+    expect(
+      within(tabs)
+        .getAllByRole('button')
+        .map((tab) => tab.textContent),
+    ).toEqual(['보드', '문서', '코드']);
   });
 
-  it('shows once the plan is built, and 앱 puts the app where the map was, which stays for coming back', async () => {
+  it('shows 앱 once the plan is built, which puts the app where the map was, and the map stays for coming back', async () => {
     mount('/board' + q(app), { extra: running });
-    const toggle = await screen.findByRole('group', { name: '지도와 앱' });
+    const toggle = await screen.findByRole('group', { name: TABS });
     fireEvent.click(within(toggle).getByRole('button', { name: '앱' }));
     expect((await frame()).src).toBe('http://localhost:5173/');
     expect(screen.getByText('앱이 열려 있어요 · 이 컴퓨터에서만 보여요')).toBeTruthy();
-    // The map is still there, out of sight, for 지도.
+    // The map is still there, out of sight, for 보드.
     expect(screen.getByRole('main', { name: '제품 지도', hidden: true })).toBeTruthy();
-    fireEvent.click(within(toggle).getByRole('button', { name: '지도' }));
+    fireEvent.click(within(toggle).getByRole('button', { name: '보드' }));
     expect(screen.queryByTitle('alpine-code 앱')).toBeNull();
     expect(screen.getByRole('main', { name: '제품 지도' })).toBeTruthy();
+  });
+
+  it('reads the board as a planning document: people, journeys with their screens, promises, decisions', async () => {
+    mount('/board' + q(app));
+    fireEvent.click(within(await screen.findByRole('group', { name: TABS })).getByRole('button', { name: '문서' }));
+    const doc = await screen.findByRole('article', { name: '문서' });
+    expect(within(doc).getByRole('heading', { name: '누가 쓰나요' })).toBeTruthy();
+    expect(within(doc).getByRole('heading', { name: '글 찾아 읽기' })).toBeTruthy();
+    expect(within(doc).getByRole('heading', { name: '글 써서 올리기' })).toBeTruthy();
+    // Every promise, each with the screen it is on and how it stands.
+    expect(within(doc).getByRole('heading', { name: '약속 9개' })).toBeTruthy();
+    const promise = within(doc).getByText('마크다운으로 쓰면 바로 미리 보여요').closest('li')!;
+    expect(promise.textContent).toContain('글 쓰기');
+    expect(promise.textContent).toContain('통과');
+    // What was decided, and by whom.
+    expect(within(doc).getByRole('heading', { name: '결정 2개' })).toBeTruthy();
+    expect(within(doc).getByText('같이 지워요').closest('li')!.textContent).toContain('AI가 정함');
+    // The contents lead to each part.
+    const contents = screen.getByRole('navigation', { name: '목차' });
+    expect(within(contents).getByRole('button', { name: '글 써서 올리기' })).toBeTruthy();
+  });
+
+  it('opens a screen pressed in the document on the board', async () => {
+    mount('/board' + q(app));
+    const tabs = await screen.findByRole('group', { name: TABS });
+    fireEvent.click(within(tabs).getByRole('button', { name: '문서' }));
+    fireEvent.click(await screen.findByRole('button', { name: '글 쓰기 보드에서 보기' }));
+    // The card opens over the board (the window behind it is out of reach while it is open).
+    const card = await screen.findByRole('dialog');
+    expect(within(card).getByRole('heading', { name: '글 쓰기' })).toBeTruthy();
+    expect(within(tabs).getByRole('button', { name: '보드', pressed: true, hidden: true })).toBeTruthy();
+    expect(screen.queryByRole('article', { name: '문서', hidden: true })).toBeNull();
+  });
+
+  it('lists what is still to decide while the plan is asking', async () => {
+    mount('/board' + q(app), { moment: 'asking' });
+    fireEvent.click(within(await screen.findByRole('group', { name: TABS })).getByRole('button', { name: '문서' }));
+    const doc = await screen.findByRole('article', { name: '문서' });
+    expect(within(doc).getByRole('heading', { name: '정할 것 2개' })).toBeTruthy();
+    expect(within(doc).getByText('댓글을 받을까요')).toBeTruthy();
+  });
+
+  it('shows the code by screen, and opens a file there without leaving the conversation', async () => {
+    const { request } = mount('/board' + q(app), { extra: files });
+    fireEvent.click(within(await screen.findByRole('group', { name: TABS })).getByRole('button', { name: '코드' }));
+    const list = await screen.findByRole('navigation', { name: '화면별 파일' });
+    const writing = within(list).getByRole('region', { name: '글 써서 올리기' });
+    expect(within(writing).getByText('글 쓰기')).toBeTruthy();
+    fireEvent.click(within(writing).getByRole('button', { name: /write\.tsx/ }));
+    expect(await screen.findByText('export function Write() {}')).toBeTruthy();
+    expect(request).toHaveBeenCalledWith('files/read', expect.objectContaining({ path: 'src/routes/write.tsx' }));
+    // The conversation stays beside it: no developer tool took its place.
+    expect(within(await side()).getByRole('textbox', { name: '지도에 부탁하기' })).toBeTruthy();
+    // 모든 파일 shows the whole tree.
+    fireEvent.click(within(list).getByRole('button', { name: '모든 파일' }));
+    expect(await screen.findByRole('tree')).toBeTruthy();
+  });
+});
+
+describe('the 코드 tab', () => {
+  it('lists a file several screens name once, above them, and under each screen only its own', async () => {
+    const own: Record<string, string[]> = {
+      list: ['src/App.tsx', 'src/routes/index.tsx'],
+      read: ['src/App.tsx', 'src/routes/post.tsx'],
+      write: ['src/App.tsx'],
+    };
+    mount('/board' + q(app), {
+      extra: files,
+      board: (b) => ({
+        ...b,
+        document: {
+          ...b.document,
+          nodes: (b.document?.nodes ?? []).map((node) => (own[node.id] ? { ...node, sources: own[node.id] } : node)),
+        },
+      }),
+    });
+    fireEvent.click(within(await screen.findByRole('group', { name: TABS })).getByRole('button', { name: '코드' }));
+    const list = await screen.findByRole('navigation', { name: '화면별 파일' });
+    const shared = within(list).getByRole('region', { name: '여러 화면이 함께 쓰는 파일' });
+    expect(within(shared).getByRole('button', { name: /App\.tsx/ }).textContent).toContain('화면 3개');
+    const reading = within(list).getByRole('region', { name: '글 찾아 읽기' });
+    expect(within(reading).queryByRole('button', { name: /App\.tsx/ })).toBeNull();
+    expect(within(reading).getByRole('button', { name: /post\.tsx/ })).toBeTruthy();
+    expect(
+      within(within(list).getByRole('region', { name: '글 써서 올리기' })).getByText('함께 쓰는 파일만 써요'),
+    ).toBeTruthy();
   });
 });
 
@@ -254,7 +363,7 @@ describe('the app view', () => {
     expect(within(strip).getByText('마크다운으로 쓰면 바로 미리 보여요')).toBeTruthy();
     expect(within(await side()).getByText('글 쓰기 화면을 보면서 말하는 중')).toBeTruthy();
     // The map's 앱에서 보기 goes through the same place (showApp with the card).
-    fireEvent.click(screen.getByRole('button', { name: '지도' }));
+    fireEvent.click(screen.getByRole('button', { name: '보드' }));
     act(() => showApp(app, 'read'));
     await waitFor(async () => expect((await frame()).src).toBe('http://localhost:5173/posts/d1-batch'));
   });
