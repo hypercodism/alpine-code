@@ -36,6 +36,14 @@ export interface AppScreen {
   howToTry: string;
   /** Its picture on the map is a capture of the running app. */
   real: boolean;
+  /** The situations the app can show it in (`?alpine-state=<id>`), besides the ordinary one. */
+  situations?: AppSituation[];
+}
+
+/** A situation of a screen the running app handles, in the person's words ("빵이 하나도 없을 때"). */
+export interface AppSituation {
+  id: string;
+  title: string;
 }
 
 export interface AppJourney {
@@ -75,11 +83,16 @@ const avatars = [
   'bg-avatar-5 text-avatar-5-ink',
 ];
 
-/** The page address of a screen in the running app. Only a web address takes a path; anything else stays itself. */
-export function screenUrl(base: string, path: string | null): string {
-  if (!path || !/^https?:/.test(base)) return base;
+/**
+ * The page address of a screen in the running app, in a situation when one is given (`?alpine-state=`, which the apps
+ * read). Only a web address takes a path; anything else stays itself.
+ */
+export function screenUrl(base: string, path: string | null, state: string | null = null): string {
+  if ((!path && !state) || !/^https?:/.test(base)) return base;
   try {
-    return new URL(path, base).toString();
+    const url = new URL(path ?? '', base);
+    if (state) url.searchParams.set('alpine-state', state);
+    return url.toString();
   } catch {
     return base;
   }
@@ -146,7 +159,14 @@ export function AppView({
   }, [cwd, settled]);
   const picked = useAppSize(cwd);
   const size: AppSize = picked ?? shown?.journey.device ?? 'computer';
-  const url = app.url ? screenUrl(app.url, shown?.screen.path ?? null) : null;
+  // The situation picked belongs to the screen it was picked on; another screen starts in its ordinary one.
+  const [pickedSituation, setSituation] = useState<{ screen: string; id: string } | null>(null);
+  const situation =
+    pickedSituation?.screen === shown?.screen.id &&
+    shown?.screen.situations?.some((one) => one.id === pickedSituation?.id)
+      ? pickedSituation!.id
+      : null;
+  const url = app.url ? screenUrl(app.url, shown?.screen.path ?? null, situation) : null;
 
   if (mobile.data)
     return (
@@ -259,7 +279,14 @@ export function AppView({
             </div>
           )}
         </div>
-        <ScreenStrip people={people} shown={shown} cardId={cardId} onPick={onPick} />
+        <ScreenStrip
+          people={people}
+          shown={shown}
+          cardId={cardId}
+          onPick={onPick}
+          situation={situation}
+          onSituation={(id) => shown && setSituation(id ? { screen: shown.screen.id, id } : null)}
+        />
       </div>
     </section>
   );
@@ -342,17 +369,38 @@ function SizeButton({
   );
 }
 
+function SituationButton({ on, onClick, children }: { on: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      onClick={onClick}
+      className={clsx(
+        'min-h-6 cursor-pointer rounded-md px-2 py-0.5 text-left text-meta',
+        on ? 'bg-selected font-medium text-fg' : 'bg-hover text-fg-muted hover:text-fg',
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
 /** The strip beside the app: the screen on view, then every other screen, grouped by person and journey. */
 function ScreenStrip({
   people,
   shown,
   cardId,
   onPick,
+  situation,
+  onSituation,
 }: {
   people: AppPerson[];
   shown: { screen: AppScreen; person: AppPerson; journey: AppJourney } | undefined;
   cardId: string | null;
   onPick: (cardId: string) => void;
+  /** The situation the app is shown in; null is the ordinary one. */
+  situation: string | null;
+  onSituation: (id: string | null) => void;
 }) {
   const t = useMessages(messages);
   const deviceWord = (device: AppSize | null) => (device === 'computer' ? t.computer : t.phone);
@@ -381,6 +429,21 @@ function ScreenStrip({
               </p>
             )
           )}
+          {!!shown.screen.situations?.length && (
+            <div role="group" aria-label={t.situations} className="mt-3 flex flex-col gap-1">
+              <p className="text-meta text-fg-muted">{t.situations}</p>
+              <div className="flex flex-wrap gap-1">
+                <SituationButton on={situation === null} onClick={() => onSituation(null)}>
+                  {t.usual}
+                </SituationButton>
+                {shown.screen.situations.map((item) => (
+                  <SituationButton key={item.id} on={situation === item.id} onClick={() => onSituation(item.id)}>
+                    {item.title}
+                  </SituationButton>
+                ))}
+              </div>
+            </div>
+          )}
           <ul aria-label={shown.screen.title} className="mt-3 flex flex-col gap-1.5">
             {shown.screen.promises.map((promise) => (
               <li
@@ -398,7 +461,7 @@ function ScreenStrip({
                         : 'text-fg-faint',
                   )}
                 >
-                  {promise.status === 'failed' ? '✗' : promise.status === 'passed' ? '✓' : '·'}
+                  {promise.status === 'failed' ? '✗' : promise.status === 'passed' ? '✓' : '○'}
                 </span>
                 <span>
                   {promise.text}
