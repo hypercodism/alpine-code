@@ -1,7 +1,7 @@
 import { LinkButton } from '@alpine/ui/primitives';
 import clsx from 'clsx';
 import { Play, Plus } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { useMessages } from '@/shared/i18n';
 
@@ -10,7 +10,8 @@ import { flowTreeMessages } from './flowTreeMessages';
 import { FlowPlayer } from './FlowPlayer';
 import { ScreenFace } from './screenFace';
 import { BOARD, layoutBoard, route, type BoardEdge, type BoardLayout, type BoardNode, type Point } from './boardLayout';
-import { deviceOf, devicesOf, journeyCounts, personCounts } from './filmstripModel';
+import { useBoardDevice } from './boardDevice';
+import { devicesOf, journeyCounts, personCounts } from './filmstripModel';
 import { CardDialog, type FlowTreeProps, type Focus } from './FlowTree';
 import {
   missingButtons,
@@ -91,8 +92,7 @@ export function Filmstrip(props: FilmstripProps) {
   const [target, setTarget] = useState<{ cardId?: string; journeyId?: string; at: number } | null>(null);
   const wall = useRef<HTMLDivElement>(null);
   const zoom = useWallZoom(wall);
-  const wide = useWideScreens(map);
-  const device = useCallback((journey: Journey) => deviceOf(journey, map, wide), [map, wide]);
+  const device = useBoardDevice(map);
   const fresh = useJustBuilt(map);
 
   const where = (cardId: string) => {
@@ -1001,43 +1001,6 @@ function ZoomControls({ zoom }: { zoom: ReturnType<typeof useWallZoom> }) {
 }
 
 // ---------------------------------------------------------------- facts the strip learns as it shows them
-
-/** Whether each picture (capture or sketch) is wider than tall, once it has loaded; unknown until then. */
-function useWideScreens(map: TreeMap) {
-  const [shapes, setShapes] = useState<Record<string, boolean>>({});
-  const sources = useMemo(
-    () =>
-      [
-        ...new Set(
-          map.people
-            .flatMap((person) => person.journeys)
-            .filter((journey) => !journey.device)
-            .flatMap((journey) => journey.steps)
-            .map((id) => map.cards[id]?.screen)
-            .filter((screen) => !!screen && screen.kind !== 'planned')
-            .map((screen) => screen!.src),
-        ),
-      ].join('\n'),
-    [map],
-  );
-  useEffect(() => {
-    let live = true;
-    for (const src of sources.split('\n').filter(Boolean)) {
-      const image = new Image();
-      image.onload = () =>
-        live &&
-        image.naturalWidth > 0 &&
-        setShapes((current) =>
-          src in current ? current : { ...current, [src]: image.naturalWidth > image.naturalHeight },
-        );
-      image.src = src;
-    }
-    return () => {
-      live = false;
-    };
-  }, [sources]);
-  return (src: string): boolean | undefined => shapes[src];
-}
 
 /** Cards that turned built while the strip was on screen, for a few seconds ("방금 실제 화면으로"). */
 function useJustBuilt(map: TreeMap) {
