@@ -12,6 +12,7 @@ import { flowTreeMessages } from './flowTreeMessages';
 import {
   hasScreenArea,
   isJourneyLink,
+  STATUS_ORDER,
   type Journey,
   type PromiseStatus,
   type TreeCard,
@@ -60,11 +61,28 @@ export function MapDocument({
     .sort((a, b) => a.rowY - b.rowY || a.x - b.x)
     .map((node) => map.cards[node.id])
     .filter((card): card is TreeCard => !!card);
-  const promises = ordered.flatMap((card) => card.promises.map((promise) => ({ card, promise })));
-  const decisions = ordered.flatMap((card) => [
-    ...(card.decision ? [{ card, answer: card.decision, question: '', by: 'person' as const }] : []),
-    ...(card.picks ?? []).map((pick) => ({ card, answer: pick.answer, question: pick.question, by: pick.by })),
-  ]);
+  // Worst first (broken, then to check again, … confirmed last); the board's order holds within each status.
+  const promises = ordered
+    .flatMap((card) => card.promises.map((promise) => ({ card, promise })))
+    .sort((a, b) => STATUS_ORDER.indexOf(a.promise.status) - STATUS_ORDER.indexOf(b.promise.status));
+  const statuses = STATUS_ORDER.map((status) => ({
+    status,
+    count: promises.filter((one) => one.promise.status === status).length,
+  })).filter((one) => one.count > 0);
+  // A decision several screens carry (the same answer to the same question) is listed once, naming each of its screens.
+  const decisions: { answer: string; question: string; by: 'person' | 'ai'; cards: TreeCard[] }[] = [];
+  for (const card of ordered)
+    for (const found of [
+      ...(card.decision ? [{ answer: card.decision, question: '', by: 'person' as const }] : []),
+      ...(card.picks ?? []).map((pick) => ({ answer: pick.answer, question: pick.question, by: pick.by })),
+    ]) {
+      const same = decisions.find(
+        (decision) =>
+          decision.answer === found.answer && decision.question === found.question && decision.by === found.by,
+      );
+      if (!same) decisions.push({ ...found, cards: [card] });
+      else if (!same.cards.includes(card)) same.cards.push(card);
+    }
   const screens = ordered.filter((card) => hasScreenArea(card)).length;
   const journeys = people.flatMap((person) => person.journeys.filter((journey) => journey.steps.length));
   const journeyTitle = (id: string) => journeys.find((journey) => journey.id === id)?.title;
@@ -147,6 +165,16 @@ export function MapDocument({
               <span className="rounded-full bg-selected px-2 py-0.5 text-interactive">{t.sameAsBoard}</span>
               {t.counts(screens, promises.length)}
             </p>
+            {(statuses.length > 0 || undecided.length > 0) && (
+              <p aria-label={t.status} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-body">
+                {statuses.map(({ status, count }) => (
+                  <span key={status} className={markTone(status)}>
+                    {mark(status)} {words[status]} {count}
+                  </span>
+                ))}
+                {undecided.length > 0 && <span className="text-fg-muted">{t.undecided(undecided.length)}</span>}
+              </p>
+            )}
           </header>
 
           <section data-doc="people" className="flex flex-col gap-4">
@@ -265,13 +293,14 @@ export function MapDocument({
               <ul className="flex flex-col gap-2">
                 {decisions.map((decision, index) => (
                   <li
-                    key={`${decision.card.id}-${index}`}
+                    key={index}
                     className="flex flex-col gap-0.5 rounded-lg border border-line bg-canvas-raised px-4 py-3"
                   >
                     <span className="text-body">{decision.answer}</span>
                     <span className="text-meta text-fg-muted">
                       {decision.question && `${decision.question} · `}
-                      {decision.card.title} · {decision.by === 'ai' ? t.byAi : t.byPerson}
+                      {decision.cards.map((card) => card.title).join(' · ')} ·{' '}
+                      {decision.by === 'ai' ? t.byAi : t.byPerson}
                     </span>
                   </li>
                 ))}

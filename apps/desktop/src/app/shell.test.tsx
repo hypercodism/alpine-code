@@ -285,6 +285,7 @@ describe('보드 · 문서 · 앱 · 코드', () => {
     mount('/board' + q(app));
     const tabs = await screen.findByRole('group', { name: TABS });
     fireEvent.click(within(tabs).getByRole('button', { name: '문서' }));
+    expect(within(tabs).getByRole('button', { name: '문서', pressed: true })).toBeTruthy();
     fireEvent.click(await screen.findByRole('button', { name: '글 쓰기 보드에서 보기' }));
     // The card opens over the board (the window behind it is out of reach while it is open).
     const card = await screen.findByRole('dialog');
