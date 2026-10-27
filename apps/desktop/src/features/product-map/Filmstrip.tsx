@@ -57,6 +57,10 @@ export interface FilmstripProps extends FlowTreeProps {
   planned?: boolean;
   /** The card being built now: it rises over a night sky with snow falling, and its row comes into view. */
   making?: string | null;
+  /** The board's own tools beside the flows list, over its top left (the bar above is the whole product's). */
+  tools?: ReactNode;
+  /** The board's own tools over its top right: what to look at, the size screens are drawn at. */
+  corner?: ReactNode;
 }
 
 /** The frames are pictures of a phone and a browser window, drawn to their own measure rather than the app's. */
@@ -194,7 +198,16 @@ export function Filmstrip(props: FilmstripProps) {
           </div>
         </WallZoom.Provider>
       </div>
-      <FlowsPanel strip={strip} board={board} undecided={props.undecided ?? []} />
+      {/* The board's tools float over it, so the bar above holds only what is the whole product's. */}
+      <div className="pointer-events-none absolute top-3 left-3 z-10 flex max-h-[calc(100%-24px)] items-start gap-2 *:pointer-events-auto">
+        <FlowsPanel strip={strip} board={board} undecided={props.undecided ?? []} />
+        {props.tools}
+      </div>
+      {props.corner && (
+        <div className="pointer-events-none absolute top-3 right-3 z-10 flex items-center gap-2 *:pointer-events-auto">
+          {props.corner}
+        </div>
+      )}
       {playing && (
         <FlowPlayer
           map={map}
@@ -1004,7 +1017,7 @@ function FlowsPanel({ strip, board, undecided }: { strip: Strip; board: BoardLay
         type="button"
         aria-expanded={false}
         onClick={() => setOpen(true)}
-        className="absolute top-3 left-3 z-10 flex cursor-pointer items-center gap-2 rounded-lg border border-line bg-canvas-raised px-3 py-1 text-meta text-fg-muted shadow-overlay hover:text-fg"
+        className="flex h-8 shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-line bg-canvas-raised px-3 text-meta text-fg-muted shadow-overlay hover:text-fg"
       >
         <span className="text-fg">{t.flows}</span>
         <span className="tabular-nums">{t.flowsFolded(journeys, screens)}</span>
@@ -1020,7 +1033,7 @@ function FlowsPanel({ strip, board, undecided }: { strip: Strip; board: BoardLay
   return (
     <nav
       aria-label={t.flows}
-      className="absolute top-3 left-3 z-10 flex max-h-[calc(100%-24px)] w-88 flex-col gap-4 overflow-y-auto rounded-xl border border-line bg-canvas-raised p-4 text-body shadow-overlay"
+      className="flex max-h-full w-88 shrink-0 flex-col gap-4 overflow-y-auto rounded-xl border border-line bg-canvas-raised p-4 text-body shadow-overlay"
     >
       <p className="flex items-center justify-between text-meta text-fg-muted">
         <span>

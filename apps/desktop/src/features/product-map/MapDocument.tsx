@@ -5,6 +5,7 @@ import { useMessages } from '@/shared/i18n';
 
 import { useBoardDevice, useJourneyDevice } from './boardDevice';
 import { layoutBoard } from './boardLayout';
+import { BoardSizeSwitch } from './BoardSizeSwitch';
 import { DocExport } from './DocExport';
 import { docMessages as messages } from './docMessages';
 import { mark, readDocument } from './docModel';
@@ -124,7 +125,11 @@ export function MapDocument({
           <header className="flex flex-col gap-3">
             <div className="flex items-start justify-between gap-4">
               <h1 className="text-display font-medium">{map.product}</h1>
-              <DocExport map={map} doc={doc} layout={layout} undecided={undecided} device={device} uses={uses} />
+              {/* The size the screens are drawn at, the board's own: it is the same map, read another way. */}
+              <span className="flex shrink-0 items-center gap-2">
+                <BoardSizeSwitch map={map} />
+                <DocExport map={map} doc={doc} layout={layout} undecided={undecided} device={device} uses={uses} />
+              </span>
             </div>
             <p className="flex flex-wrap items-center gap-2 text-meta text-fg-muted">
               <span className="rounded-full bg-selected px-2 py-0.5 text-interactive">{t.sameAsBoard}</span>

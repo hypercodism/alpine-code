@@ -430,12 +430,15 @@ describe('the top row', () => {
     expect(dimmed(await stepCard('주문 결과 받기'))).toBe(false);
     expect(dimmed(await stepCard('장바구니'))).toBe(true);
   });
-  it('a status chip lights its cards and lets go when pressed again; one at a time', async () => {
+  it('a choice of what to look at lights its screens and lets go when pressed again; one at a time', async () => {
     mount();
     await loaded();
-    const again = screen.getByRole('button', { name: '다시 확인 1' });
-    const failed = screen.getByRole('button', { name: '실패 1' });
-    expect(screen.getByRole('button', { name: '바뀐 카드 2' })).toBeTruthy();
+    const all = screen.getByRole('button', { name: '모두' });
+    const again = screen.getByRole('button', { name: '다시 확인할 화면 1' });
+    const failed = screen.getByRole('button', { name: '깨진 화면 1' });
+    // A promise waiting or broken is its own choice, not a change.
+    expect(screen.queryByRole('button', { name: /^바뀐 화면 \d/ })).toBeNull();
+    expect(all.getAttribute('aria-pressed')).toBe('true');
     expect(again.getAttribute('aria-pressed')).toBe('false');
     fireEvent.click(again);
     expect(again.getAttribute('aria-pressed')).toBe('true');
@@ -452,18 +455,18 @@ describe('the top row', () => {
     expect(dimmed(await stepCard('주문 결과 받기'))).toBe(true);
     fireEvent.click(failed);
     expect(failed.getAttribute('aria-pressed')).toBe('false');
+    expect(all.getAttribute('aria-pressed')).toBe('true');
     expect(allSteps().some(dimmed)).toBe(false);
   });
-  it('shows no status chip for a status nothing has', async () => {
+  it('shows no choice of what to look at when nothing wants a look', async () => {
     mount(
       withBoard((board) => {
         board.states = {};
       }),
     );
     await loaded();
-    expect(screen.queryByRole('button', { name: /^실패 \d/ })).toBeNull();
-    expect(screen.queryByRole('button', { name: /^다시 확인 \d/ })).toBeNull();
-    expect(screen.queryByRole('button', { name: /^바뀐 카드 \d/ })).toBeNull();
+    expect(screen.queryByRole('group', { name: '보기' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '모두' })).toBeNull();
   });
   it('counts changes since the last visit and opens them in a side panel', async () => {
     localStorage.setItem(`alpine:product-map:seen:${cwd}`, '2026-10-01T00:00:00Z');

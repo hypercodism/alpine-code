@@ -415,7 +415,7 @@ describe('a plan stays quiet until it is built', () => {
     expect(screen.queryByText('보드에 아직 담기지 않은 코드')).toBeNull();
   });
 
-  it('shows no 바뀐 카드 while it is being built: every card is the AI changing it', async () => {
+  it('shows no 바뀐 화면 while it is being built: every card is the AI changing it', async () => {
     mount(
       'building',
       {},
@@ -434,7 +434,7 @@ describe('a plan stays quiet until it is built', () => {
       },
     );
     await screen.findAllByText('만드는 중');
-    expect(screen.queryByText(/^바뀐 카드/)).toBeNull();
+    expect(screen.queryByText(/^바뀐 화면/)).toBeNull();
   });
 });
 

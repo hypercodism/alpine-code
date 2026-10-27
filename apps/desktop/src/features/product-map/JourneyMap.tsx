@@ -45,6 +45,8 @@ export function JourneyMap({
   making = null,
   view = 'board',
   onShowOnBoard,
+  tools,
+  corner,
 }: {
   cwd: string;
   /** `board` read person first (`toTreeMap`). */
@@ -80,6 +82,9 @@ export function JourneyMap({
   view?: 'board' | 'doc';
   /** A screen pressed in the document: the board shows it. */
   onShowOnBoard?: (cardId: string) => void;
+  /** The board's own tools, floating over its top left and top right. */
+  tools?: ReactNode;
+  corner?: ReactNode;
 }) {
   const t = useMessages(flowTreeMessages);
   const edit = useEditFlow();
@@ -123,6 +128,8 @@ export function JourneyMap({
           <Filmstrip
             map={map}
             undecided={board.undecided ?? []}
+            tools={tools}
+            corner={corner}
             planned={planned}
             making={making}
             drawing={drawing}

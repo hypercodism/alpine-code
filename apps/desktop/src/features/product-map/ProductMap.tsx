@@ -1,7 +1,7 @@
 import type { FlowNode, FlowPrepareParams, FlowPrepareResult, MapProblem } from '@alpine/protocol';
 import { Button, Dialog, LinkButton, Popover, SlidingPanel } from '@alpine/ui/primitives';
 import clsx from 'clsx';
-import { Brain, ChevronRight, CircleX, RotateCcw, Search, Sparkles, X } from 'lucide-react';
+import { Brain, ChevronRight, Search, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
@@ -47,14 +47,21 @@ import { REMOVED } from './Conditions';
 import { Coverage } from './Coverage';
 import { noticeRow, recheckIds } from './Focus';
 import { filmMessages } from './filmMessages';
-import { changedCards } from './FlowTree';
 import { toTreeMap } from './flowTreeData';
 import { hasScreenArea } from './flowTreeModel';
 import { flowTreeMessages } from './flowTreeMessages';
 import { JourneyMap } from './JourneyMap';
 import { useMapActionStore, useMapMenuStore } from './mapActions';
 import { Bar, CONNECTION, PlanBar, Working, type PlanTeamAnswer } from './PlanBar';
-import { buildActivity, lastReply, openPromises, pendingQuestion, planPhase, stopReason, TEAM_WORKING } from './planData';
+import {
+  buildActivity,
+  lastReply,
+  openPromises,
+  pendingQuestion,
+  planPhase,
+  stopReason,
+  TEAM_WORKING,
+} from './planData';
 import { mapLookCss, type Device, type PickedLook, wornLook } from './planLook';
 import { planMessages } from './planMessages';
 import { useMapRequest } from './askRequest';
@@ -92,8 +99,9 @@ type Lens = 'failed' | 'recheck' | 'changed' | null;
 const EMPTY_ANYWAY = new Set(['.DS_Store', '.git']);
 
 /**
- * A project's map: the people who use the product and the journeys they walk. One row above it searches the cards,
- * lights what broke, needs a recheck or changed, opens the change history and holds the map's menu; a second row
+ * A project's map: the people who use the product and the journeys they walk. Its own tools float over the board (the
+ * bar above is the whole product's): the flows list and the search on its left; on its right one choice of what to
+ * light (broken, to check again, changed since I looked) and the size screens are drawn at. A row above the board
  * appears only when something wants a look (code not on the map, parts not drawn yet, promises I rewrote, cards the
  * AI removed). Asking the AI about a card happens in the card itself.
  */
@@ -754,7 +762,10 @@ export function ProductMap({
     return {
       failed,
       recheck: again,
-      changed: treeMap ? changedCards(treeMap, seenAt ?? undefined) : new Set<string>(),
+      // Changed means a change since I last looked, not a promise waiting: that is its own choice beside it.
+      changed: new Set(
+        (seenAt ? (treeMap?.recent ?? []).filter((change) => change.at > seenAt) : []).map((change) => change.cardId),
+      ),
     };
   }, [treeMap, seenAt]);
 
@@ -1015,6 +1026,107 @@ export function ProductMap({
   });
   useEffect(() => () => registerMenu(cwd, null), [registerMenu, cwd]);
 
+  // The board's own tools float over it (the bar above is the whole product's): on its left, beside the flows list,
+  // the look being tried and the search (a plan being decided has nothing to search yet); on its right what to look
+  // at, only when something wants a look, and the size the screens are drawn at.
+  const showChanged = lenses.changed.size > 0 && !planning && !building;
+  const boardTools = (
+    <>
+      {/* Every screen wears the look being tried: the map says whose. */}
+      {tryingLook && (
+        <p
+          role="status"
+          className="flex h-8 items-center gap-1.5 rounded-lg border border-line bg-canvas-raised px-3 text-meta text-fg-muted shadow-overlay"
+        >
+          <span aria-hidden="true" className="size-1.5 rounded-full bg-interactive" />
+          {plan.previewingLook(tryingLook.label)}
+        </p>
+      )}
+      {!planning && (
+        <div className="flex items-center gap-2 rounded-lg border border-line bg-canvas-raised pr-2 shadow-overlay has-[input:placeholder-shown]:pr-0">
+          <label className="relative flex w-52 items-center">
+            <span className="sr-only">{t.searchLabel}</span>
+            <Search size={13} className="pointer-events-none absolute left-2.5 text-fg-faint" />
+            <input
+              ref={search}
+              type="search"
+              value={query}
+              placeholder={t.searchPlaceholder}
+              onChange={(event) => {
+                hit.current = -1;
+                setQuery(event.target.value);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  event.stopPropagation();
+                  hit.current = -1;
+                  setQuery('');
+                } else if (event.key === 'Enter' && query.trim()) {
+                  event.preventDefault();
+                  nextHit();
+                }
+              }}
+              className="h-8 w-full min-w-0 rounded-lg bg-transparent pr-2 pl-8 text-body outline-none"
+            />
+          </label>
+          {query.trim() && (
+            <span className="flex items-center gap-2 text-meta whitespace-nowrap text-fg-muted">
+              <span className="tabular-nums">{t.found(hits.length)}</span>
+              {hits.length > 1 && (
+                <LinkButton aria-label={t.nextMatch} onClick={nextHit}>
+                  {t.nextMatchShort}
+                </LinkButton>
+              )}
+              {hits.length > 0 && !planning && (
+                <LinkButton disabled={locked} onClick={verifyFound}>
+                  {t.verifyFound}
+                </LinkButton>
+              )}
+            </span>
+          )}
+        </div>
+      )}
+    </>
+  );
+  const lensShown = lenses.failed.size > 0 || lenses.recheck.size > 0 || showChanged;
+  const boardCorner = treeMap && (
+    <>
+      {memoryWaiting > 0 && onMemory && (
+        <Chip pressed={false} tone="attention" onClick={onMemory}>
+          <Brain size={13} aria-hidden />
+          {t.memoryWaiting(memoryWaiting)}
+        </Chip>
+      )}
+      <ImportLink cwd={cwd} onOpen={openImported} />
+      {/* One choice of what to look at: every screen, or only those that broke, wait for a check or changed. */}
+      {lensShown && (
+        <div role="group" aria-label={t.lensLabel} className="flex gap-0.5 rounded-lg bg-hover p-0.5 shadow-overlay">
+          <LensButton pressed={lens === null} onClick={() => setLens(null)}>
+            {t.lensAll}
+          </LensButton>
+          {lenses.failed.size > 0 && (
+            <LensButton pressed={lens === 'failed'} tone="danger" onClick={() => pick('failed')}>
+              {t.lensFailed(lenses.failed.size)}
+            </LensButton>
+          )}
+          {lenses.recheck.size > 0 && (
+            <LensButton pressed={lens === 'recheck'} tone="attention" onClick={() => pick('recheck')}>
+              {t.lensRecheck(lenses.recheck.size)}
+            </LensButton>
+          )}
+          {/* While a plan is drawn or built every card is the AI's change: only later ones are news. */}
+          {showChanged && (
+            <LensButton pressed={lens === 'changed'} onClick={() => pick('changed')}>
+              {t.lensChanged(lenses.changed.size)}
+            </LensButton>
+          )}
+        </div>
+      )}
+      <BoardSizeSwitch map={treeMap} />
+      {mapMenu}
+    </>
+  );
+
   return (
     <BoardSize.Provider value={boardSize}>
       <main
@@ -1027,91 +1139,6 @@ export function ProductMap({
         {!hasMap && data && (workBusy || data.exists) && mapMenu && (
           <div className="flex min-h-11 shrink-0 items-center gap-2 bg-canvas-sunken px-10 py-1.5">
             <span className="grow" />
-            {mapMenu}
-          </div>
-        )}
-        {/* Over the filmstrip, quiet: the search (a plan being decided has nothing to search yet), what wants a look
-          only when something does, and the map's menu. */}
-        {/* The document reads the whole map: nothing on it to search or light. */}
-        {hasMap && data && view === 'board' && (
-          <div className="flex min-h-11 shrink-0 flex-wrap items-center gap-2 bg-canvas-sunken px-10 py-1.5">
-            {/* Every screen wears the look being tried: the map says whose. */}
-            {tryingLook && (
-              <p role="status" className="flex items-center gap-1.5 text-meta text-fg-muted">
-                <span aria-hidden="true" className="size-1.5 rounded-full bg-interactive" />
-                {plan.previewingLook(tryingLook.label)}
-              </p>
-            )}
-            {!planning && (
-              <label className="relative flex w-52 min-w-36 items-center">
-                <span className="sr-only">{t.searchLabel}</span>
-                <Search size={13} className="pointer-events-none absolute left-2.5 text-fg-faint" />
-                <input
-                  ref={search}
-                  type="search"
-                  value={query}
-                  placeholder={t.searchPlaceholder}
-                  onChange={(event) => {
-                    hit.current = -1;
-                    setQuery(event.target.value);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Escape') {
-                      event.stopPropagation();
-                      hit.current = -1;
-                      setQuery('');
-                    } else if (event.key === 'Enter' && query.trim()) {
-                      event.preventDefault();
-                      nextHit();
-                    }
-                  }}
-                  className="h-8 w-full min-w-0 rounded-lg border border-line bg-canvas-raised pr-2 pl-8 text-body"
-                />
-              </label>
-            )}
-            {query.trim() && (
-              <span className="flex items-center gap-2 text-meta text-fg-muted">
-                <span className="tabular-nums">{t.found(hits.length)}</span>
-                {hits.length > 1 && (
-                  <LinkButton aria-label={t.nextMatch} onClick={nextHit}>
-                    {t.nextMatchShort}
-                  </LinkButton>
-                )}
-                {hits.length > 0 && !planning && (
-                  <LinkButton disabled={locked} onClick={verifyFound}>
-                    {t.verifyFound}
-                  </LinkButton>
-                )}
-              </span>
-            )}
-            <span className="grow" />
-            {treeMap && <BoardSizeSwitch map={treeMap} />}
-            {lenses.failed.size > 0 && (
-              <Chip pressed={lens === 'failed'} tone="danger" onClick={() => pick('failed')}>
-                <CircleX size={13} aria-hidden />
-                {t.lensFailed(lenses.failed.size)}
-              </Chip>
-            )}
-            {lenses.recheck.size > 0 && (
-              <Chip pressed={lens === 'recheck'} tone="attention" onClick={() => pick('recheck')}>
-                <RotateCcw size={13} aria-hidden />
-                {t.lensRecheck(lenses.recheck.size)}
-              </Chip>
-            )}
-            {/* While a plan is drawn or built every card is the AI's change: only later ones are news. */}
-            {lenses.changed.size > 0 && !planning && !building && (
-              <Chip pressed={lens === 'changed'} onClick={() => pick('changed')}>
-                <Sparkles size={13} aria-hidden />
-                {t.lensChanged(lenses.changed.size)}
-              </Chip>
-            )}
-            {memoryWaiting > 0 && onMemory && (
-              <Chip pressed={false} tone="attention" onClick={onMemory}>
-                <Brain size={13} aria-hidden />
-                {t.memoryWaiting(memoryWaiting)}
-              </Chip>
-            )}
-            <ImportLink cwd={cwd} onOpen={openImported} />
             {mapMenu}
           </div>
         )}
@@ -1305,6 +1332,8 @@ export function ProductMap({
               <JourneyMap
                 cwd={cwd}
                 map={treeMap}
+                tools={boardTools}
+                corner={boardCorner}
                 board={data}
                 seenAt={seenAt}
                 start={(action, target) => start(action, target)}
@@ -1611,6 +1640,40 @@ function Chip({
         'inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-2.5 text-meta transition-colors',
         pressed ? 'border-interactive bg-selected text-fg' : 'border-line bg-canvas-raised hover:bg-hover',
         !pressed && (tone === 'danger' ? 'text-danger' : tone === 'attention' ? 'text-attention' : 'text-fg-muted'),
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** One choice of what the board lights, drawn like the size switch beside it: the pressed one is raised. */
+function LensButton({
+  pressed,
+  tone,
+  onClick,
+  children,
+}: {
+  pressed: boolean;
+  tone?: 'danger' | 'attention';
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={pressed}
+      onClick={onClick}
+      className={clsx(
+        'flex h-7 cursor-pointer items-center rounded-md px-2.5 text-meta whitespace-nowrap tabular-nums',
+        pressed ? 'bg-canvas-raised font-medium shadow-overlay' : 'hover:text-fg',
+        tone === 'danger'
+          ? 'text-danger'
+          : tone === 'attention'
+            ? 'text-attention'
+            : pressed
+              ? 'text-fg'
+              : 'text-fg-muted',
       )}
     >
       {children}
