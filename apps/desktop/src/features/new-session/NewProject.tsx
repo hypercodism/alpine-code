@@ -1,5 +1,5 @@
 import type { CloudStatus } from '@alpine/protocol';
-import { AutoHeight, Button, Dialog } from '@alpine/ui/primitives';
+import { AutoHeight, Button, Dialog, LinkButton } from '@alpine/ui/primitives';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
@@ -9,8 +9,10 @@ import { useStore } from 'zustand';
 
 import { AlpineSignIn, NodeInstall, UpgradeSheet } from '@/shared/components/cloud';
 import { AgentChip, Composer, type Mode } from '@/shared/components/composer';
+import { CloneDialog } from '@/shared/components/project-add';
 import { Snowscape } from '@/shared/components/snowscape';
 import { useLocale, useMessages } from '@/shared/i18n';
+import { useOpenFolder } from '@/shared/platform';
 import {
   ServerError,
   cloudKey,
@@ -67,7 +69,8 @@ function failureOf(creating: CreatingStage, error: unknown): CreateFailure {
  * why, and when only the pick fails the usual setup shows with no pick), 만들기 makes the project (`projects/create`:
  * the template in its folder, its web address too when signed in to Alpine) and starts its map conversation planning
  * the idea; then the map opens (`onPlanning`). Existing projects are not started from here: they are their maps
- * (map-first 40). Where it got to is kept for the server connection (`useNewProjectStore`), so leaving and coming back
+ * (map-first 40), and the line under the input only opens one (a folder on this computer) or gets one (a repository),
+ * so 새 프로젝트 is the one way in for both. Where it got to is kept for the server connection (`useNewProjectStore`), so leaving and coming back
  * finds it there, and a making that ended meanwhile says how.
  */
 export function NewProject({
@@ -112,6 +115,9 @@ export function NewProject({
   const [prefill, setPrefill] = useState<{ text: string; key: number } | undefined>();
   // A folder picked for the project that has files in it: not taken, and said why.
   const [filled, setFilled] = useState<string | null>(null);
+  const [getting, setGetting] = useState(false);
+  const showProject = (path: string) => void navigate({ to: '/', search: { project: path } });
+  const openFolder = useOpenFolder(showProject);
 
   const setStage = (next: Stage | null) => store.setState({ stage: next });
   const setFolder = (next: string | null) => store.setState({ folder: next });
@@ -405,9 +411,19 @@ export function NewProject({
               />
             }
           />
+          {!stage && (
+            // Over the snow scene, so on its own ground to be read.
+            <p className="mx-auto mt-3 flex w-fit flex-wrap items-center justify-center gap-x-1 rounded-full bg-canvas-raised/85 px-3 text-meta text-fg-muted backdrop-blur-sm">
+              {t.existingLead}
+              <LinkButton onClick={() => void openFolder()}>{t.openExisting}</LinkButton>
+              <span aria-hidden="true">·</span>
+              <LinkButton onClick={() => setGetting(true)}>{t.getExisting}</LinkButton>
+            </p>
+          )}
         </div>
         <div className="grow basis-0" />
       </div>
+      <CloneDialog open={getting} onOpenChange={setGetting} onDone={showProject} />
       <Dialog.Root open={gate?.kind === 'sign-in'} onOpenChange={(open) => !open && setGate(null)}>
         <Dialog.Popup>
           {gate?.kind === 'sign-in' && (

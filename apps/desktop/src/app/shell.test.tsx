@@ -170,7 +170,7 @@ describe('the project menu, where the rail was', () => {
     expect(screen.getByRole('button', { name: '더 보기' })).toBeTruthy();
   });
 
-  it('opens 프로젝트 추가… and 보관함, and restores an archived project onto its map', async () => {
+  it('opens 새 프로젝트 and 보관함, and restores an archived project onto its map', async () => {
     const { router } = mount('/board' + q(app));
     const list = await projectMenu();
     fireEvent.click(within(await row(list, 'infra-terraform')).getByRole('button', { name: 'infra-terraform 메뉴' }));
@@ -181,8 +181,10 @@ describe('the project menu, where the rail was', () => {
     fireEvent.click(within(archive).getByRole('button', { name: '복원' }));
     await waitFor(() => expect(router.state.location.href).toBe('/board' + q(infra)));
     await projectMenu();
-    fireEvent.click(screen.getByRole('button', { name: '프로젝트 추가…' }));
-    expect(await screen.findByRole('button', { name: /내 컴퓨터의 프로젝트 열기/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '프로젝트 추가…' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /^새 프로젝트/ }));
+    expect(await screen.findByRole('button', { name: '내 컴퓨터에서 열기' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '회사·팀 프로젝트 받기' })).toBeTruthy();
   });
 });
 

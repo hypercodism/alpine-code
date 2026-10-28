@@ -4,6 +4,9 @@ export const messages = defineMessages({
   ko: {
     newHeading: '무엇을 만들어 볼까요?',
     newPlaceholder: '만들고 싶은 앱을 적어 주세요',
+    existingLead: '이미 있는 프로젝트라면',
+    openExisting: '내 컴퓨터에서 열기',
+    getExisting: '회사·팀 프로젝트 받기',
 
     judging: '에이전트가 판단하고 있어요',
     pickSetupHeading: '이 구성으로 만들어 볼까요?',
@@ -88,6 +91,9 @@ export const messages = defineMessages({
   en: {
     newHeading: 'What do you want to make?',
     newPlaceholder: 'Describe the app you want to make',
+    existingLead: 'Already have a project?',
+    openExisting: 'Open from this computer',
+    getExisting: 'Get a company or team project',
 
     judging: 'The agent is looking at it',
     pickSetupHeading: 'Make it with this setup?',

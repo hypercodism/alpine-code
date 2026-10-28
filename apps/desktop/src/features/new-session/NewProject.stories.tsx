@@ -31,7 +31,16 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+/** Under the input, a project already made is opened from this computer or got from a repository. */
 export const Ready: Story = {};
+
+/** 회사·팀 프로젝트 받기 under the input: the repository address, in a dialog over the screen. */
+export const GettingAProject: Story = {
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: /회사·팀 프로젝트 받기|Get a company or team project/ }));
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeVisible());
+  },
+};
 
 /** Where it is made: a new folder in the clone folder, or an empty folder picked here. */
 export const Where: Story = {
