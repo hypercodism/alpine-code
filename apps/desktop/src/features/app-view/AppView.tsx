@@ -2,7 +2,7 @@ import { Button, LinkButton } from '@alpine/ui/primitives';
 import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { Monitor, Smartphone } from 'lucide-react';
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { useMessages } from '@/shared/i18n';
 import { openInBrowser } from '@/shared/platform';
@@ -36,6 +36,14 @@ export interface AppScreen {
   howToTry: string;
   /** Its picture on the map is a capture of the running app. */
   real: boolean;
+  /** The situations the app can show it in (`?alpine-state=<id>`), besides the ordinary one. */
+  situations?: AppSituation[];
+}
+
+/** A situation of a screen the running app handles, in the person's words ("빵이 하나도 없을 때"). */
+export interface AppSituation {
+  id: string;
+  title: string;
 }
 
 export interface AppJourney {
@@ -75,11 +83,16 @@ const avatars = [
   'bg-avatar-5 text-avatar-5-ink',
 ];
 
-/** The page address of a screen in the running app. Only a web address takes a path; anything else stays itself. */
-export function screenUrl(base: string, path: string | null): string {
-  if (!path || !/^https?:/.test(base)) return base;
+/**
+ * The page address of a screen in the running app, in a situation when one is given (`?alpine-state=`, which the apps
+ * read). Only a web address takes a path; anything else stays itself.
+ */
+export function screenUrl(base: string, path: string | null, state: string | null = null): string {
+  if ((!path && !state) || !/^https?:/.test(base)) return base;
   try {
-    return new URL(path, base).toString();
+    const url = new URL(path ?? '', base);
+    if (state) url.searchParams.set('alpine-state', state);
+    return url.toString();
   } catch {
     return base;
   }
@@ -146,7 +159,14 @@ export function AppView({
   }, [cwd, settled]);
   const picked = useAppSize(cwd);
   const size: AppSize = picked ?? shown?.journey.device ?? 'computer';
-  const url = app.url ? screenUrl(app.url, shown?.screen.path ?? null) : null;
+  // The situation picked belongs to the screen it was picked on; another screen starts in its ordinary one.
+  const [pickedSituation, setSituation] = useState<{ screen: string; id: string } | null>(null);
+  const situation =
+    pickedSituation?.screen === shown?.screen.id &&
+    shown?.screen.situations?.some((one) => one.id === pickedSituation?.id)
+      ? pickedSituation!.id
+      : null;
+  const url = app.url ? screenUrl(app.url, shown?.screen.path ?? null, situation) : null;
 
   if (mobile.data)
     return (
@@ -214,7 +234,7 @@ export function AppView({
     );
 
   return (
-    <section aria-label={t.title} className="flex min-h-0 min-w-0 grow flex-col">
+    <section aria-label={t.title} className="flex min-h-0 min-w-0 grow flex-col overflow-clip">
       <div className="flex h-10 shrink-0 items-center gap-2.5 px-6 text-meta text-fg-muted">
         <span aria-hidden="true" className="size-1.5 rounded-full bg-interactive" />
         <span role="status">{t.running}</span>
@@ -243,7 +263,7 @@ export function AppView({
               />
             </div>
           ) : (
-            <div className="flex size-full flex-col overflow-hidden rounded-xl border border-line bg-canvas-raised shadow-overlay">
+            <div className="flex size-full flex-col overflow-clip rounded-xl border border-line bg-canvas-raised shadow-overlay">
               <div className="flex h-9 shrink-0 items-center gap-2 border-b border-line-subtle bg-canvas-sunken px-3.5">
                 <span aria-hidden="true" className="size-2.5 rounded-full bg-line" />
                 <span aria-hidden="true" className="size-2.5 rounded-full bg-line" />
@@ -255,19 +275,58 @@ export function AppView({
                   {shown ? `${name} · ${t.screenOf(shown.person.name)}` : name}
                 </span>
               </div>
-              <iframe
-                key={`${app.serverId}:${reload}`}
-                src={url}
-                title={t.frameTitle(name)}
-                sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-                className="min-h-0 grow bg-canvas-raised"
-              />
+              <ComputerScreen key={`${app.serverId}:${reload}`} src={url} title={t.frameTitle(name)} />
             </div>
           )}
         </div>
-        <ScreenStrip people={people} shown={shown} cardId={cardId} onPick={onPick} />
+        <ScreenStrip
+          people={people}
+          shown={shown}
+          cardId={cardId}
+          onPick={onPick}
+          situation={situation}
+          onSituation={(id) => shown && setSituation(id ? { screen: shown.screen.id, id } : null)}
+        />
       </div>
     </section>
+  );
+}
+
+/** A computer's page width: the app draws its computer layout at it, and the frame is scaled to fit beside the strip. */
+export const COMPUTER_WIDTH = 1280;
+
+/**
+ * The app at a computer's width (dogfood 16: in the room beside the strip it was about 520 px wide and drew its narrow
+ * layout): the page is 1280 wide, scaled down to the room there is, never up.
+ */
+function ComputerScreen({ src, title }: { src: string; title: string }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [room, setRoom] = useState({ width: 0, height: 0 });
+  useEffect(() => {
+    const element = box.current;
+    if (!element) return;
+    const measure = () => setRoom({ width: element.clientWidth, height: element.clientHeight });
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const sizes = new ResizeObserver(measure);
+    sizes.observe(element);
+    return () => sizes.disconnect();
+  }, []);
+  const scale = room.width > 0 ? Math.min(1, room.width / COMPUTER_WIDTH) : 1;
+  return (
+    <div ref={box} className="relative min-h-0 grow overflow-clip bg-canvas-raised">
+      <iframe
+        src={src}
+        title={title}
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+        className="absolute top-0 left-0 origin-top-left border-0 bg-canvas-raised"
+        style={{
+          width: COMPUTER_WIDTH,
+          height: room.height > 0 ? Math.ceil(room.height / scale) : '100%',
+          transform: scale === 1 ? undefined : `scale(${scale})`,
+        }}
+      />
+    </div>
   );
 }
 
@@ -310,17 +369,38 @@ function SizeButton({
   );
 }
 
+function SituationButton({ on, onClick, children }: { on: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      onClick={onClick}
+      className={clsx(
+        'min-h-6 cursor-pointer rounded-md px-2 py-0.5 text-left text-meta',
+        on ? 'bg-selected font-medium text-fg' : 'bg-hover text-fg-muted hover:text-fg',
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
 /** The strip beside the app: the screen on view, then every other screen, grouped by person and journey. */
 function ScreenStrip({
   people,
   shown,
   cardId,
   onPick,
+  situation,
+  onSituation,
 }: {
   people: AppPerson[];
   shown: { screen: AppScreen; person: AppPerson; journey: AppJourney } | undefined;
   cardId: string | null;
   onPick: (cardId: string) => void;
+  /** The situation the app is shown in; null is the ordinary one. */
+  situation: string | null;
+  onSituation: (id: string | null) => void;
 }) {
   const t = useMessages(messages);
   const deviceWord = (device: AppSize | null) => (device === 'computer' ? t.computer : t.phone);
@@ -349,6 +429,21 @@ function ScreenStrip({
               </p>
             )
           )}
+          {!!shown.screen.situations?.length && (
+            <div role="group" aria-label={t.situations} className="mt-3 flex flex-col gap-1">
+              <p className="text-meta text-fg-muted">{t.situations}</p>
+              <div className="flex flex-wrap gap-1">
+                <SituationButton on={situation === null} onClick={() => onSituation(null)}>
+                  {t.usual}
+                </SituationButton>
+                {shown.screen.situations.map((item) => (
+                  <SituationButton key={item.id} on={situation === item.id} onClick={() => onSituation(item.id)}>
+                    {item.title}
+                  </SituationButton>
+                ))}
+              </div>
+            </div>
+          )}
           <ul aria-label={shown.screen.title} className="mt-3 flex flex-col gap-1.5">
             {shown.screen.promises.map((promise) => (
               <li
@@ -366,7 +461,7 @@ function ScreenStrip({
                         : 'text-fg-faint',
                   )}
                 >
-                  {promise.status === 'failed' ? '✗' : promise.status === 'passed' ? '✓' : '·'}
+                  {promise.status === 'failed' ? '✗' : promise.status === 'passed' ? '✓' : '○'}
                 </span>
                 <span>
                   {promise.text}

@@ -114,11 +114,13 @@ def test_a_project_is_made_from_the_template_and_the_agent_gets_the_idea(monkeyp
         opened = await harness.sessions.open(SessionOpenParams(session_id=result.session_id))
         assert Path(opened.info.cwd) == folder and opened.info.purpose == "map"
         assert get_flow(FlowGetParams(cwd=str(folder))).planned
-        # While it is planned, the map conversation writes the map without asking, whatever the mode.
+        # While it is planned, the map conversation writes the map and the screens' code without asking, whatever the
+        # mode: planned screens are real code on made-up data. Outside the project still asks.
         session = harness.sessions._live[result.session_id].session
         write = session._agent.tool_map["write"]
-        assert session.policy.evaluate("write", {"path": ".alpine-code/map/screens/home.html"}, write).allowed
-        assert not session.policy.evaluate("write", {"path": "src/app.tsx"}, write).allowed
+        assert session.policy.evaluate("write", {"path": ".alpine-code/map/features/home.json"}, write).allowed
+        assert session.policy.evaluate("write", {"path": "src/app.tsx"}, write).allowed
+        assert not session.policy.evaluate("write", {"path": str(folder.parent / "elsewhere.txt")}, write).allowed
         await harness.close()
 
     run(scenario())

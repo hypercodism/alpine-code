@@ -83,7 +83,9 @@ def build_system_prompt(cwd: Path, memory: str = "", instructions: str = "", ski
             "Never edit .alpine-code/map/state/, OVERVIEW.md or overview/, and never set priority, scope or decision. "
             "Only record checks you actually executed, with command, output and result. "
             "Do not remove a failing promise without rechecking. "
-            "Never fabricate screenshots, implementation, or check results."
+            "Never fabricate screenshots, implementation, or check results. "
+            "Write every text on the map in the user's language (Korean when they write Korean). "
+            "Alpine refuses a map file it could not read as you write it; `map_check` checks them all."
         )
     if instructions.strip():
         parts.append(

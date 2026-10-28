@@ -56,6 +56,7 @@ export function Session({
   readOnly = false,
   inputOnMap = false,
   questionsPinned = false,
+  approvalsPinned = false,
   onInspectProcesses,
   onShowTaskForce,
 }: {
@@ -65,6 +66,8 @@ export function Session({
   inputOnMap?: boolean;
   /** The question it waits on is held under it, above the input (a plan's map): here it is one quiet line. */
   questionsPinned?: boolean;
+  /** Its calls waiting for my OK are held above the input beside the map (`WaitingApprovals`). */
+  approvalsPinned?: boolean;
   onInspectProcesses?: () => void;
   /** Opens the dock on the session's TF. */
   onShowTaskForce?: () => void;
@@ -160,7 +163,7 @@ export function Session({
   const { info } = state;
   const running = info.status === 'running' || info.status === 'waiting';
   const approval = activeApproval(state);
-  const answerHere = readOnly && !inputOnMap && (!!approval || questionOpen(state.items));
+  const answerHere = readOnly && !inputOnMap && ((!!approval && !approvalsPinned) || questionOpen(state.items));
   const title = info.title || t.untitled;
   const agentError = setAgent.error;
   const agentFailed =
@@ -197,6 +200,7 @@ export function Session({
             onShowTaskForce={onShowTaskForce}
             inputOnMap={readOnly && inputOnMap}
             questionsPinned={questionsPinned}
+            approvalsPinned={approvalsPinned}
           />
           {running && <ProgressLine info={info} />}
           {commandsLeft > 0 && (

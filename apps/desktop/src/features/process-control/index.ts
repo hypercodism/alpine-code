@@ -1,1 +1,1 @@
-export { ProcessControl } from './ProcessControl';
+export { ProcessControl, useCommands } from './ProcessControl';

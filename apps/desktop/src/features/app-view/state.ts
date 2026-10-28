@@ -1,7 +1,10 @@
 import { create } from 'zustand';
 
-/** What the left of a project's window shows: its map, or its app running. */
-export type ProjectView = 'map' | 'app';
+/**
+ * What the left of a project's window shows (the 보드 · 문서 · 앱 · 코드 tabs): its map as the board, the same map
+ * read as a document, its app running, or its code by screen.
+ */
+export type ProjectView = 'map' | 'doc' | 'app' | 'code';
 
 /** The size the app is shown at: a phone's or a computer's. */
 export type AppSize = 'phone' | 'computer';
@@ -39,7 +42,12 @@ export function useAppSize(cwd: string): AppSize | null {
 
 /** Shows the project's map. The app's screen stays picked for coming back. */
 export function showMap(cwd: string) {
-  useAppViewState.setState((state) => ({ views: { ...state.views, [cwd]: 'map' } }));
+  showView(cwd, 'map');
+}
+
+/** Shows one of the project's tabs other than its app (which `showApp` opens, at a screen or where it was). */
+export function showView(cwd: string, view: Exclude<ProjectView, 'app'>) {
+  useAppViewState.setState((state) => ({ views: { ...state.views, [cwd]: view } }));
 }
 
 /**

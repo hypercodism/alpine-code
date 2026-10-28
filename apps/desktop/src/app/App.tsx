@@ -56,7 +56,7 @@ function connect(): ServerConnection {
     ...(demo.stoppedRuns ? STOPPED_RUNS : []),
     ...(demo.planTeam ? PLAN_TEAM_SESSIONS : []),
     ...(demo.mapTalk
-      ? [{ info: sessionInfo({ id: 'alpine-map', cwd: '/Users/me/alpine-code', purpose: 'map', title: '지도' }) }]
+      ? [{ info: sessionInfo({ id: 'alpine-map', cwd: '/Users/me/alpine-code', purpose: 'map', title: '보드' }) }]
       : []),
   ];
   const connection = scriptedConnection(

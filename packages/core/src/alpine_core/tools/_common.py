@@ -6,6 +6,7 @@ import json
 import subprocess
 import tempfile
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -109,6 +110,27 @@ def run_rg(args: list[str], cwd: Path, timeout: int = 60, limit: int | None = No
             err.seek(0)
             raise ToolError(err.read().decode(errors="replace").strip() or "ripgrep failed")
     return lines
+
+
+#: Checks a file tool asks before it writes: each gets the working directory, the file and its new text, and returns
+#: ``None`` when it has nothing to say, else ``(refuse, message)``: refused, nothing is written and the call fails with
+#: the message, so the model fixes it at once; otherwise the message is added to the result. The server adds the
+#: product map's check (``alpine_server.map_files``), so a card Alpine could not read is never written.
+WRITE_CHECKS: list[Callable[[Path, Path, str], tuple[bool, str] | None]] = []
+
+
+def check_write(root: Path, file: Path, text: str) -> str:
+    """Runs ``WRITE_CHECKS`` for one write: raises with the refusal, or returns the notes to add to the result."""
+    notes = []
+    for check in WRITE_CHECKS:
+        said = check(root, file, text)
+        if said is None:
+            continue
+        refuse, message = said
+        if refuse:
+            raise ToolError(message)
+        notes.append("\n" + message)
+    return "".join(notes)
 
 
 def json_note(file: Path, text: str) -> str:

@@ -1,10 +1,17 @@
 import { memo, type ElementType, type HTMLAttributes, type ReactNode } from 'react';
-import { defaultRehypePlugins, Streamdown, useIsCodeFenceIncomplete, type Components } from 'streamdown';
+import {
+  defaultRehypePlugins,
+  defaultRemarkPlugins,
+  Streamdown,
+  useIsCodeFenceIncomplete,
+  type Components,
+} from 'streamdown';
 
 import { FileReference, useFileNavigation, parseFileLocation } from '@/shared/files';
 import { useMessages } from '@/shared/i18n';
 import { openInBrowser } from '@/shared/platform';
 
+import { remarkCjkStrong } from './cjkStrong';
 import { CodeBlock } from './CodeBlock';
 import { messages } from './messages';
 
@@ -13,6 +20,9 @@ import { messages } from './messages';
  * without `harden` a link we don't open is plain text in our look (`Link` decides) rather than a "[blocked]" label.
  */
 const rehypePlugins = [defaultRehypePlugins.sanitize!];
+
+/** Streamdown's own steps, then bold that Korean sentences hide from CommonMark (`remarkCjkStrong`). */
+const remarkPlugins = [...Object.values(defaultRemarkPlugins), remarkCjkStrong];
 
 /** Links we open: web pages and mail, always in the default browser, never inside the app. */
 const OPENABLE = /^(https?:|mailto:)/i;
@@ -107,6 +117,7 @@ export const Markdown = memo(function Markdown({ text, streaming }: { text: stri
     <Streamdown
       className="text-reading [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
       components={components}
+      remarkPlugins={remarkPlugins}
       rehypePlugins={rehypePlugins}
       controls={false}
       linkSafety={{ enabled: false }}

@@ -119,16 +119,17 @@ If any of these is on a screen, it was not designed. Fix it before showing it:
 
 ## 8. In the plan
 
-Draw the first sketches already in the direction you would pick: their layout follows the concept, not a neutral
-wireframe. Sketches cannot load pictures, so a picture's place is a `bg-surface` block at the real crop
-(`aspect-[4/3]`, full width) with a short muted line of what goes there ("갓 구운 소금빵 사진").
+The planned screens are real code on made-up data: write the first ones already in the direction you would pick,
+their layout following the concept, not a neutral wireframe, with real pictures as section 5 says. Every situation of
+a screen (section 4) is designed as carefully as its ordinary day: it is a screen of its own on the map.
 
 The look question offers two to four **different directions**, not colourways of one screen. Each option differs in
 layout idea, type pairing, palette and imagery, and is named after the real product it takes after ("당근 참고",
 "Kinfolk 참고"). Your pick comes first and its `detail` says the feeling in plain words. Give **every** option its own
 `html`: the product's most telling screen, drawn in that direction's composition, so the person compares real
-alternatives side by side. A look only restyles colour, type and corners; when the person picks a direction whose
-layout differs from the sketches, redraw the sketches in that layout.
+alternatives side by side (these previews cannot load pictures: a picture's place is a `bg-surface` block at the
+real crop with a short muted line of what goes there). Once a direction is picked, put it in the project's theme
+right away and, when its layout differs from the screens, rework them in it.
 
 ## 9. In the build
 
@@ -140,8 +141,8 @@ layout differs from the sketches, redraw the sketches in that layout.
 
 ## 10. Look, then fix
 
-After building or redrawing screens, look at them: capture each screen (the build already captures previews; a phone
-screen at 390 px wide, a computer screen at about 1280 px) and open the images. Check each against:
+After building or redrawing screens, look at them with `app_screen` (a phone screen at 390 px wide, a computer screen
+at 1280 px; it shows the whole page and what it says). Check each against:
 
 1. **Concept**: does this screen say the concept sentence? Is there anything without a job?
 2. **Direction**: same type scale, spacing, radius, accent use and image treatment as the other screens?

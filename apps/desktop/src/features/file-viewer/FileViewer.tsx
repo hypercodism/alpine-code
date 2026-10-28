@@ -22,7 +22,12 @@ import { useServer } from '@/shared/server';
 import { FileTree } from './FileTree';
 import { messages } from './messages';
 
-export function FileViewer() {
+/**
+ * The project's files: the folder tree, and the file opened from it in its place (`both`). The 코드 tab shows the two
+ * side by side, as an editor does: one `browser` (the tree, always there) and one `file` (the file open, or a line
+ * that says to pick one).
+ */
+export function FileViewer({ part = 'both' }: { part?: 'both' | 'browser' | 'file' }) {
   const navigation = useFileNavigation();
   const server = useServer();
   const client = useQueryClient();
@@ -36,7 +41,7 @@ export function FileViewer() {
   const folders = useRef<HTMLDivElement>(null);
   const back = useRef<HTMLButtonElement>(null);
   const previousPath = useRef<string | undefined>(undefined);
-  const location = navigation?.location;
+  const location = part === 'browser' ? undefined : navigation?.location;
   const selectedPath = location?.path;
   useEffect(() => {
     if (selectedPath) back.current?.focus();
@@ -47,7 +52,7 @@ export function FileViewer() {
   const file = useQuery({
     queryKey: ['files', navigation?.cwd, location?.path, location?.line],
     queryFn: () => server.request('files/read', { cwd: navigation!.cwd, path: location!.path, line: location!.line }),
-    enabled: Boolean(navigation && location),
+    enabled: Boolean(navigation && location && part !== 'browser'),
     retry: false,
     staleTime: 0,
   });
@@ -111,10 +116,11 @@ export function FileViewer() {
     'inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-fg-muted hover:bg-hover disabled:cursor-default disabled:opacity-40';
   return (
     <section aria-label={t.title} className="flex min-h-0 grow flex-col gap-3">
+      {part === 'file' && !location && <p className="text-body text-fg-muted">{t.pickFile}</p>}
       <div
         ref={folders}
-        hidden={Boolean(location)}
-        className={clsx('min-h-0 grow flex-col gap-2', location ? 'hidden' : 'flex')}
+        hidden={Boolean(location) || part === 'file'}
+        className={clsx('min-h-0 grow flex-col gap-2', location || part === 'file' ? 'hidden' : 'flex')}
       >
         <div className="flex shrink-0 items-center gap-1">
           <span className="grow text-meta text-fg-muted">{t.localFolder}</span>
@@ -173,7 +179,11 @@ export function FileViewer() {
           </div>
         )}
         <div hidden={Boolean(query)} className={clsx('min-h-0 grow flex-col', query ? 'hidden' : 'flex')}>
-          <FileTree cwd={navigation.cwd} active={!location && !query} onOpen={(path) => navigation.open({ path })} />
+          <FileTree
+            cwd={navigation.cwd}
+            active={part !== 'file' && !location && !query}
+            onOpen={(path) => navigation.open({ path })}
+          />
         </div>
       </div>
       {location && (
@@ -182,6 +192,7 @@ export function FileViewer() {
             <button
               ref={back}
               type="button"
+
               aria-label={location.fromChanges ? t.backToChanges : t.backToTree}
               title={location.fromChanges ? t.backToChanges : t.backToTree}
               onClick={() => {
@@ -189,7 +200,7 @@ export function FileViewer() {
                 setCopied(false);
                 setActionError('');
               }}
-              className={iconButton}
+              className={clsx(iconButton, part === 'file' && 'hidden')}
             >
               <ArrowLeft size={15} />
             </button>

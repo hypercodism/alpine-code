@@ -20,7 +20,7 @@ import { bookingBoard, boardScript, ORDER_FLOW, SDK_FLOW, seeded, withBoard } fr
 
 const cwd = '/project';
 /** The map's top row is there once the map has loaded. */
-const loaded = () => screen.findByRole('button', { name: '지도 메뉴' });
+const loaded = () => screen.findByRole('button', { name: '보드 메뉴' });
 /** The screens with this title on the filmstrip (a step shared by two journeys shows in each). */
 const stepCards = (title: string) => screen.queryAllByRole('button', { name: `${title} 열기`, hidden: true });
 /** The first step card with this title, once the map has drawn it (long rows opened, so every screen shows). */
@@ -54,11 +54,11 @@ function backToStep(panel: HTMLElement, title: string) {
 }
 /** Opens the map's "⋯" menu and returns its item with this name. */
 async function menuItem(name: RegExp | string, role: 'menuitem' | 'menuitemcheckbox' = 'menuitem') {
-  fireEvent.click(await screen.findByRole('button', { name: '지도 메뉴' }));
+  fireEvent.click(await screen.findByRole('button', { name: '보드 메뉴' }));
   return screen.findByRole(role, { name });
 }
 /** The row under the top one that lists what wants a look, or null when nothing does. */
-const notices = () => screen.queryByRole('list', { name: '지도에서 볼 것' });
+const notices = () => screen.queryByRole('list', { name: '보드에서 볼 것' });
 /** Every step on the filmstrip. */
 const allSteps = () =>
   screen.getAllByRole('button').filter((b) => b.getAttribute('aria-haspopup') === 'dialog' && b.closest('[data-card]'));
@@ -152,7 +152,7 @@ describe('living product map', () => {
   it('takes words in its input as a request on a map that exists: done, and the map kept true', async () => {
     const { request } = mount();
     await loaded();
-    fireEvent.change(screen.getByRole('textbox', { name: '지도에 부탁하기' }), {
+    fireEvent.change(screen.getByRole('textbox', { name: '보드에 부탁하기' }), {
       target: { value: '글 목록에 검색을 넣어 줘' },
     });
     fireEvent.click(screen.getByRole('button', { name: '보내기' }));
@@ -173,7 +173,7 @@ describe('living product map', () => {
       },
     });
     expect(await screen.findByRole('heading', { name: '빈 폴더예요' })).toBeTruthy();
-    expect(screen.queryByRole('textbox', { name: '지도에 부탁하기' })).toBeNull();
+    expect(screen.queryByRole('textbox', { name: '보드에 부탁하기' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '여기서 새로 만들기' }));
     expect(onNewHere).toHaveBeenCalledWith(cwd);
     expect(request.mock.calls.some(([method]) => method === 'flow/prepare')).toBe(false);
@@ -310,24 +310,24 @@ describe('living product map', () => {
       },
     });
     expect(await screen.findByRole('alert')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: '지도 그리기' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '보드 그리기' })).toBeNull();
     expect(request.mock.calls.some(([method]) => method === 'flow/prepare')).toBe(false);
   });
   it('has an empty discovery state instead of invented features', async () => {
     mount({ results: { 'flow/get': { document: { flows: [], nodes: [], edges: [] }, revision: 'missing' } } });
-    expect(await screen.findByRole('button', { name: '지도 그리기' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: '보드 그리기' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /장바구니/ })).toBeNull();
   });
   it('opens on the person view, with one card per journey and no view switch', async () => {
     mount();
     await loaded();
     expect(screen.queryByRole('tab')).toBeNull();
-    expect(screen.queryByRole('radio', { name: '카드 지도' })).toBeNull();
+    expect(screen.queryByRole('radio', { name: '카드 보드' })).toBeNull();
     expect(screen.queryByRole('radio', { name: '사람별 흐름' })).toBeNull();
     expect(screen.getAllByRole('region', { name: ORDER_FLOW.title })).toHaveLength(1);
-    // A step on two journeys has a screen on each.
+    // A step on two journeys is drawn once, where it is first walked; the other journey's arrow comes to it.
     await stepCard('결제');
-    expect(stepCards('결제')).toHaveLength(2);
+    expect(stepCards('결제')).toHaveLength(1);
     expect(localStorage.getItem('alpine.product-map.view')).toBeNull();
   });
   it('puts a screen picture on screen cards, a quiet note when there is none, and nothing on other cards', async () => {
@@ -356,9 +356,9 @@ describe('living product map', () => {
   });
   it('hides the new-flow button until a map exists', async () => {
     mount({ results: { 'flow/get': { document: { flows: [], nodes: [], edges: [] }, revision: 'missing' } } });
-    await screen.findByRole('button', { name: '지도 그리기' });
+    await screen.findByRole('button', { name: '보드 그리기' });
     expect(screen.queryByRole('button', { name: '새 흐름' })).toBeNull();
-    expect(screen.queryByRole('button', { name: '지도 메뉴' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '보드 메뉴' })).toBeNull();
   });
 });
 
@@ -430,12 +430,15 @@ describe('the top row', () => {
     expect(dimmed(await stepCard('주문 결과 받기'))).toBe(false);
     expect(dimmed(await stepCard('장바구니'))).toBe(true);
   });
-  it('a status chip lights its cards and lets go when pressed again; one at a time', async () => {
+  it('a choice of what to look at lights its screens and lets go when pressed again; one at a time', async () => {
     mount();
     await loaded();
-    const again = screen.getByRole('button', { name: '다시 확인 1' });
-    const failed = screen.getByRole('button', { name: '실패 1' });
-    expect(screen.getByRole('button', { name: '바뀐 카드 2' })).toBeTruthy();
+    const all = screen.getByRole('button', { name: '모두' });
+    const again = screen.getByRole('button', { name: '다시 확인할 화면 1' });
+    const failed = screen.getByRole('button', { name: '깨진 화면 1' });
+    // A promise waiting or broken is its own choice, not a change.
+    expect(screen.queryByRole('button', { name: /^바뀐 화면 \d/ })).toBeNull();
+    expect(all.getAttribute('aria-pressed')).toBe('true');
     expect(again.getAttribute('aria-pressed')).toBe('false');
     fireEvent.click(again);
     expect(again.getAttribute('aria-pressed')).toBe('true');
@@ -452,18 +455,18 @@ describe('the top row', () => {
     expect(dimmed(await stepCard('주문 결과 받기'))).toBe(true);
     fireEvent.click(failed);
     expect(failed.getAttribute('aria-pressed')).toBe('false');
+    expect(all.getAttribute('aria-pressed')).toBe('true');
     expect(allSteps().some(dimmed)).toBe(false);
   });
-  it('shows no status chip for a status nothing has', async () => {
+  it('shows no choice of what to look at when nothing wants a look', async () => {
     mount(
       withBoard((board) => {
         board.states = {};
       }),
     );
     await loaded();
-    expect(screen.queryByRole('button', { name: /^실패 \d/ })).toBeNull();
-    expect(screen.queryByRole('button', { name: /^다시 확인 \d/ })).toBeNull();
-    expect(screen.queryByRole('button', { name: /^바뀐 카드 \d/ })).toBeNull();
+    expect(screen.queryByRole('group', { name: '보기' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '모두' })).toBeNull();
   });
   it('counts changes since the last visit and opens them in a side panel', async () => {
     localStorage.setItem(`alpine:product-map:seen:${cwd}`, '2026-10-01T00:00:00Z');
@@ -481,16 +484,16 @@ describe('the top row', () => {
         ];
       }),
     );
-    const trigger = await screen.findByRole('button', { name: '지도 메뉴' });
+    const trigger = await screen.findByRole('button', { name: '보드 메뉴' });
     // A dot on the menu says the history has something new.
     expect(trigger.querySelector('.rounded-full')).toBeTruthy();
-    fireEvent.click(await menuItem('지도 기록 · 새로 1개'));
-    const panel = await screen.findByRole('complementary', { name: '지도 기록' });
+    fireEvent.click(await menuItem('보드 기록 · 새로 1개'));
+    const panel = await screen.findByRole('complementary', { name: '보드 기록' });
     expect(within(panel).getByText(/10월 10일 · 결제 · 확인 실패/)).toBeTruthy();
     expect(within(panel).getByText('쿠폰이 반영되지 않아요.')).toBeTruthy();
     // Opening marks everything as seen.
     await waitFor(() => expect(trigger.querySelector('.rounded-full')).toBeNull());
-    expect(await menuItem('지도 기록')).toBeTruthy();
+    expect(await menuItem('보드 기록')).toBeTruthy();
     fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
     expect(Date.parse(localStorage.getItem(`alpine:product-map:seen:${cwd}`)!)).toBeGreaterThan(
       Date.parse('2026-10-11'),
@@ -510,8 +513,8 @@ describe('the top row', () => {
         ];
       }),
     );
-    fireEvent.click(await menuItem(/^지도 기록/));
-    const panel = await screen.findByRole('complementary', { name: '지도 기록' });
+    fireEvent.click(await menuItem(/^보드 기록/));
+    const panel = await screen.findByRole('complementary', { name: '보드 기록' });
     expect(within(panel).queryByText(/planned/)).toBeNull();
     expect(within(panel).getByText(/결제 · 안 고치기로 함/)).toBeTruthy();
     expect(within(panel).getByText(/회원 주문 · 다시 돌려 봄 · 같은 결과/)).toBeTruthy();
@@ -524,8 +527,8 @@ describe('the top row', () => {
         ];
       }),
     );
-    fireEvent.click(await menuItem(/^지도 기록/));
-    const panel = await screen.findByRole('complementary', { name: '지도 기록' });
+    fireEvent.click(await menuItem(/^보드 기록/));
+    const panel = await screen.findByRole('complementary', { name: '보드 기록' });
     expect(within(panel).getByText('예정 → 구현됨')).toBeTruthy();
   });
   it('shows the notice row only when something wants a look', async () => {
@@ -541,7 +544,7 @@ describe('the top row', () => {
     await loaded();
     // Code changes without git are not counted.
     expect(notices()).toBeNull();
-    expect(screen.queryByText('지도에 아직 담기지 않은 코드')).toBeNull();
+    expect(screen.queryByText('보드에 아직 담기지 않은 코드')).toBeNull();
     cleanup();
     mount(
       withBoard((board) => {
@@ -551,7 +554,7 @@ describe('the top row', () => {
     );
     await loaded();
     const row = notices()!;
-    expect(within(row).getByRole('button', { name: /^지도에 아직 담기지 않은 코드/ })).toBeTruthy();
+    expect(within(row).getByRole('button', { name: /^보드에 아직 담기지 않은 코드/ })).toBeTruthy();
     expect(within(row).getByRole('button', { name: /^AI가 지운 카드 1개/ })).toBeTruthy();
     expect(within(row).queryByText(/고친 약속/)).toBeNull();
     expect(within(row).queryByText('아직 그리지 않은 것')).toBeNull();
@@ -884,7 +887,7 @@ describe('map upkeep', () => {
       }),
     );
     await loaded();
-    const row = within(notices()!).getByRole('button', { name: /^지도에 아직 담기지 않은 코드/ });
+    const row = within(notices()!).getByRole('button', { name: /^보드에 아직 담기지 않은 코드/ });
     expect(row.textContent).toContain('5');
     // The changes not counted are folded inside its popover, not on the map.
     expect(screen.queryByText('범위 밖 변경 2개')).toBeNull();
@@ -893,7 +896,7 @@ describe('map upkeep', () => {
     expect(screen.getByText('외 3개')).toBeTruthy();
     expect(screen.getByText('범위 밖 변경 2개').closest('details')!.open).toBe(false);
     expect(screen.getByText('제외된 변경 7개').closest('details')!.open).toBe(false);
-    fireEvent.click(screen.getByRole('button', { name: '지도 맞추기' }));
+    fireEvent.click(screen.getByRole('button', { name: '보드 맞추기' }));
     await waitFor(() => expect(lastPrepare(request)).toMatchObject({ action: 'sync', nodeId: null, flowId: null }));
     expect(request.mock.calls.some(([method]) => method === 'session/send')).toBe(true);
   });
@@ -913,7 +916,7 @@ describe('map upkeep', () => {
     const buttons = within(notices()!).getAllByRole('button');
     const row = within(notices()!).getByRole('button', { name: /^아직 그리지 않은 것/ });
     expect(buttons.indexOf(row)).toBeGreaterThan(
-      buttons.indexOf(within(notices()!).getByRole('button', { name: /^지도에 아직 담기지 않은 코드/ })),
+      buttons.indexOf(within(notices()!).getByRole('button', { name: /^보드에 아직 담기지 않은 코드/ })),
     );
     expect(row.textContent).toContain('2');
     fireEvent.click(row);
@@ -924,7 +927,7 @@ describe('map upkeep', () => {
     await waitFor(() =>
       expect(lastPrepare(request)).toMatchObject({
         action: 'discover',
-        request: '지도에 아직 그리지 않은 것으로 남은 부분부터 이어서 지도를 그려 주세요.',
+        request: '보드에 아직 그리지 않은 것으로 남은 부분부터 이어서 보드를 그려 주세요.',
       }),
     );
   });
@@ -957,7 +960,7 @@ describe('map upkeep', () => {
       }),
     );
     // The menu is open (another item is there), but the batch recheck is not.
-    expect(await menuItem('지도 범위 바꾸기')).toBeTruthy();
+    expect(await menuItem('보드 범위 바꾸기')).toBeTruthy();
     expect(screen.queryByRole('menuitem', { name: /다시 확인$/ })).toBeNull();
   });
 
@@ -997,22 +1000,22 @@ describe('map upkeep', () => {
       }),
     );
     expect(
-      await screen.findByText('이 지도는 새 버전 Alpine으로 만들어졌어요. 업데이트하면 고칠 수 있어요'),
+      await screen.findByText('이 보드는 새 버전 Alpine으로 만들어졌어요. 업데이트하면 고칠 수 있어요'),
     ).toBeTruthy();
     expect((await menuItem('기능 더 찾기')).getAttribute('aria-disabled')).toBe('true');
     expect(screen.getByRole('menuitemcheckbox', { name: '매일 자동으로 확인' }).getAttribute('aria-disabled')).toBe(
       'true',
     );
-    expect(screen.queryByRole('menuitem', { name: '지도 삭제' })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: '보드 삭제' })).toBeNull();
     expect(screen.getByRole('menuitem', { name: '바뀐 기능 1개 다시 확인' }).getAttribute('aria-disabled')).toBe(
       'true',
     );
     fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
-    fireEvent.click(within(notices()!).getByRole('button', { name: /^지도에 아직 담기지 않은 코드/ }));
-    expect(((await screen.findByRole('button', { name: '지도 맞추기' })) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(within(notices()!).getByRole('button', { name: /^보드에 아직 담기지 않은 코드/ }));
+    expect(((await screen.findByRole('button', { name: '보드 맞추기' })) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.keyDown(globalThis.document.body, { key: 'Escape' });
-    await waitFor(() => expect(screen.queryByRole('button', { name: '지도 맞추기' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('button', { name: '보드 맞추기' })).toBeNull());
     const panel = await openStep('결제');
     expect((within(panel).getByRole('button', { name: '다시 확인' }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(within(panel).getByLabelText('AI에게 부탁하기'), { target: { value: '고쳐 줘' } });
@@ -1034,10 +1037,32 @@ describe('map upkeep', () => {
         ];
       }),
     );
-    const summary = await screen.findByText('지도 파일 2개를 읽지 못했어요');
+    const summary = await screen.findByText('보드 파일 2개를 읽지 못했어요');
     expect(summary.closest('details')!.open).toBe(false);
     expect(within(summary.closest('details')!).getByText(/gift\.json/)).toBeTruthy();
     expect(await stepCard('상품 찾기')).toBeTruthy();
+  });
+
+  it('counts a file once, says in Korean what is wrong, and tells a card shown without its wrong parts', async () => {
+    mount(
+      withBoard((board) => {
+        board.problems = [
+          { file: '.alpine-code/map/flows/read.json', message: "The card 'home' does not exist" },
+          { file: '.alpine-code/map/flows/read.json', message: 'The edge about -> home points outside this flow' },
+          {
+            file: '.alpine-code/map/features/home.json',
+            message: 'Unknown or duplicate condition check',
+            partial: true,
+          },
+        ];
+      }),
+    );
+    const summary = await screen.findByText(
+      '보드 파일 1개를 읽지 못했어요 · 보드 파일 1개는 틀린 부분만 빼고 보여 주고 있어요',
+    );
+    const list = within(summary.closest('details')!);
+    expect(list.getByText("없는 카드 'home'를 가리켜요 · 흐름 밖의 화면을 잇는 화살표가 있어요")).toBeTruthy();
+    expect(list.getByText('약속에 없는 확인 기록이 있거나 같은 약속을 두 번 확인했어요')).toBeTruthy();
   });
 
   it('asks only for what changed: an unchanged answer keeps the map on screen', async () => {
@@ -1075,16 +1100,16 @@ describe('map upkeep', () => {
     const { request } = mount(mergeScripts(boardScript(board), folders));
     await loaded();
     // The AI's exclusions sit under the changes they hide, not in the settings.
-    fireEvent.click(within(notices()!).getByRole('button', { name: /^지도에 아직 담기지 않은 코드/ }));
+    fireEvent.click(within(notices()!).getByRole('button', { name: /^보드에 아직 담기지 않은 코드/ }));
     const excluded = (await screen.findByText('제외된 변경 4개')).closest('details')!;
     expect(within(excluded).getByText('fixtures/**')).toBeTruthy();
     fireEvent.keyDown(globalThis.document.body, { key: 'Escape' });
     await waitFor(() => expect(screen.queryByText('제외된 변경 4개')).toBeNull());
-    expect(screen.queryByRole('button', { name: '지도 설정' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '보드 설정' })).toBeNull();
     // The scope is one item of the map menu; it opens the editor under the header.
-    expect(screen.queryByRole('region', { name: '지도 범위' })).toBeNull();
-    fireEvent.click(await menuItem('지도 범위 바꾸기'));
-    expect(within(await screen.findByRole('region', { name: '지도 범위' })).getByText('apps/web')).toBeTruthy();
+    expect(screen.queryByRole('region', { name: '보드 범위' })).toBeNull();
+    fireEvent.click(await menuItem('보드 범위 바꾸기'));
+    expect(within(await screen.findByRole('region', { name: '보드 범위' })).getByText('apps/web')).toBeTruthy();
     // Folders are picked from the project's own, not typed: apps opens to show web (picked) and api.
     fireEvent.click(await screen.findByRole('button', { name: 'apps 펼치기' }));
     expect(screen.queryByRole('checkbox', { name: 'node_modules' })).toBeNull();
@@ -1104,7 +1129,7 @@ describe('map upkeep', () => {
       }),
     );
     fireEvent.click(screen.getByRole('button', { name: '닫기' }));
-    expect(screen.queryByRole('region', { name: '지도 범위' })).toBeNull();
+    expect(screen.queryByRole('region', { name: '보드 범위' })).toBeNull();
     // The daily check is a checkbox item that keeps the menu open.
     const daily = await menuItem('매일 자동으로 확인', 'menuitemcheckbox');
     expect(daily.getAttribute('aria-checked')).toBe('false');
@@ -1334,13 +1359,13 @@ describe('discovery and map settings', () => {
   });
   it('deletes the map from its settings after one confirmation', async () => {
     const { request } = mount();
-    fireEvent.click(await menuItem('지도 삭제'));
+    fireEvent.click(await menuItem('보드 삭제'));
     expect(request.mock.calls.some(([method]) => method === 'flow/delete')).toBe(false);
-    const strip = await screen.findByRole('region', { name: '지도 삭제' });
+    const strip = await screen.findByRole('region', { name: '보드 삭제' });
     expect(within(strip).getByText(/되돌릴 수 없어요/)).toBeTruthy();
     fireEvent.click(within(strip).getByRole('button', { name: '삭제' }));
     await waitFor(() => expect(request.mock.calls.find(([method]) => method === 'flow/delete')?.[1]).toEqual({ cwd }));
-    expect(await screen.findByRole('button', { name: '지도 그리기' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: '보드 그리기' })).toBeTruthy();
   });
 
   it('shows the scope before the map is made', async () => {
@@ -1439,7 +1464,7 @@ describe("the user's own sentences (decision 16)", () => {
     );
   });
 
-  it('shows what a "지도에서 고치기" run changed until the user keeps it or puts the map back', async () => {
+  it('shows what a "보드에서 고치기" run changed until the user keeps it or puts the map back', async () => {
     const { request } = mount(
       seeded((board) => {
         board.review = {
@@ -1451,12 +1476,12 @@ describe("the user's own sentences (decision 16)", () => {
         };
       }),
     );
-    const banner = (await screen.findByText('AI가 지도를 이렇게 바꿨어요')).closest('[data-review]') as HTMLElement;
+    const banner = (await screen.findByText('AI가 보드를 이렇게 바꿨어요')).closest('[data-review]') as HTMLElement;
     expect(within(banner).getByText('새 카드: 가입하기')).toBeTruthy();
     expect(within(banner).getByText('바뀐 카드: 로그인하기')).toBeTruthy();
-    fireEvent.click(within(banner).getByRole('button', { name: '예전 지도로 되돌리기' }));
+    fireEvent.click(within(banner).getByRole('button', { name: '예전 보드로 되돌리기' }));
     await waitFor(() => expect(request).toHaveBeenCalledWith('flow/review', { cwd, target: 'map', action: 'restore' }));
-    await waitFor(() => expect(screen.queryByText('AI가 지도를 이렇게 바꿨어요')).toBeNull());
+    await waitFor(() => expect(screen.queryByText('AI가 보드를 이렇게 바꿨어요')).toBeNull());
   });
 
   it('lists cards the user decided on that the AI removed, with keep and put back', async () => {
@@ -1516,7 +1541,7 @@ describe("the user's own sentences (decision 16)", () => {
 });
 
 describe('flows that call another flow (decision 19)', () => {
-  it('draws the called flow as one card that leads to that flow', async () => {
+  it('draws a called flow as an arrow into its first screen, and the flows list leads to it', async () => {
     let calledTitle = '';
     mount(
       withBoard((board) => {
@@ -1526,10 +1551,13 @@ describe('flows that call another flow (decision 19)', () => {
       }),
     );
     await loaded();
-    const link = screen.getByRole('button', { name: `다른 흐름${calledTitle}` });
+    expect(document.querySelectorAll('svg path[marker-end]').length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: /^흐름/ }));
+    const flows = screen.getByRole('navigation', { name: '흐름' });
+    const [link] = within(flows).getAllByRole('button', { name: new RegExp(`^${calledTitle}`) });
     const scrolled = vi.mocked(Element.prototype.scrollIntoView);
     scrolled.mockClear();
-    fireEvent.click(link);
+    fireEvent.click(link!);
     // It leads to that journey's row.
     await waitFor(() => expect(scrolled.mock.contexts).toContain(screen.getByRole('region', { name: calledTitle })));
   });
@@ -1580,12 +1608,12 @@ describe('beside its conversation (map-first 43)', () => {
     expect(within(panel).queryByLabelText('AI에게 부탁하기')).toBeNull();
     // The only input for the map is the one beside it.
     expect(
-      screen.queryAllByRole('textbox', { name: '지도에 부탁하기', hidden: true }).filter((box) => !slot.contains(box)),
+      screen.queryAllByRole('textbox', { name: '보드에 부탁하기', hidden: true }).filter((box) => !slot.contains(box)),
     ).toEqual([]);
     fireEvent.click(within(panel).getByRole('button', { name: '이 카드에 대해 부탁하기' }));
     expect(onShowTalk).toHaveBeenCalled();
     expect(within(slot).getByText('장바구니에 대해')).toBeTruthy();
-    fireEvent.change(within(slot).getByRole('textbox', { name: '지도에 부탁하기' }), {
+    fireEvent.change(within(slot).getByRole('textbox', { name: '보드에 부탁하기' }), {
       target: { value: '선물 포장 단계를 추가해 줘' },
     });
     fireEvent.click(within(slot).getByRole('button', { name: '보내기' }));
@@ -1607,7 +1635,7 @@ describe('beside its conversation (map-first 43)', () => {
       {
         results: {
           'session/list': {
-            sessions: [sessionInfo({ id: 'map-1', cwd, purpose: 'map', title: '지도', status: 'running' })],
+            sessions: [sessionInfo({ id: 'map-1', cwd, purpose: 'map', title: '보드', status: 'running' })],
           },
         },
       },
@@ -1616,7 +1644,7 @@ describe('beside its conversation (map-first 43)', () => {
       vi.fn(),
       { talkSlot: slot, onShowTalk: vi.fn() },
     );
-    const box = await within(slot).findByRole('textbox', { name: '지도에 부탁하기' });
+    const box = await within(slot).findByRole('textbox', { name: '보드에 부탁하기' });
     await waitFor(() => expect(box.getAttribute('placeholder')).toBe('지금 일이 끝나면 전해요'));
     expect(within(slot).queryByRole('button', { name: '멈추기' })).toBeNull();
     expect(within(slot).getByRole('button', { name: '보내기' })).toBeTruthy();
@@ -1628,6 +1656,6 @@ describe('beside its conversation (map-first 43)', () => {
     mount({}, vi.fn(), vi.fn(), vi.fn(), { talkSlot: null, onShowTalk });
     fireEvent.click(await screen.findByRole('button', { name: 'AI와 대화하기' }));
     expect(onShowTalk).toHaveBeenCalled();
-    expect(screen.queryByRole('textbox', { name: '지도에 부탁하기' })).toBeNull();
+    expect(screen.queryByRole('textbox', { name: '보드에 부탁하기' })).toBeNull();
   });
 });

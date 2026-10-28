@@ -51,6 +51,7 @@ import {
   type TreePromise,
 } from './flowTreeModel';
 import { flowTreeMessages as messages } from './flowTreeMessages';
+import { LiveScreenView, SituationNote, useLiveApp, type SituationAct } from './liveScreens';
 import type { SourceText } from './treeParts';
 import { TreeCanvas, type ShownNode, type TreeCanvasHandle } from './TreeCanvas';
 import {
@@ -127,13 +128,15 @@ export interface FlowTreeProps {
   touching?: ReadonlySet<string>;
   /** The card a question is about now: outlined so its screen can be read while answering. */
   asked?: string | null;
+  /** What the person decides about a screen's situation: make a proposal, have one that does not show fixed, or drop it. */
+  onSituation?: (cardId: string, situationId: string, act: SituationAct) => void;
 }
 
 /** What the side panel shows: a node's details, a promise of a step, or a form for what a "+" adds. */
 export type Focus =
   | { kind: 'person'; personId: string }
   | { kind: 'journey'; personId: string; journeyId: string }
-  | { kind: 'step'; personId: string; journeyId: string; cardId: string }
+  | { kind: 'step'; personId: string; journeyId: string; cardId: string; state?: string | null }
   | { kind: 'promise'; personId: string; journeyId: string; cardId: string; promiseId: string }
   | { kind: 'addJourney'; personId: string }
   | { kind: 'addPerson' };
@@ -860,19 +863,11 @@ function ScreenView({ screen, look }: { screen: CardScreen; look: string }) {
   );
 }
 
-/**
- * What was decided on a card, in one line under its title: the person's latest answer, or what the AI took on its own
- * ("AI가 정함 · 같이 지워요"), which the person can change from the card.
- */
+/** What was decided on a card, in one line under its title: the latest answer. */
 function PickLine({ card }: { card: TreeCard }) {
-  const t = useMessages(messages);
   const last = card.picks?.at(-1);
   if (!last) return null;
-  return (
-    <span className="shrink-0 truncate text-meta text-fg-muted">
-      {last.by === 'ai' ? `${t.aiPicked} · ${last.answer}` : last.answer}
-    </span>
-  );
+  return <span className="shrink-0 truncate text-meta text-fg-muted">{last.answer}</span>;
 }
 
 /** The card's screen at a glance: a real capture, a sketch marked as one, a planned screen, or room left for one. */
@@ -1098,8 +1093,21 @@ export function CardDialog({
   onDone: (focus: Focus | null) => void;
 }) {
   const t = useMessages(messages);
-  const focusScreen =
-    focus && (focus.kind === 'step' || focus.kind === 'promise') ? map.cards[focus.cardId]?.screen : undefined;
+  const live = useLiveApp();
+  const focusCard = focus && (focus.kind === 'step' || focus.kind === 'promise') ? map.cards[focus.cardId] : undefined;
+  const focusScreen = focusCard?.screen;
+  // A screen in the running app shows itself, every situation and its real buttons, not a picture of it.
+  const liveCard = live && focusCard?.path && focusCard.kind === 'screen' ? focusCard : undefined;
+  const liveDevice =
+    (focus && 'journeyId' in focus ? person?.journeys.find((one) => one.id === focus.journeyId)?.device : null) ??
+    focusScreen?.device ??
+    'phone';
+  const goTo = (cardId: string) => {
+    for (const someone of [person, ...map.people].filter((one): one is Person => !!one)) {
+      const journey = someone.journeys.find((one) => one.steps.includes(cardId));
+      if (journey) return onFocus({ kind: 'step', personId: someone.id, journeyId: journey.id, cardId });
+    }
+  };
   return (
     <Dialog.Root
       open={focus !== null}
@@ -1113,7 +1121,12 @@ export function CardDialog({
       }}
     >
       <Dialog.Popup
-        className={clsx('relative max-h-[85vh] gap-0 overflow-y-auto p-0', focusScreen && 'w-[min(760px,94vw)]!')}
+        className={clsx(
+          'relative max-h-[85vh] gap-0 overflow-y-auto p-0',
+          liveCard && liveDevice === 'computer'
+            ? 'w-[min(1000px,94vw)]!'
+            : (focusScreen || liveCard) && 'w-[min(760px,94vw)]!',
+        )}
       >
         <Dialog.Close
           aria-label={t.close}
@@ -1122,7 +1135,33 @@ export function CardDialog({
         >
           <X size={14} aria-hidden />
         </Dialog.Close>
-        {focusScreen && <ScreenView key={focusScreen.src} screen={focusScreen} look={props.look ?? WIREFRAME} />}
+        {focusCard && focus?.kind === 'step' && focus.state && (
+          <SituationNote
+            card={focusCard}
+            state={focus.state}
+            onAct={
+              props.onSituation
+                ? (act) => {
+                    props.onSituation!(focusCard.id, focus.state!, act);
+                    if (act === 'drop') onFocus({ ...focus, state: null });
+                  }
+                : undefined
+            }
+          />
+        )}
+        {liveCard && focus?.kind !== 'addPerson' && focus?.kind !== 'person' ? (
+          <LiveScreenView
+            key={liveCard.id}
+            map={map}
+            card={liveCard}
+            device={liveDevice}
+            state={focus?.kind === 'step' ? (focus.state ?? null) : null}
+            onState={(state) => focus?.kind === 'step' && onFocus({ ...focus, state })}
+            onGo={goTo}
+          />
+        ) : (
+          focusScreen && <ScreenView key={focusScreen.src} screen={focusScreen} look={props.look ?? WIREFRAME} />
+        )}
         {props.waitNote && (
           <p role="status" className="mx-5 mt-5 mr-12 rounded-lg bg-canvas-sunken px-3 py-2 text-meta text-attention">
             {props.waitNote}
@@ -1436,10 +1475,15 @@ function PersonPanel({
         </span>
       </div>
       <section className="flex flex-col gap-2">
+        {/* Before anything is built nothing could have passed yet: no red 0 while planning (dogfood 24). */}
         <span className="text-title tabular-nums">
-          {counts.total ? t.promiseSummary(counts.passed, counts.total) : t.noPromises}
+          {!counts.total
+            ? t.noPromises
+            : props.planning
+              ? t.promisesPlanned(counts.total)
+              : t.promiseSummary(counts.passed, counts.total)}
         </span>
-        {counts.total > 0 && <Progress counts={counts} wide />}
+        {counts.total > 0 && !props.planning && <Progress counts={counts} wide />}
         {counts.checking > 0 && (
           <p role="status" className="motion-step flex items-center gap-2 text-meta text-interactive">
             <LoaderCircle size={13} aria-hidden className="motion-spin" />
@@ -1541,8 +1585,10 @@ function JourneyPanel({
       ) : (
         <>
           <section className="flex flex-col gap-2">
-            <span className="tabular-nums">{t.promiseSummary(counts.passed, counts.total)}</span>
-            <Progress counts={counts} wide />
+            <span className="tabular-nums">
+              {props.planning ? t.promisesPlanned(counts.total) : t.promiseSummary(counts.passed, counts.total)}
+            </span>
+            {!props.planning && <Progress counts={counts} wide />}
           </section>
           <ol className="flex flex-col">
             {journey.steps.map((cardId, index) => {

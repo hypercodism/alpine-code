@@ -101,7 +101,7 @@ describe('새 프로젝트', () => {
     const { router, sent } = mount();
     await send();
     fireEvent.click(await screen.findByRole('button', { name: '만들기' }));
-    fireEvent.click(await screen.findByRole('button', { name: '지도로 가기' }));
+    fireEvent.click(await screen.findByRole('button', { name: '보드로 가기' }));
     await waitFor(() => expect(router.state.location.pathname).toBe('/board'));
     expect(router.state.location.search).toEqual({ project: MADE.path });
     expect(sent.find((r) => r.method === 'projects/create')?.params.folder).toBeUndefined();
@@ -113,7 +113,7 @@ describe('새 프로젝트', () => {
     expect(await screen.findByRole('button', { name: '만들 곳: devlog' })).toBeTruthy();
     await send();
     fireEvent.click(await screen.findByRole('button', { name: '만들기' }));
-    fireEvent.click(await screen.findByRole('button', { name: '지도로 가기' }));
+    fireEvent.click(await screen.findByRole('button', { name: '보드로 가기' }));
     await waitFor(() => expect(router.state.location.search).toEqual({ project: mine }));
     expect(sent.find((r) => r.method === 'projects/create')?.params.folder).toBe(mine);
   });

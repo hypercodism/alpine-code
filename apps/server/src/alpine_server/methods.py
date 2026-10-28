@@ -21,6 +21,7 @@ from alpine_core import (
     Settings,
     chatgpt_tokens,
     current_branch,
+    git_diff,
     git_status,
     list_models,
     load_catalog,
@@ -63,11 +64,14 @@ from alpine_protocol import (
     GitInfo,
     InitializeParams,
     InitializeResult,
+    ProjectDiffFile,
     ProjectInfo,
     ProjectsArchiveParams,
     ProjectsArchiveResult,
     ProjectsDeleteParams,
     ProjectsDeleteResult,
+    ProjectsDiffParams,
+    ProjectsDiffResult,
     ProjectsGitParams,
     ProjectsGitResult,
     ProjectsOpenParams,
@@ -331,6 +335,17 @@ def project_git(params: ProjectsGitParams) -> ProjectsGitResult:
     )
 
 
+def project_diff(params: ProjectsDiffParams) -> ProjectsDiffResult:
+    found = git_diff(Path(params.path))
+    if found is None:
+        return ProjectsDiffResult(git=False, files=[])
+    return ProjectsDiffResult(
+        git=True,
+        files=[ProjectDiffFile(**vars(f)) for f in found.files],
+        truncated=found.truncated,
+    )
+
+
 def _cached_pull_request(folder: Path, branch: str | None) -> PullRequest | None:
     if branch is None:
         return None
@@ -368,4 +383,5 @@ HANDLERS: dict[str, Callable[[Any], Any]] = {
     "projects/archive": archive_project,
     "projects/delete": delete_project,
     "projects/git": project_git,
+    "projects/diff": project_diff,
 }

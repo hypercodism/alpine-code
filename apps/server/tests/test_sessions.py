@@ -142,7 +142,7 @@ def approval_id(client: Client, sid: str):
 
 
 def test_approval_allow_and_first_answer_wins(folder, monkeypatch):
-    fake_model(monkeypatch, tool_call("bash", command="echo 1"), "done")
+    fake_model(monkeypatch, tool_call("bash", command="touch made.txt"), "done")
 
     async def scenario():
         async with Client([]) as client:
@@ -192,7 +192,7 @@ def test_approval_deny_skips_the_call_and_the_run_goes_on(folder, monkeypatch):
             await client.status(sid, "idle")
             return (await client.call("session/open", sessionId=sid))["result"]
 
-    replies = [tool_call("bash", command="echo 1"), "OK"]
+    replies = [tool_call("bash", command="touch made.txt"), "OK"]
     skipped = asyncio.run(scenario(replies, None, "agent_message"))
     assert [i["kind"] for i in skipped["items"]][-2:] == ["tool_call", "agent_message"]
     continued = asyncio.run(scenario(replies, "use ls", "agent_message"))
@@ -201,7 +201,7 @@ def test_approval_deny_skips_the_call_and_the_run_goes_on(folder, monkeypatch):
 
 
 def test_cancel_while_waiting_and_idle_cancel(folder, monkeypatch):
-    fake_model(monkeypatch, tool_call("bash", command="echo 1"), "done")
+    fake_model(monkeypatch, tool_call("bash", command="touch made.txt"), "done")
 
     async def scenario():
         async with Client([]) as client:
@@ -220,7 +220,7 @@ def test_cancel_while_waiting_and_idle_cancel(folder, monkeypatch):
 
 
 def test_shutdown_saves_running_sessions_as_interrupted_and_open_resumes_from_disk(folder, monkeypatch):
-    fake_model(monkeypatch, tool_call("bash", command="echo 1"), "done")
+    fake_model(monkeypatch, tool_call("bash", command="touch made.txt"), "done")
 
     async def first():
         async with Client([]) as client:
@@ -270,7 +270,7 @@ def test_list_reports_a_dead_process_as_idle_without_opening_it(folder, monkeypa
 
 
 def test_sigterm_closes_the_server_and_saves_running_sessions(folder, monkeypatch):
-    fake_model(monkeypatch, tool_call("bash", command="echo 1"), "done")
+    fake_model(monkeypatch, tool_call("bash", command="touch made.txt"), "done")
 
     async def scenario():
         client = Client([])
@@ -347,7 +347,7 @@ def test_a_slow_method_does_not_block_a_session(folder, monkeypatch):
 
 
 def test_info_carries_activity_usage_and_context_on_the_wire(folder, monkeypatch):
-    fake_model(monkeypatch, tool_call("bash", command="echo 1"), "done")
+    fake_model(monkeypatch, tool_call("bash", command="touch made.txt"), "done")
 
     async def scenario():
         async with Client([]) as client:
@@ -562,7 +562,7 @@ def test_set_agent_switches_from_the_next_message_and_says_so(folder, monkeypatc
 
 
 def test_set_agent_is_refused_while_running_and_for_an_unknown_agent(folder, monkeypatch):
-    fake_model(monkeypatch, tool_call("bash", command="echo 1"), "done")
+    fake_model(monkeypatch, tool_call("bash", command="touch made.txt"), "done")
 
     async def scenario():
         async with Client([]) as client:

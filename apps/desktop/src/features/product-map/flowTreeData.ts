@@ -85,6 +85,12 @@ function toJourney(flow: ProductFlow): Journey {
     steps: flow.nodeIds ?? [],
     edges: (flow.edges ?? []).map((edge) => ({ from: edge.source, to: edge.target, label: edge.label ?? '' })),
     device: flow.device ?? null,
+    situations: (flow.situations ?? []).map((situation) => ({
+      id: situation.id,
+      title: situation.title,
+      why: situation.why ?? '',
+      screen: situation.screen ?? null,
+    })),
   };
 }
 
@@ -98,7 +104,8 @@ function toCard(node: FlowNode, result: FlowGetResult, working: ReadonlySet<stri
       checking && promise?.status !== 'passed' ? 'checking' : (promise?.status ?? 'unconfirmed');
     return {
       id: condition.id,
-      when: '',
+      // A promise about one of the screen's situations reads "그 상황 → 이렇게 된다".
+      when: (condition.state && node.states?.find((situation) => situation.id === condition.state)?.title) || '',
       then: condition.expectation,
       status,
       note: check?.plain || check?.summary || '',
@@ -109,6 +116,7 @@ function toCard(node: FlowNode, result: FlowGetResult, working: ReadonlySet<stri
       environment: check?.environment ?? '',
       changedFiles: promise?.changed ?? [],
       question: promise?.issue === 'question',
+      state: condition.state ?? null,
     };
   });
   return {
@@ -135,6 +143,12 @@ function toCard(node: FlowNode, result: FlowGetResult, working: ReadonlySet<stri
     tentative: !!node.tentative,
     phase: node.phase ?? null,
     path: node.path ?? null,
+    states: (node.states ?? []).map((situation) => ({
+      id: situation.id,
+      title: situation.title,
+      why: situation.why ?? '',
+      handled: situation.handled ?? true,
+    })),
     picks: (node.decisions ?? []).map((pick) => ({
       question: pick.question,
       options: pick.options ?? [],

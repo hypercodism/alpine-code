@@ -56,7 +56,9 @@ const FONTS = `<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncac
 
 /** A screen's body as a whole page, with every look's fonts and the page's ground and ink from the theme. */
 export const screenPage = (body: string) =>
-  `<!doctype html><html lang="ko"><head><meta charset="utf-8">${FONTS}</head>` +
+  // Korean breaks between words, not inside them: a narrow menu never reads 기/록, 주/제 (dogfood 20).
+  `<!doctype html><html lang="ko"><head><meta charset="utf-8">${FONTS}` +
+  `<style>body{word-break:keep-all;overflow-wrap:break-word}</style></head>` +
   `<body class="bg-page text-ink font-body antialiased">${body}</body></html>`;
 
 /** What the person on a journey uses it on (`ProductFlow.device`); a journey without one is drawn for a phone. */

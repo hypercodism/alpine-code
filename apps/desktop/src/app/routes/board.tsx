@@ -1,20 +1,24 @@
 import { LinkButton, PanelResizer, usePanelWidth } from '@alpine/ui/primitives';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
-import { ArrowLeft } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { Database, FileText, Globe, ListChecks, MessageSquare, SquareTerminal } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
 
 import { useAppPeople, useHasApp } from '@/app/appScreens';
-import { MoreMenu } from '@/app/MoreMenu';
 import { shellMessages } from '@/app/shellMessages';
+import { ProjectCode } from '@/app/ProjectCode';
 import { MapTopBar, StartTopBar } from '@/app/ShellTopBar';
 import { UpdateButton } from '@/app/TopBar';
-import { CHANGES_TAB, SUMMARY_TAB, useProjectTools } from '@/app/WorkspaceDock';
+import { ToolRail, type RailPlace } from '@/app/ToolRail';
+import { DataPlace, SUMMARY_TAB } from '@/app/WorkspaceDock';
 import { AppView } from '@/features/app-view/AppView';
-import { showApp, useAppCard, useLookingAt, useProjectView } from '@/features/app-view/state';
+import { showApp, showMap, showView, useAppCard, useLookingAt, useProjectView } from '@/features/app-view/state';
+import { DeployLogs } from '@/features/deploy-logs/DeployLogs';
 import { messages as serverMessages } from '@/features/development-servers/messages';
 import { messages as dockMessages } from '@/features/dock/messages';
-import { showDockTab, useDockTab } from '@/features/dock/state';
+import { pickRailPlace, setRailProject, showDockTab, useRail } from '@/features/dock/state';
+import { ProcessControl, useCommands } from '@/features/process-control';
 import { askMapFor } from '@/features/product-map/askRequest';
 import { useMapActions } from '@/features/product-map/mapActions';
 import { useMapTalk } from '@/features/product-map/mapTalk';
@@ -26,11 +30,20 @@ import { openPublish, usePublishable } from '@/features/publish/publishRequest';
 import { MissingProject } from '@/features/rail/MissingProject';
 import { RecordItems } from '@/features/session/RecordItems';
 import { Session } from '@/features/session/Session';
+import { WaitingApprovals } from '@/features/session/WaitingApprovals';
 import { useTaskForceTab } from '@/features/taskforce/useTaskForceTab';
-import { useWorkResultTab } from '@/features/work-result/useWorkResultTab';
+import { Terminal } from '@/features/terminal';
 import { FileNavigationProvider } from '@/shared/files';
 import { useMessages } from '@/shared/i18n';
-import { useCloudEnabled, useProductMap, useProjects, useSession, type Item } from '@/shared/server';
+import {
+  useCloudEnabled,
+  useDataSources,
+  useProductMap,
+  useProjects,
+  usePublishStatus,
+  useSession,
+  type Item,
+} from '@/shared/server';
 
 export const Route = createFileRoute('/board')({
   validateSearch: (search: Record<string, unknown>): { project?: string; session?: string } => ({
@@ -45,9 +58,10 @@ function renderRecord(items: Item[]) {
 }
 
 /**
- * A project's window (flow-spec, 화면의 뼈대): the bar over the left (the project menu, 지도 | 앱, the map's actions),
- * the map or the app under it, and on the right the conversation, where a developer tool from ⋯ opens in its place with
- * ← 대화 back. Everything said to the map sits under the conversation (map-first 43).
+ * A project's window (flow-spec, 화면의 뼈대): the bar over the left (the project menu, 보드 · 문서 · 앱 · 코드, the
+ * map's actions), the board, its document, the app or the code under it; on the right the icon rail (2c) and beside it
+ * the place it picked: the conversation, 명령, 터미널, 로그 or 데이터, folded away when its icon is pressed again.
+ * Everything said to the map sits under the place, whichever it is (map-first 43).
  */
 function BoardRoute() {
   const { project: chosen, session: asked } = Route.useSearch();
@@ -64,7 +78,6 @@ function BoardRoute() {
   const [buildShownFor, setBuildShownFor] = useState<string | null>(null);
   const navigate = useNavigate();
   const attached = useSession(session ?? null);
-  const resultTab = useWorkResultTab(session ?? null, chosen);
   const cloud = useCloudEnabled();
   const t = useMessages(dockMessages);
   const m = useMessages(mapMessages);
@@ -83,23 +96,42 @@ function BoardRoute() {
   const unbuilt = !!board?.planned && planPhase(board, false, false) !== 'built';
   const publishable = usePublishable(cwd, cloud && !!project && !unbuilt);
   const hasApp = useHasApp(cwd);
-  const showingApp = useProjectView(cwd) === 'app' && hasApp;
+  const view = useProjectView(cwd);
+  const showingApp = view === 'app' && hasApp;
+  // The code tab covers the map like the app does; the document is the map itself, read another way.
+  const showingCode = view === 'code';
+  const mapCovered = showingApp || showingCode;
   const cardId = useAppCard(cwd);
   const looking = useLookingAt(cwd);
   const people = useAppPeople(cwd, project?.name ?? '');
   const lookingTitle = showingApp
     ? people.flatMap((p) => p.journeys.flatMap((j) => j.screens)).find((screen) => screen.id === looking)?.title
     : undefined;
-  const [chosenTool] = useDockTab();
-  const tools = useProjectTools({
-    cwd,
-    sessionId: attachedHere ? session : undefined,
-    changes: { ...resultTab, label: s.changes },
-    enabled: !!project,
-  });
-  // A developer tool takes the conversation's place; anything else picked (대화, or a session page's tab) is the
-  // conversation.
-  const tool = tools.find((each) => each.id === chosenTool) ?? null;
+  const rail = useRail(cwd);
+  // `showDockTab` (a card's 명령, the AI 팀) opens a place of this window while it shows.
+  useEffect(() => {
+    setRailProject(cwd || null);
+    return () => setRailProject(null);
+  }, [cwd]);
+  const client = useQueryClient();
+  const running =
+    useCommands(cwd).data?.processes.filter((p) => p.kind !== 'shell' && p.status === 'running').length ?? 0;
+  // The 데이터 place is Alpine Cloud's, and only once there is data to show.
+  const hasData = useDataSources(cwd, cloud && !!project).data?.sources.some((source) => source.available) ?? false;
+  const published = !!usePublishStatus(cwd, cloud && !!project).data?.lastPublishedAt;
+  const places: RailPlace[] = [
+    { id: SUMMARY_TAB, label: s.conversation, icon: MessageSquare },
+    { id: 'processes', label: s.commands, icon: ListChecks, badge: running },
+    { id: 'terminal', label: s.terminal, icon: SquareTerminal },
+    { id: 'logs', label: s.logs, icon: FileText },
+    ...(hasData ? [{ id: 'data', label: s.data, icon: Database }] : []),
+    { id: 'browser', label: s.browser, icon: Globe, later: true },
+  ];
+  // A place that is not here (데이터 without data, or an id another page used) shows the conversation.
+  const place = places.some((each) => each.id === rail.place && !each.later) ? rail.place : SUMMARY_TAB;
+  // The terminal starts once its place is first opened, and keeps its shells while another place shows.
+  const [terminalFor, setTerminalFor] = useState<string | null>(null);
+  if (place === 'terminal' && terminalFor !== cwd) setTerminalFor(cwd);
   const width = usePanelWidth({ storageKey: 'alpine.work-result.width', initial: 400, min: 320, max: 720 });
   const teamShown = !!team && teamOf === session;
   // Opens the app at one screen: 앱에서 보기 on a map card, or a screen picked beside the app.
@@ -116,7 +148,7 @@ function BoardRoute() {
     return (
       <div className="flex min-w-0 grow flex-col">
         <StartTopBar project={chosen} />
-        <div className="mx-2 mb-2 flex min-h-0 grow overflow-hidden rounded-xl border border-line bg-canvas">
+        <div className="mx-2 mb-2 flex min-h-0 grow overflow-clip rounded-xl border border-line bg-canvas">
           {projects.data && chosen ? (
             <MissingProject
               path={chosen}
@@ -132,14 +164,17 @@ function BoardRoute() {
   // A finished build of a plan, as one line in the map's conversation: how long it took, and its work when opened.
   const buildDone = planned && !!buildSessionId && !building && !!buildInfo && buildInfo.status !== 'running';
   const buildMinutes = buildInfo
-    ? Math.max(1, Math.round((Date.parse(buildInfo.updatedAt) - Date.parse(buildInfo.createdAt)) / 60000) || 1)
+    ? Math.max(
+        1,
+        Math.round((Date.parse(builtAt(buildInfo, buildDone)) - Date.parse(buildInfo.createdAt)) / 60000) || 1,
+      )
     : 1;
   const conversation = attachedHere ? (
     <div className="flex min-h-0 grow flex-col">
       {/* Another conversation opened beside the map (a card's, one brought over): my words to the map do not go
           there, so it says so and leads back. */}
       {talkTo && session !== talkTo && (
-        <p className="flex flex-wrap items-center gap-x-2 border-b border-line bg-canvas-sunken px-4 py-2 text-meta text-fg-muted">
+        <p className="flex shrink-0 flex-wrap items-center gap-x-2 border-b border-line bg-canvas-sunken px-4 py-2 text-meta text-fg-muted">
           <span>{m.viewingOther}</span>
           <LinkButton
             className="min-h-5 px-0.5"
@@ -151,21 +186,22 @@ function BoardRoute() {
       )}
       {buildDone && buildShownFor === buildSessionId ? (
         <div className="flex min-h-0 grow flex-col">
-          <p className="border-b border-line px-4 py-2 text-meta">
+          <p className="shrink-0 border-b border-line px-4 py-2 text-meta">
             <LinkButton className="min-h-5 px-0.5" onClick={() => setBuildShownFor(null)}>
               {m.backToConversation}
             </LinkButton>
           </p>
-          <Session key={buildSessionId} sessionId={buildSessionId} compact readOnly inputOnMap />
+          <Session key={buildSessionId} sessionId={buildSessionId} compact readOnly inputOnMap approvalsPinned />
         </div>
       ) : teamShown ? (
-        <div className="flex min-h-0 grow flex-col overflow-y-auto">
-          <p className="border-b border-line px-4 py-2 text-meta">
+        <div className="flex min-h-0 grow flex-col">
+          {/* The way back stays in view however far the agents' records scroll. */}
+          <p className="shrink-0 border-b border-line px-4 py-2 text-meta">
             <LinkButton className="min-h-5 px-0.5" onClick={() => setTeamOf(null)}>
               {m.backToConversation}
             </LinkButton>
           </p>
-          {team.content}
+          <div className="min-h-0 grow overflow-y-auto">{team.content}</div>
         </div>
       ) : (
         // The map has its own input; here the conversation only reads, unless it is one the map's input does not
@@ -188,6 +224,7 @@ function BoardRoute() {
             readOnly
             inputOnMap={!talkTo || session === talkTo}
             questionsPinned={planned && session === talkTo}
+            approvalsPinned
             onInspectProcesses={() => showDockTab('processes')}
             onShowTaskForce={
               team
@@ -206,30 +243,32 @@ function BoardRoute() {
   );
 
   return (
-    <FileNavigationProvider
-      key={cwd}
-      cwd={cwd}
-      onOpen={() => showDockTab('source')}
-      onReturnToChanges={() => showDockTab(CHANGES_TAB)}
-    >
-      <div className="flex min-w-0 grow">
-        <section className="flex min-w-0 grow flex-col">
+    // A file opened anywhere in the window (a link in the conversation) shows in the 코드 tab.
+    <FileNavigationProvider key={cwd} cwd={cwd} onOpen={() => showView(cwd, 'code')}>
+      {/* Neither side ever scrolls as a whole (overflow: clip): the bar over the map and the conversation's header
+          stay, whatever inside them is brought into view. */}
+      <div className="flex min-h-0 min-w-0 grow overflow-clip">
+        <section className="flex min-h-0 min-w-0 grow flex-col overflow-clip">
           <MapTopBar
             cwd={cwd}
             hasApp={hasApp}
             end={
-              publishable && (
-                // A plan's completion card has 인터넷에 올리기; the sheet still opens from there (openPublish).
-                <PublishButton cwd={cwd} name={project.name} sessionId={talkTo} sheetOnly={planned} />
-              )
+              <>
+                {/* The restart-to-update button, which sat by ⋯ before ⋯ went down to the rail. */}
+                <UpdateButton />
+                {publishable && (
+                  // A plan's completion card has 인터넷에 올리기; the sheet still opens from there (openPublish).
+                  <PublishButton cwd={cwd} name={project.name} sessionId={talkTo} sheetOnly={planned} />
+                )}
+              </>
             }
           />
-          <div className="relative min-h-0 grow">
+          <div className="relative min-h-0 grow overflow-clip">
             {/* The map stays mounted under the app, so going back finds it where it was. */}
             <div
-              className={clsx('absolute inset-0 flex min-w-0', showingApp && 'invisible')}
-              aria-hidden={showingApp}
-              inert={showingApp}
+              className={clsx('absolute inset-0 flex min-w-0', mapCovered && 'invisible')}
+              aria-hidden={mapCovered}
+              inert={mapCovered}
             >
               <ProductMap
                 key={cwd}
@@ -237,7 +276,9 @@ function BoardRoute() {
                 sessionId={session ?? null}
                 dockOpen
                 menuInWindow
-                hidden={showingApp}
+                hidden={mapCovered}
+                view={view === 'doc' ? 'doc' : 'board'}
+                onShowBoard={() => showMap(cwd)}
                 talkSlot={talkSlot}
                 onShowTalk={() => showDockTab(SUMMARY_TAB)}
                 demo={!('__TAURI_INTERNALS__' in window)}
@@ -260,6 +301,11 @@ function BoardRoute() {
                 }
               />
             </div>
+            {showingCode && (
+              <div className="absolute inset-0 flex min-w-0">
+                <ProjectCode key={cwd} cwd={cwd} />
+              </div>
+            )}
             {showingApp && (
               <div className="absolute inset-0 flex min-w-0">
                 <AppView
@@ -286,34 +332,80 @@ function BoardRoute() {
           </div>
         </section>
         <aside
-          // Named as the dock it replaces: the right side of the window, which holds the conversation.
+          // The place the rail picked; folded, it is not shown and the board takes the room.
           aria-label={t.title}
+          hidden={rail.folded}
           style={{ width: width.width }}
-          className="relative flex shrink-0 flex-col border-l border-line bg-canvas"
+          className={clsx(
+            'relative min-h-0 shrink-0 flex-col border-l border-line bg-canvas',
+            rail.folded ? 'hidden' : 'flex',
+          )}
         >
           <PanelResizer panel={width} edge="left" label={t.resize} />
-          <header data-tauri-drag-region className="flex h-12 shrink-0 items-center gap-2 pr-3.5 pl-4">
-            {tool && (
-              <>
-                <LinkButton className="min-h-6 gap-1 px-0.5" onClick={() => showDockTab(SUMMARY_TAB)}>
-                  <ArrowLeft size={14} strokeWidth={1.6} aria-hidden="true" />
-                  {s.backToConversation}
-                </LinkButton>
-                <span aria-hidden="true" className="h-4 w-px bg-line" />
-                <h2 className="truncate text-body font-medium">{tool.label}</h2>
-              </>
-            )}
-            <span data-tauri-drag-region className="grow self-stretch" />
-            <UpdateButton />
-            <MoreMenu project={cwd} tools={tools} onTool={showDockTab} />
-          </header>
-          {tool && (
-            <ToolPlace id={tool.id} bare={tool.bare}>
-              {tool.content}
-            </ToolPlace>
+          {place === SUMMARY_TAB ? (
+            <PlaceHeader>
+              {/* The conversations of the project will sit here as tabs; for now the board's own. */}
+              <span className="rounded-md bg-hover px-2.5 py-1 text-body font-medium text-fg">
+                {s.conversationWithBoard}
+              </span>
+            </PlaceHeader>
+          ) : place === 'processes' ? null : (
+            <PlaceHeader>
+              <h2 className="text-body font-semibold">{places.find((each) => each.id === place)?.label}</h2>
+            </PlaceHeader>
           )}
-          {/* The conversation stays mounted behind a tool, so coming back finds it where it was. */}
-          <div className={clsx('min-h-0 grow flex-col', tool ? 'hidden' : 'flex')}>{conversation}</div>
+          {place === 'processes' && (
+            <ProcessControl
+              key={cwd}
+              cwd={cwd}
+              onInspectProcess={(processId) => {
+                client.setQueryData(['terminal-selection', cwd], processId);
+                showDockTab('terminal');
+              }}
+              onAskAI={(text) => {
+                askMapFor(cwd, text);
+                showDockTab(SUMMARY_TAB);
+              }}
+              renderHeader={(count, actions) => (
+                <PlaceHeader>
+                  <h2 className="text-body font-semibold">{s.commands}</h2>
+                  {count}
+                  <span data-tauri-drag-region className="grow self-stretch" />
+                  {actions}
+                </PlaceHeader>
+              )}
+            />
+          )}
+          {/* The terminal keeps its shells while another place shows. */}
+          {terminalFor === cwd && (
+            <div className={clsx('min-h-0 grow flex-col', place === 'terminal' ? 'flex' : 'hidden')}>
+              <Terminal
+                key={cwd}
+                cwd={cwd}
+                sessionId={attachedHere ? session : undefined}
+                onOpenDevelopmentServer={() => showApp(cwd)}
+              />
+            </div>
+          )}
+          {place === 'logs' && (
+            <div className="min-h-0 grow overflow-y-auto">
+              <DeployLogs
+                published={published}
+                onPublish={publishable ? () => openPublish(cwd) : undefined}
+                onShowCommands={() => pickRailPlace(cwd, 'processes')}
+                onShowTerminal={() => pickRailPlace(cwd, 'terminal')}
+              />
+            </div>
+          )}
+          {place === 'data' && (
+            <div className="flex min-h-0 grow flex-col">
+              <DataPlace key={cwd} cwd={cwd} />
+            </div>
+          )}
+          {/* The conversation stays mounted behind another place, so coming back finds it where it was. */}
+          <div className={clsx('min-h-0 grow flex-col', place === SUMMARY_TAB ? 'flex' : 'hidden')}>{conversation}</div>
+          {/* Every call of the project waiting for my OK, whatever shows above: never behind a card or another view. */}
+          <WaitingApprovals cwd={cwd} />
           {lookingTitle && (
             <p className="mx-4 mb-2 flex items-center gap-1.5 text-meta text-fg-muted">
               <span aria-hidden="true" className="size-1.5 rounded-full bg-interactive" />
@@ -322,19 +414,44 @@ function BoardRoute() {
           )}
           <div ref={setTalkSlot} className="contents" />
         </aside>
+        <ToolRail
+          project={cwd}
+          places={places}
+          current={place}
+          folded={rail.folded}
+          onPick={(id) => pickRailPlace(cwd, id)}
+        />
       </div>
     </FileNavigationProvider>
   );
 }
 
-/** A developer tool in the conversation's place: the ones that scroll and pad themselves fill it edge to edge. */
-function ToolPlace({ id, bare, children }: { id: string; bare?: boolean; children: ReactNode }) {
+const BUILT_AT = 'alpine.build.ended-at';
+
+/**
+ * When a build ended, as first seen: its conversation may be touched again later (asked something once built), and
+ * 만들기 · N분 걸렸어요 counts the build alone, not what came after it (dogfood 24).
+ */
+function builtAt(info: { id: string; updatedAt: string }, done: boolean): string {
+  try {
+    const key = `${BUILT_AT}:${info.id}`;
+    const seen = localStorage.getItem(key);
+    if (seen) return seen;
+    if (done) localStorage.setItem(key, info.updatedAt);
+  } catch {
+    // Not kept: the latest change stands in.
+  }
+  return info.updatedAt;
+}
+
+/** The head of the place beside the board: its name, or the conversation's tab, and what acts on it. */
+function PlaceHeader({ children }: { children: ReactNode }) {
   return (
-    <div
-      id={`dock-panel-${id}`}
-      className={clsx('motion-content flex min-h-0 grow flex-col', !bare && 'overflow-y-auto px-5 pb-5')}
+    <header
+      data-tauri-drag-region
+      className="flex h-12 shrink-0 items-center gap-2 border-b border-line-subtle pr-3.5 pl-4"
     >
       {children}
-    </div>
+    </header>
   );
 }

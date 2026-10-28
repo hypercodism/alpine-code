@@ -93,8 +93,66 @@ export function useDockTab(): [string | null, (id: string) => void] {
   return [value, set];
 }
 
+/** Where a project window's icon rail stands (2c): the place picked, and whether its panel is folded away. */
+export interface RailState {
+  place: string;
+  folded: boolean;
+}
+
+const RAIL_KEY = 'alpine.rail';
+const FIRST_PLACE: RailState = { place: 'summary', folded: false };
+/** Each project's rail, remembered across restarts. */
+let rails: Record<string, RailState> | null = null;
+/** The project whose window shows the rail now, so `showDockTab` opens a place there. */
+let railProject: string | null = null;
+
+function readRails(): Record<string, RailState> {
+  if (rails === null) {
+    try {
+      const saved: unknown = JSON.parse(localStorage.getItem(RAIL_KEY) ?? '{}');
+      rails = saved && typeof saved === 'object' ? (saved as Record<string, RailState>) : {};
+    } catch {
+      rails = {};
+    }
+  }
+  return rails;
+}
+
+function writeRail(cwd: string, next: RailState) {
+  rails = { ...readRails(), [cwd]: next };
+  try {
+    localStorage.setItem(RAIL_KEY, JSON.stringify(rails));
+  } catch {
+    // Not remembered, but the rail still follows.
+  }
+  emit();
+}
+
+/** Forgets every project's rail (tests start from a fresh one, as after clearing storage). */
+export function forgetRails() {
+  rails = null;
+  emit();
+}
+
+/** The project's rail: the place last picked (대화 at first) and whether its panel is folded. */
+export function useRail(cwd: string): RailState {
+  return useSyncExternalStore(subscribe, () => readRails()[cwd] ?? FIRST_PLACE);
+}
+
+/** Picks a place on the rail; the place already open folds its panel away, and any place opens it again. */
+export function pickRailPlace(cwd: string, place: string) {
+  const now = readRails()[cwd] ?? FIRST_PLACE;
+  writeRail(cwd, { place, folded: now.place === place && !now.folded });
+}
+
+/** The project window showing the rail, while it shows (null when it goes). */
+export function setRailProject(cwd: string | null) {
+  railProject = cwd;
+}
+
 /** Opens the dock on one tab, e.g. the conversation of a session the map just started. */
 export function showDockTab(id: string) {
+  if (railProject) writeRail(railProject, { place: id, folded: false });
   tab = id;
   open = true;
   try {

@@ -112,3 +112,63 @@ it('shows the agent purpose alongside its exact command and excludes interactive
   expect(inspected).toEqual(['types']);
   client.clear();
 });
+
+it('shows the end of a dev server’s output with its address, and hands an error in it to the AI', async () => {
+  const server: TerminalProcess = {
+    id: 'dev',
+    command: 'npm run dev',
+    cwd: '/project',
+    sessionId: null,
+    title: 'Dev server :5173',
+    pty: false,
+    pid: 7,
+    status: 'running',
+    exitCode: null,
+    cancelled: false,
+    createdAt: Date.now() / 1000 - 12 * 60,
+    outputSize: 80,
+  };
+  const asked: string[] = [];
+  const script: Script = {
+    results: {
+      'processes/list': { processes: [server] },
+      'devServers/list': {
+        servers: [
+          {
+            id: 's',
+            cwd: '/project',
+            command: 'npm run dev',
+            port: 5173,
+            url: 'http://localhost:5173',
+            processId: 'dev',
+            status: 'running',
+          },
+        ],
+      },
+      'terminals/read': {
+        text: '\u001b[32m  VITE ready\u001b[0m\r\nGET /api/posts 200\r\n✘ GET /api/notes 500 TypeError: x\r\n',
+        nextOffset: 80,
+        total: 80,
+        process: server,
+      },
+    },
+  };
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <LocaleProvider locale="ko">
+      <QueryClientProvider client={client}>
+        <ServerProvider connection={scriptedConnection(script)}>
+          <ProcessControl cwd="/project" onAskAI={(text) => asked.push(text)} />
+        </ServerProvider>
+      </QueryClientProvider>
+    </LocaleProvider>,
+  );
+  expect(await screen.findByText('Alpine이 띄움')).toBeTruthy();
+  expect(screen.getByText('12분째')).toBeTruthy();
+  expect(await screen.findByText('localhost:5173 · 앱 탭이 이 주소를 보여 줘요')).toBeTruthy();
+  expect(await screen.findByText('✘ GET /api/notes 500 TypeError: x')).toBeTruthy();
+  expect(screen.getByText('실행 중 1')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'AI에게 이 오류 보여 주기' }));
+  expect(asked[0]).toContain('`npm run dev` 출력에 오류가 있어요');
+  expect(asked[0]).toContain('✘ GET /api/notes 500 TypeError: x');
+});

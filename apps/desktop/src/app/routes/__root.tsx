@@ -5,7 +5,7 @@ import { FirstRun } from '@/features/first-run/FirstRun';
 import { useForgetFinished } from '@/features/new-session/newProjectStore';
 import { Rail } from '@/features/rail/Rail';
 import { NavigationController } from '@/features/rail/NavigationController';
-import { useCloneUpdates } from '@/shared/server';
+import { useCloneUpdates, useScreenCaptures } from '@/shared/server';
 
 import { DroppedSkillsDialog } from '../DroppedSkills';
 import { EngineStopped } from '../EngineStopped';
@@ -15,6 +15,7 @@ import { useFirstPress } from '../useFirstPress';
 import { useFolderOpening } from '../useFolderOpening';
 import { useMapNotifications } from '../useMapNotifications';
 import { useNewSessionShortcut } from '../useNewSessionShortcut';
+import { WaitingElsewhere } from '../WaitingElsewhere';
 
 const RAIL_KEY = 'alpine.rail.open';
 
@@ -64,6 +65,7 @@ function Root() {
   const drawingNewSession = useRouterState({ select: (state) => state.matches.at(-1)?.routeId === '/' });
   const waiting = restoring && drawingNewSession;
   useCloneUpdates();
+  useScreenCaptures();
   useForgetFinished(onNewSession);
   const newSession = useNewSessionShortcut();
   useAppMenu(railOpen, { newSession, openFolder, toggleRail });
@@ -76,12 +78,12 @@ function Root() {
     },
   });
   const content = (
-    <div key={page} className="motion-page flex min-h-0 min-w-0 grow">
+    <div key={page} className="motion-page flex min-h-0 min-w-0 grow overflow-clip">
       {!waiting && <Outlet />}
     </div>
   );
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-canvas-sunken">
+    <div className="flex h-screen flex-col overflow-clip bg-canvas-sunken">
       {!framed && <TopBar railOpen={railOpen} onToggleRail={toggleRail} />}
       <EngineStopped />
       {framed ? (
@@ -89,7 +91,7 @@ function Root() {
       ) : (
         <div className="flex min-h-0 grow">
           <Rail open={railOpen} />
-          <div className="mr-2 mb-2 flex min-w-0 grow overflow-hidden rounded-xl border border-line bg-canvas">
+          <div className="mr-2 mb-2 flex min-w-0 grow overflow-clip rounded-xl border border-line bg-canvas">
             {content}
           </div>
         </div>
@@ -97,6 +99,7 @@ function Root() {
       {/* Kept in one place whatever the page, so going between them never starts them over (opening the app
           goes back to the last map only once). */}
       <NavigationController onRestored={restored} />
+      <WaitingElsewhere />
       <FirstRun auto={onNewSession && !restoring} />
       <DroppedSkillsDialog outcome={dropped} onClose={closeDropped} />
     </div>

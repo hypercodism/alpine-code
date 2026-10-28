@@ -40,6 +40,7 @@ from alpine_protocol.cloud import (
     ProjectsNodeToolsChangedParams,
     PublishChangedParams,
 )
+from alpine_protocol.dev_servers import ScreensCaptureParams
 
 from .agents import HANDLERS as AGENT_HANDLERS
 from .chatgpt import ChatGPTSignIns
@@ -59,6 +60,7 @@ from .new_projects import NewProjects
 from .node_tools import NodeTools
 from .process_control import HANDLERS as PROCESS_HANDLERS
 from .publish import PublishMethods
+from .screens import AppScreens, ScreenCaptures
 from .sessions import SessionManager
 from .skills import HANDLERS as SKILL_HANDLERS
 from .terminals import HANDLERS as TERMINAL_HANDLERS
@@ -96,6 +98,8 @@ class Server:
         self.cloud = CloudMethods(self._send_cloud_sign_in_finished, self._send_cloud_changed)
         self.node_tools = NodeTools(self._send_node_tools_changed)
         self.dev_servers = DevelopmentServers()
+        self.screens = ScreenCaptures(self._send_screen_capture)
+        self.sessions.screens = lambda project: AppScreens(project, self.dev_servers.manager, self.screens)
         self.publish = PublishMethods(self._send_publish_changed, self.dev_servers.manager)
         self.data = DataMethods()
         self.dev_branches = DevBranches()
@@ -113,6 +117,7 @@ class Server:
             | self.data.handlers()
             | self.node_tools.handlers()
             | self.dev_servers.handlers()
+            | {"screens/captured": self.screens.captured}
             | self.new_projects.handlers()
             | TERMINAL_HANDLERS
             | PROCESS_HANDLERS
@@ -144,6 +149,9 @@ class Server:
 
     def _send_node_tools_changed(self, params: ProjectsNodeToolsChangedParams) -> None:
         self._notify("projects/nodeToolsChanged", params)
+
+    def _send_screen_capture(self, params: ScreensCaptureParams) -> None:
+        self._notify("screens/capture", params)
 
     def _send_create_changed(self, params: ProjectsCreateChangedParams) -> None:
         self._notify("projects/createChanged", params)

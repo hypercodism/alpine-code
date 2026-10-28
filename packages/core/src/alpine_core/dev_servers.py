@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from .processes import process_manager
+from .relay import Relay, connect
 
 
 async def _command(*args: str) -> str:
@@ -49,7 +50,7 @@ async def listener(port: int) -> dict[str, Any] | None:
     if not await asyncio.to_thread(connected):
         return None
     info: dict[str, Any] = {"port": port, "pid": None, "cwd": None, "can_reuse": False}
-    lsof = shutil.which("lsof") or ("/usr/sbin/lsof" if Path("/usr/sbin/lsof").exists() else None)
+    lsof = _lsof()
     if lsof:
         owners = await _command(lsof, "-nP", "-t", f"-iTCP:{port}", "-sTCP:LISTEN")
         pids = owners.splitlines()
@@ -58,6 +59,71 @@ async def listener(port: int) -> dict[str, Any] | None:
             fields = await _command(lsof, "-a", "-p", pids[0], "-d", "cwd", "-Fn")
             info["cwd"] = next((line[1:] for line in fields.splitlines() if line.startswith("n")), None)
     return info
+
+
+def _lsof() -> str | None:
+    return shutil.which("lsof") or ("/usr/sbin/lsof" if Path("/usr/sbin/lsof").exists() else None)
+
+
+#: Where a listener counts as this machine's own dev server: loopback, or every address (``*``).
+_LOCAL_ADDRESSES = ("127.0.0.1", "[::1]", "*", "0.0.0.0", "[::]", "localhost")
+
+
+async def project_listeners(project: str) -> list[tuple[int, int]]:
+    """The ports something started in ``project`` (or a folder inside it) listens on, with the process's pid, lowest
+    port first: a server the AI or a terminal started some other way than through Alpine's processes (``nohup``, a
+    script, another terminal app). Never Alpine's own process (its relays)."""
+    lsof = _lsof()
+    if not lsof:
+        return []
+    ports: dict[int, int] = {}
+    pid = None
+    for line in (await _command(lsof, "-nP", "-iTCP", "-sTCP:LISTEN", "-Fpn")).splitlines():
+        if line.startswith("p") and line[1:].isdigit():
+            pid = int(line[1:])
+        elif line.startswith("n") and pid is not None and pid != os.getpid():
+            host, _, port = line[1:].rpartition(":")
+            if host in _LOCAL_ADDRESSES and port.isdigit():
+                ports.setdefault(int(port), pid)
+    if not ports:
+        return []
+    cwds: dict[int, str] = {}
+    pid = None
+    pids = ",".join(str(p) for p in sorted(set(ports.values())))
+    for line in (await _command(lsof, "-a", "-d", "cwd", "-Fpn", "-p", pids)).splitlines():
+        if line.startswith("p") and line[1:].isdigit():
+            pid = int(line[1:])
+        elif line.startswith("n") and pid is not None:
+            cwds[pid] = line[1:]
+    root = Path(project)
+    return [(port, owner) for port, owner in sorted(ports.items()) if owner in cwds and _within(cwds[owner], root)]
+
+
+def _within(path: str, project: Path) -> bool:
+    try:
+        return Path(path).resolve().is_relative_to(project)
+    except OSError:
+        return False
+
+
+async def serves_page(port: int) -> bool:
+    """Whether ``port`` answers ``GET /`` with a web page (a dev server), not an API or a debugger's socket."""
+    try:
+        reader, writer, host = await asyncio.wait_for(connect(port), 1)
+    except (OSError, TimeoutError):
+        return False
+    try:
+        name = f"[{host}]" if ":" in host else host
+        request = f"GET / HTTP/1.1\r\nHost: {name}:{port}\r\nAccept: text/html\r\nConnection: close\r\n\r\n"
+        writer.write(request.encode())
+        await writer.drain()
+        head = (await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), 3)).decode("latin-1").lower()
+    except (OSError, TimeoutError, asyncio.IncompleteReadError, asyncio.LimitOverrunError):
+        return False
+    finally:
+        writer.close()
+    status = head.split(" ", 2)[1] if head.count(" ") >= 2 else ""
+    return status[:1] in ("2", "3") and "text/html" in head
 
 
 def _owned_by(listener: dict[str, Any], pid: int) -> bool:
@@ -162,6 +228,8 @@ class DevelopmentServer:
     worked: float | None = None
     quiet_since: float = field(default_factory=time.monotonic)
     gave_up: bool = False
+    # The map's way in (``relay``): open while the server runs, following it to whatever port it moved to.
+    relay: Relay | None = None
 
     async def snapshot(self) -> dict[str, Any]:
         if self.process_id:
@@ -177,7 +245,7 @@ class DevelopmentServer:
             occupied = None
         status = "running" if occupied else "starting"
         if self.external:
-            same_project = occupied and occupied["cwd"] and str(Path(occupied["cwd"]).resolve()) == self.cwd
+            same_project = occupied and occupied["cwd"] and _within(occupied["cwd"], Path(self.cwd))
             same_process = occupied and occupied["pid"] == self.external_pid
             status = "running" if same_project and same_process else "stopped"
         else:
@@ -198,22 +266,39 @@ class DevelopmentServer:
                     self.gave_up = True
                     status = "failed"
                     await process.stop()
+        if status == "running":
+            # The app moved to another port (restarted, or Vite took the next one): a new relay, so the map's
+            # frames, keyed by its address, open the screens again instead of keeping a page that went away.
+            if self.relay is not None and self.relay.target_port != self.port:
+                await self.relay.close()
+                self.relay = None
+            if self.relay is None:
+                self.relay = await Relay(self.port).start()
+        elif self.relay is not None and status in {"stopped", "failed"}:
+            await self.relay.close()
+            self.relay = None
         return {
             "id": self.id,
             "cwd": self.cwd,
             "command": self.command,
             "port": self.port,
             "url": f"http://localhost:{self.port}" if status == "running" else None,
+            "board_url": self.relay.url if status == "running" and self.relay else None,
             "process_id": self.process_id,
             "external": self.external,
             "status": status,
         }
 
 
+#: How often listing a project with no server running looks for one started outside Alpine's processes.
+ADOPT_EVERY = 5.0
+
+
 class DevelopmentServerManager:
     def __init__(self) -> None:
         self.servers: dict[str, DevelopmentServer] = {}
         self._lock = asyncio.Lock()
+        self._looked: dict[str, float] = {}
 
     async def start(
         self, cwd: str, command: str, port: int, *, session_id: str | None = None, reuse: bool = False
@@ -232,7 +317,7 @@ class DevelopmentServerManager:
         if not project.is_dir():
             raise ValueError("Choose a project folder")
         async with self._lock:
-            await self._discover(str(project))
+            await self._discover(str(project), adopt=True)
             for server in reversed(list(self.servers.values())):
                 if server.cwd == str(project):
                     current = await server.snapshot()
@@ -291,8 +376,10 @@ class DevelopmentServerManager:
         self.servers[server.id] = server
         return {"server": await server.snapshot()}
 
-    async def _discover(self, project: str) -> None:
-        """Adopt agent/terminal-launched servers only after verifying their listening process group."""
+    async def _discover(self, project: str, *, adopt: bool = False) -> None:
+        """Adopt agent/terminal-launched servers only after verifying their listening process group. With ``adopt``
+        and no server of the project running, also one started outside Alpine's processes: a listener whose process
+        works in the project and that serves a page, as an external server (it is not Alpine's to stop)."""
         registered = {server.process_id for server in self.servers.values() if server.process_id}
         for process in process_manager().list(cwd=project):
             state = process.snapshot()
@@ -312,11 +399,29 @@ class DevelopmentServerManager:
                     self.servers[server.id] = server
                     registered.add(process.id)
                     break
+        if not adopt:
+            return
+        self._looked[project] = time.monotonic()
+        mine = [server for server in self.servers.values() if server.cwd == project]
+        for server in mine:
+            if (await server.snapshot())["status"] in {"starting", "running"}:
+                return
+        for port, pid in await project_listeners(project):
+            if any(server.port == port and server.external_pid == pid for server in mine):
+                continue
+            if await serves_page(port):
+                command = await _command("ps", "-o", "command=", "-p", str(pid))
+                server = DevelopmentServer(
+                    uuid.uuid4().hex, project, command or f"port {port}", port, external=True, external_pid=pid
+                )
+                self.servers[server.id] = server
+                return
 
     async def list(self, cwd: str) -> list[dict[str, Any]]:
         project = str(Path(cwd).expanduser().resolve())
         async with self._lock:
-            await self._discover(project)
+            adopt = time.monotonic() - self._looked.get(project, -ADOPT_EVERY) >= ADOPT_EVERY
+            await self._discover(project, adopt=adopt)
             return [await s.snapshot() for s in list(self.servers.values()) if s.cwd == project]
 
     async def stop(self, id: str) -> dict[str, Any]:
@@ -324,15 +429,23 @@ class DevelopmentServerManager:
         if server.external:
             # Reused processes belong to their original launcher. Detach without signaling them.
             del self.servers[id]
+            if server.relay is not None:
+                await server.relay.close()
+                server.relay = None
             return {**await server.snapshot(), "status": "stopped", "url": None}
         await process_manager().get(server.process_id).stop()
         return await server.snapshot()
 
     async def restart(self, id: str) -> dict[str, Any]:
+        """Stops the server and starts it again, fresh: Vite's prepared modules (``node_modules/.vite``) are thrown
+        away first, since a stale copy is what leaves a page blank, waiting for files that never come."""
         server = self.servers[id]
         if server.external:
             raise ValueError("Stop or restart this server in its original terminal")
         await self.stop(id)
+        cache = Path(server.cwd) / "node_modules" / ".vite"
+        if cache.is_dir() and not cache.is_symlink():
+            await asyncio.to_thread(shutil.rmtree, cache, True)
         return await self.start(server.cwd, server.command, server.port, session_id=server.session_id)
 
     def logs(self, id: str, offset: int, limit: int) -> dict[str, Any]:

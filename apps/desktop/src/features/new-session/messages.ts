@@ -4,6 +4,9 @@ export const messages = defineMessages({
   ko: {
     newHeading: '무엇을 만들어 볼까요?',
     newPlaceholder: '만들고 싶은 앱을 적어 주세요',
+    existingLead: '이미 있는 프로젝트라면',
+    openExisting: '내 컴퓨터에서 열기',
+    getExisting: '회사·팀 프로젝트 받기',
 
     judging: '에이전트가 판단하고 있어요',
     pickSetupHeading: '이 구성으로 만들어 볼까요?',
@@ -36,11 +39,11 @@ export const messages = defineMessages({
     created: '프로젝트를 만들었어요',
     stepFolder: '폴더 만들기',
     stepAddress: '인터넷 주소 만들기',
-    stepAgent: 'AI가 지도에 기획을 그리기 시작',
+    stepAgent: 'AI가 보드에 기획을 그리기 시작',
     done: '완료',
     working: '진행 중',
     waiting: '대기',
-    goToMap: '지도로 가기',
+    goToMap: '보드로 가기',
     createFailed: '만들지 못했어요',
     createNoTemplate: '이 구성을 찾지 못했어요. 다른 구성으로 다시 만들어 보세요.',
     createBadConfig: '설정을 읽지 못했어요. 설정을 확인한 뒤 다시 만들어 주세요.',
@@ -56,7 +59,7 @@ export const messages = defineMessages({
     createUnknown: '프로젝트를 만들지 못했어요. 잠시 뒤에 다시 만들어 보세요.',
     madeButNotStarted: '프로젝트는 만들었어요',
     madeButNotStartedBody:
-      'AI가 기획을 시작하지 못했어요. 다시 시작을 누르면 같은 아이디어로 지도에 기획을 다시 그려요.',
+      'AI가 기획을 시작하지 못했어요. 다시 시작을 누르면 같은 아이디어로 보드에 기획을 다시 그려요.',
     back: '돌아가기',
     openProject: '프로젝트 열기',
     proSignInReason: '실시간 웹앱을 쓰려면 Alpine 계정이 필요해요 (무료)',
@@ -88,6 +91,9 @@ export const messages = defineMessages({
   en: {
     newHeading: 'What do you want to make?',
     newPlaceholder: 'Describe the app you want to make',
+    existingLead: 'Already have a project?',
+    openExisting: 'Open from this computer',
+    getExisting: 'Get a company or team project',
 
     judging: 'The agent is looking at it',
     pickSetupHeading: 'Make it with this setup?',

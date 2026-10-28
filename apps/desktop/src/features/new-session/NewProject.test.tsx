@@ -133,7 +133,7 @@ describe('NewProject', () => {
     const { sent, onPlanning } = asNew();
     await send(IDEA);
     await create();
-    const open = await screen.findByRole('button', { name: '지도로 가기' });
+    const open = await screen.findByRole('button', { name: '보드로 가기' });
     expect(sent('projects/create')).toEqual([
       { id: expect.any(String), idea: IDEA, template: 'web-lite', name: 'craft-booking', agent: 'default' },
     ]);
@@ -145,7 +145,7 @@ describe('NewProject', () => {
     const { sent } = asNew({ ...fast, judgeFails: true });
     await send(IDEA);
     await create();
-    await screen.findByRole('button', { name: '지도로 가기' });
+    await screen.findByRole('button', { name: '보드로 가기' });
     expect(sent('projects/create')).toEqual([expect.objectContaining({ template: 'web-lite', name: '' })]);
   });
 
@@ -158,7 +158,7 @@ describe('NewProject', () => {
     expect(alert.textContent).toContain('Permission denied');
     expect(screen.getByRole('heading', { name: '만들지 못했어요' })).toBeTruthy();
     expect(screen.queryByText('진행 중')).toBeNull();
-    expect(screen.queryByRole('button', { name: '지도로 가기' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '보드로 가기' })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: '돌아가기' }));
     expect(await screen.findByRole('radiogroup', { name: '구성' })).toBeTruthy();
@@ -221,7 +221,7 @@ describe('NewProject where chip', () => {
     expect(await screen.findByRole('button', { name: '만들 곳: devlog' })).toBeTruthy();
     await send(IDEA);
     await create();
-    await screen.findByRole('button', { name: '지도로 가기' });
+    await screen.findByRole('button', { name: '보드로 가기' });
     expect(sent('projects/create')).toEqual([expect.objectContaining({ folder: '/Users/me/Developments/devlog' })]);
   });
 
@@ -239,7 +239,7 @@ describe('NewProject where chip', () => {
       await send(IDEA);
       await create();
       expect(await screen.findByText('craft-booking.alpinesite.app')).toBeTruthy();
-      await screen.findByRole('button', { name: '지도로 가기' });
+      await screen.findByRole('button', { name: '보드로 가기' });
       expect(screen.getByText('인터넷 주소 만들기')).toBeTruthy();
       expect(sent('projects/create')).toHaveLength(1);
     });
@@ -248,7 +248,7 @@ describe('NewProject where chip', () => {
       mount({ ...fast }, cloudScript({ signedIn: true }));
       await send(IDEA);
       await create();
-      await screen.findByRole('button', { name: '지도로 가기' });
+      await screen.findByRole('button', { name: '보드로 가기' });
       expect(screen.queryByText('인터넷 주소 만들기')).toBeNull();
     });
 
@@ -264,7 +264,7 @@ describe('NewProject where chip', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Google로 계속하기' }));
       // A new account is on the free plan, so Pro is the next thing asked for.
       fireEvent.click(await screen.findByRole('button', { name: '7일 무료로 써 보기' }));
-      await screen.findByRole('button', { name: '지도로 가기' });
+      await screen.findByRole('button', { name: '보드로 가기' });
       expect(window.open).toHaveBeenCalledWith(expect.stringContaining('provider=google'), '_blank', 'noopener');
       expect(sent('projects/create')).toEqual([expect.objectContaining({ template: 'web-pro' })]);
     });
@@ -277,7 +277,7 @@ describe('NewProject where chip', () => {
       expect(sent('projects/create')).toEqual([]);
 
       fireEvent.click(screen.getByRole('button', { name: '7일 무료로 써 보기' }));
-      await screen.findByRole('button', { name: '지도로 가기' });
+      await screen.findByRole('button', { name: '보드로 가기' });
       expect(sent('cloud/startTrial')).toHaveLength(1);
       expect(sent('projects/create')).toEqual([expect.objectContaining({ template: 'web-pro' })]);
     });
@@ -286,7 +286,7 @@ describe('NewProject where chip', () => {
       const { sent } = mount(withPro, cloudScript({ signedIn: true, plan: 'pro' }));
       await send(CHAT);
       await create();
-      await screen.findByRole('button', { name: '지도로 가기' });
+      await screen.findByRole('button', { name: '보드로 가기' });
       expect(sent('cloud/startTrial')).toEqual([]);
       expect(sent('projects/create')).toEqual([expect.objectContaining({ template: 'web-pro' })]);
     });
@@ -310,7 +310,7 @@ describe('NewProject where chip', () => {
       expect(sent('projects/create')).toEqual([]);
 
       fireEvent.click(screen.getByRole('button', { name: '설치하고 이어가기' }));
-      await screen.findByRole('button', { name: '지도로 가기' });
+      await screen.findByRole('button', { name: '보드로 가기' });
       expect(sent('projects/installNodeTools')).toHaveLength(1);
       expect(sent('projects/create')).toHaveLength(1);
     });
@@ -332,7 +332,7 @@ describe('NewProject where chip', () => {
       await send(IDEA);
       fireEvent.click(await screen.findByRole('radio', { name: /빈 프로젝트/ }));
       await create();
-      await screen.findByRole('button', { name: '지도로 가기' });
+      await screen.findByRole('button', { name: '보드로 가기' });
       expect(sent('projects/installNodeTools')).toEqual([]);
     });
   });

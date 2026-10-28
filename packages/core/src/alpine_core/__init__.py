@@ -52,6 +52,7 @@ from .events import (
     UsageInfo,
 )
 from .git import GitStatus, PullRequest, current_branch, pull_request
+from .git import diff as git_diff
 from .git import status as git_status
 from .home import home_dir
 from .imports import SOURCE_NAMES, ExternalSession, ImportSource, find_external_sessions, import_session
@@ -238,6 +239,7 @@ __all__ = [
     "install_git_tools",
     "place",
     "current_branch",
+    "git_diff",
     "git_status",
     "GitStatus",
     "pull_request",

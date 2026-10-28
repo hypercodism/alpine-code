@@ -67,5 +67,5 @@ export const Building: Story = { parameters: { server: server('building') } };
 /** The build is over with cards left: it says so, and continues where it stopped. */
 export const Stopped: Story = { parameters: { server: server('stopped') } };
 
-/** 다 만든: every promise checked, what the AI decided on its own, and 앱 열기. */
+/** 다 만든: every promise checked, and 앱 열기. */
 export const Built: Story = { parameters: { server: server('built') } };

@@ -127,6 +127,82 @@ NEVER_REMEMBER = frozenset(
     }
 )
 
+#: Commands that only look: they read files and say what they found, change nothing and reach no network. Inside the
+#: working directory they never ask (``read_only``). A flag that makes one write or run something is checked there.
+READ_ONLY = frozenset(
+    {
+        "ls",
+        "cat",
+        "head",
+        "tail",
+        "wc",
+        "pwd",
+        "echo",
+        "printf",
+        "grep",
+        "egrep",
+        "fgrep",
+        "rg",
+        "which",
+        "file",
+        "stat",
+        "du",
+        "df",
+        "tree",
+        "sort",
+        "uniq",
+        "cut",
+        "tr",
+        "diff",
+        "cmp",
+        "basename",
+        "dirname",
+        "realpath",
+        "readlink",
+        "test",
+        "[",
+        "true",
+        "false",
+        "date",
+        "whoami",
+        "uname",
+        "id",
+        "ps",
+        "lsof",
+        "jq",
+        "nl",
+        "column",
+        "cd",
+        "pushd",
+        "popd",
+        "type",
+        "find",
+    }
+)
+
+#: The subcommands of git that only look.
+_GIT_LOOKS = frozenset({"status", "diff", "log", "show", "rev-parse", "ls-files", "blame", "describe", "shortlog"})
+
+#: Flags that make a looking command write a file or run another command.
+_WRITING_FLAGS = {
+    "sort": ("-o", "--output"),
+    "tree": ("-o",),
+    "find": ("-exec", "-execdir", "-ok", "-okdir", "-delete", "-fprint", "-fprint0", "-fprintf", "-fls"),
+    "rg": ("--pre",),
+    "git": ("--output", "-o", "--ext-diff", "--textconv"),
+}
+
+#: Tools that only check code (types, style): a package.json script made of them alone runs without asking.
+CHECK_TOOLS = frozenset(
+    {"tsc", "vue-tsc", "svelte-check", "astro", "eslint", "prettier", "biome", "stylelint", "oxlint"}
+)
+
+#: Flags that make a checking tool change the files it checks.
+_FIXING_FLAGS = ("--fix", "--write", "-w", "--apply", "--apply-unsafe", "--fix-dry-run")
+
+#: Interpreters running a script: what follows the script is the program's own input, not paths for the shell.
+_INTERPRETERS = frozenset({"node", "python", "python3", "deno", "bun", "ruby", "perl", "php", "tsx", "ts-node"})
+
 _WRITE_OPERATORS = {">", ">>", "&>", "&>>", ">|"}
 _DEVICES = {"/dev/null", "/dev/stdin", "/dev/stdout", "/dev/stderr", "/dev/tty", "-"}
 _ARGUMENTS = (
@@ -161,6 +237,8 @@ class Analysis:
     unresolved_paths: tuple[str, ...] = ()
     """Path-like arguments whose value is only known at run time (``$HOME/.ssh``), or relative paths after a
     ``cd`` whose target is unknown."""
+    full: tuple[tuple[str, ...], ...] = ()
+    """The same commands with their flags, in the same order (``git -C x status``)."""
 
 
 @cache
@@ -172,6 +250,7 @@ def analyze(script: str) -> Analysis:
     tree = _parser().parse(script.encode())
     paths = _PathCollector()
     commands: list[tuple[str, ...]] = []
+    full: list[tuple[str, ...]] = []
     writes_files = False
     opaque = tree.root_node.has_error
 
@@ -184,6 +263,7 @@ def analyze(script: str) -> Analysis:
                 opaque = True
             elif words:
                 commands.append(words)
+                full.append(_words(node, flags=True) or words)
             paths.command(node)
         elif node.type == "file_redirect":
             writes_files = writes_files or _writes(node)
@@ -194,7 +274,9 @@ def analyze(script: str) -> Analysis:
             visit(child)
 
     visit(tree.root_node)
-    return Analysis(tuple(commands), writes_files, opaque, tuple(paths.paths), tuple(paths.unresolved))
+    return Analysis(
+        tuple(commands), writes_files, opaque, tuple(paths.paths), tuple(paths.unresolved), full=tuple(full)
+    )
 
 
 class _PathCollector:
@@ -212,6 +294,10 @@ class _PathCollector:
         if name and (name.startswith("~") or ("/" in name and not name.startswith("/"))):
             self._add(name)  # a script run by path: ./run.sh, ../other/run.sh, ~/bin/deploy
         args = [c for c in command.children if c.type in _ARGUMENTS]
+        if name in _INTERPRETERS:
+            # ``node capture.mjs / '/?state=empty'``: only the script is a file; the rest is the program's input.
+            script = next((a for a in args if not _is_flag(_literal(a))), None)
+            args = [script] if script is not None else []
         for arg in args:
             self.argument(arg)
         if name in ("cd", "pushd"):
@@ -275,8 +361,44 @@ def matches(words: tuple[str, ...], rule: tuple[str, ...]) -> bool:
     return words[: len(rule)] == rule
 
 
-def _words(command: Node) -> tuple[str, ...] | None:
-    """The command's words without flags, or ``None`` when its name is not a plain word."""
+def read_only(full: tuple[str, ...]) -> bool:
+    """Whether a command, with its flags, only looks (``READ_ONLY``, git's looking subcommands, a package manager
+    listing what is installed, any tool asked only for its version)."""
+    if not full:
+        return False
+    name, rest = full[0], full[1:]
+    if rest and all(word in ("--version", "-v", "-V", "--help", "-h") for word in rest):
+        return name not in NEVER_REMEMBER or name in ("node", "python", "python3")
+    flagged = _WRITING_FLAGS.get(name, ())
+    if any(word == flag or word.startswith(flag + "=") for word in rest for flag in flagged):
+        return False
+    if name == "git":
+        sub = next((word for word in rest if not word.startswith("-")), None)
+        return sub in _GIT_LOOKS and "-C" not in rest
+    if name in ("npm", "pnpm", "yarn", "bun"):
+        sub = next((word for word in rest if not word.startswith("-")), None)
+        return sub in ("ls", "list", "why")
+    return name in READ_ONLY
+
+
+def check_only(script: str) -> bool:
+    """Whether a package.json script only checks code: every command one of ``CHECK_TOOLS`` (``astro check`` for
+    astro), none of them asked to fix what it finds, nothing written by redirection."""
+    analysis = analyze(script)
+    if analysis.opaque or analysis.writes_files or not analysis.full:
+        return False
+    for full in analysis.full:
+        name = full[0]
+        if name not in CHECK_TOOLS or (name == "astro" and full[1:2] != ("check",)):
+            return False
+        if any(word in _FIXING_FLAGS or word.startswith(("--fix=", "--write=")) for word in full[1:]):
+            return False
+    return True
+
+
+def _words(command: Node, *, flags: bool = False) -> tuple[str, ...] | None:
+    """The command's words without flags (with them, given ``flags``), or ``None`` when its name is not a plain
+    word."""
     words: list[str] = []
     for child in command.children:
         if child.type == "command_name":
@@ -286,7 +408,7 @@ def _words(command: Node) -> tuple[str, ...] | None:
             words.append(_text(name))
         elif words and child.type in ("word", "string", "raw_string", "number", "concatenation"):
             text = _unquote(child)
-            if not text.startswith("-"):
+            if flags or not text.startswith("-"):
                 words.append(text)
         elif words and child.type in ("simple_expansion", "expansion", "command_substitution"):
             words.append(_text(child))
@@ -335,6 +457,8 @@ def _is_flag(value: str | None) -> bool:
 def _path_like(text: str) -> bool:
     if _URL.match(text):
         return False
+    if text.startswith("/") and ("?" in text or "#" in text):
+        return False  # an address in an app (``/?alpine-state=empty``), not a file
     return text.startswith(("/", "~", ".")) or "/" in text  # "." also catches dotfiles like .env
 
 

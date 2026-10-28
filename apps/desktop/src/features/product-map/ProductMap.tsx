@@ -1,7 +1,7 @@
-import type { FlowNode, FlowPrepareParams, FlowPrepareResult } from '@alpine/protocol';
+import type { FlowNode, FlowPrepareParams, FlowPrepareResult, MapProblem } from '@alpine/protocol';
 import { Button, Dialog, LinkButton, Popover, SlidingPanel } from '@alpine/ui/primitives';
 import clsx from 'clsx';
-import { Brain, ChevronRight, CircleX, RotateCcw, Search, Sparkles, X } from 'lucide-react';
+import { Brain, ChevronRight, Search, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
@@ -10,14 +10,14 @@ import { lookingAt } from '@/features/app-view/state';
 
 import { AgentChip, ModeChip, type Mode } from '@/shared/components/composer';
 import { ImportLink } from '@/shared/components/import-link';
-import { latestTaskForce, roomOf } from '@/shared/components/taskforce';
+import { latestTaskForce, roomOf, teamShape } from '@/shared/components/taskforce';
 import { useMessages } from '@/shared/i18n';
 import {
-  activeApproval,
   SESSION_RUNNING,
   ServerError,
   useAgents,
   useAnswerApproval,
+  useProjectApprovals,
   useCancelSession,
   useConnections,
   useMemory,
@@ -39,21 +39,30 @@ import {
   useTaskForceAction,
 } from '@/shared/server';
 
+import { BoardSize } from './boardDevice';
+import { BoardSizeSwitch } from './BoardSizeSwitch';
 import { CardAsk, HowToTry, PromiseMore, Title } from './CardExtras';
 import { Changes, newChanges, useLastSeen } from './Changes';
 import { REMOVED } from './Conditions';
 import { Coverage } from './Coverage';
 import { noticeRow, recheckIds } from './Focus';
 import { filmMessages } from './filmMessages';
-import { changedCards } from './FlowTree';
 import { toTreeMap } from './flowTreeData';
 import { hasScreenArea } from './flowTreeModel';
 import { flowTreeMessages } from './flowTreeMessages';
 import { JourneyMap } from './JourneyMap';
 import { useMapActionStore, useMapMenuStore } from './mapActions';
-import { Bar, CONNECTION, PlanBar, Working, type PlanReview, type PlanTeamAnswer } from './PlanBar';
-import { buildActivity, lastReply, pendingQuestion, planPhase, stopReason, TEAM_WORKING } from './planData';
-import { mapLookCss, type PickedLook, wornLook } from './planLook';
+import { Bar, CONNECTION, PlanBar, Working, type PlanTeamAnswer } from './PlanBar';
+import {
+  buildActivity,
+  lastReply,
+  openPromises,
+  pendingQuestion,
+  planPhase,
+  stopReason,
+  TEAM_WORKING,
+} from './planData';
+import { mapLookCss, type Device, type PickedLook, wornLook } from './planLook';
 import { planMessages } from './planMessages';
 import { useMapRequest } from './askRequest';
 import { AskFlight, MapAsk } from './MapAsk';
@@ -61,6 +70,7 @@ import { DeleteMap, MapMenu, MapMenuItems, ScopeEditor } from './MapSettings';
 import { Unmapped } from './Unmapped';
 import { messages } from './messages';
 import { type LaterWord, useLaterWords, useMapTalk } from './mapTalk';
+import { problemFiles, problemWordMessages, problemWords } from './problemWords';
 import { mapOf, matchingIds, searchOrder } from './model';
 
 type Action = FlowPrepareParams['action'];
@@ -89,8 +99,9 @@ type Lens = 'failed' | 'recheck' | 'changed' | null;
 const EMPTY_ANYWAY = new Set(['.DS_Store', '.git']);
 
 /**
- * A project's map: the people who use the product and the journeys they walk. One row above it searches the cards,
- * lights what broke, needs a recheck or changed, opens the change history and holds the map's menu; a second row
+ * A project's map: the people who use the product and the journeys they walk. Its own tools float over the board (the
+ * bar above is the whole product's): the flows list and the search on its left; on its right one choice of what to
+ * light (broken, to check again, changed since I looked) and the size screens are drawn at. A row above the board
  * appears only when something wants a look (code not on the map, parts not drawn yet, promises I rewrote, cards the
  * AI removed). Asking the AI about a card happens in the card itself.
  */
@@ -112,6 +123,8 @@ export function ProductMap({
   onShowTalk,
   onOpenInApp,
   menuInWindow = false,
+  view = 'board',
+  onShowBoard,
 }: {
   cwd: string;
   sessionId?: string | null;
@@ -145,6 +158,10 @@ export function ProductMap({
   onShowTalk?: () => void;
   /** Opens the running app at a built screen's address (its card's `path`). */
   onOpenInApp?: (cardId: string) => void;
+  /** The board, or the same map read as a document (the 문서 tab, 10-25 design canvas D). */
+  view?: 'board' | 'doc';
+  /** Goes back to the board, where a screen pressed in the document opens. */
+  onShowBoard?: () => void;
   /**
    * The window has a ⋯ of its own (the map's page): the map's menu is its "지도" part instead of a second ⋯ on the
    * map (useMapMenuStore).
@@ -185,6 +202,9 @@ export function ProductMap({
     }
   };
   const [query, setQuery] = useState('');
+  // The size a one-app product's screens are drawn at, picked over the board (null: its usual size).
+  const [pickedSize, setPickedSize] = useState<Device | null>(null);
+  const boardSize = useMemo(() => ({ size: pickedSize, set: setPickedSize }), [pickedSize]);
   const [lens, setLens] = useState<Lens>(null);
   const [reveal, setReveal] = useState<{ cardId: string; seq: number } | null>(null);
   const hit = useRef(-1);
@@ -223,15 +243,19 @@ export function ProductMap({
   const document = data && mapOf(data);
   // Where the map talks and who does its work now: the build while it is unfinished, else the map's own conversation
   // (or, before the map has one, the session the page attached, as an older map's drawing was).
-  const { mapConversation, buildSessionId, buildWorking, buildItems, buildTeam, building, talkTo } = useMapTalk(cwd);
+  const { mapConversation, buildSessionId, buildWorking, buildItems, buildTeam, buildState, building, talkTo } =
+    useMapTalk(cwd);
   const workId = talkTo ?? sessionId;
   const work = useSession(workId);
   const workInfo = work.data?.info;
   const workTeam = work.data ? latestTaskForce(work.data.items) : null;
   // A TF the work started keeps working while the session itself waits for it.
   const workBusy = atWork(workInfo) || (!!workTeam && TEAM_WORKING.has(workTeam.status));
-  // A call the work waits for me to allow: words in the map's input skip it and tell the AI what to do instead.
-  const approval = work.data && workInfo?.status === 'waiting' ? activeApproval(work.data) : null;
+  // A call of this project that waits for me to allow (the work's own, its TF's agents', or another conversation's):
+  // words in the map's input skip the one nearest the input and tell the AI what to do instead.
+  const waitingCalls = useProjectApprovals(cwd);
+  const waitingCall = waitingCalls.at(-1) ?? null;
+  const approval = waitingCall?.approval ?? null;
   const answer = useAnswerApproval();
   // Other conversations of this project at work (an older one on the rail, one opened beside the map): the map waits
   // for them, and says so.
@@ -381,10 +405,7 @@ export function ProductMap({
   const question = pending?.question ?? null;
   // A build is a conversation of its own (map-first 36): the map follows it and the TF it proposes or runs. While it
   // is unfinished the map's one input goes to it, which fixes things itself (map-first 37).
-  const phase =
-    planned && data
-      ? planPhase(data, conversationWorking, !!question, { working: buildWorking, team: buildTeam?.status ?? null })
-      : null;
+  const phase = planned && data ? planPhase(data, conversationWorking, !!question, buildState) : null;
   const talking = building ? buildWorking : conversationWorking;
   // A plan whose build never began has no code: nothing on it is checked or found in code, and what is added to it is
   // planned. Once a build began there is code, even when cards were added later or the build stopped halfway.
@@ -437,38 +458,6 @@ export function ProductMap({
     : (workActivity?.text ?? plan.activityThinking);
   const touchingKey = (activity ?? workActivity)?.touching.join(' ') ?? '';
   const touching = useMemo(() => new Set(touchingKey.split(' ').filter(Boolean)), [touchingKey]);
-  // A question the AI answered on its own, opened from its card to answer again; from the done line, one after
-  // another through every card the AI decided on.
-  const [reviewing, setReviewing] = useState<string | null>(null);
-  const aiPick = (cardId: string) => treeMap?.cards[cardId]?.picks?.findLast((pick) => pick.by === 'ai');
-  const aiPicked = Object.values(treeMap?.cards ?? {}).filter((card) => card.picks?.some((pick) => pick.by === 'ai'));
-  const reviewOrder = aiPicked.map((card) => card.id);
-  const reviewAt = reviewing ? reviewOrder.indexOf(reviewing) : -1;
-  const reviewPick = reviewing ? aiPick(reviewing) : undefined;
-  const pickReview: PlanReview | null =
-    reviewing && reviewPick
-      ? {
-          card: treeMap?.cards[reviewing]?.title ?? '',
-          picked: Math.max(reviewPick.options.indexOf(reviewPick.answer), 0),
-          question: {
-            id: `pick:${reviewing}`,
-            about: reviewing,
-            text: reviewPick.question,
-            options: (reviewPick.options.length ? reviewPick.options : [reviewPick.answer]).map((label) => ({ label })),
-          },
-          position: reviewAt >= 0 && reviewOrder.length > 1 ? { index: reviewAt + 1, total: reviewOrder.length } : null,
-        }
-      : null;
-  const nextReview = () => setReviewing(reviewAt >= 0 ? (reviewOrder[reviewAt + 1] ?? null) : null);
-  // Another answer to a question the AI decided: while building it goes to the build, which redoes that part; once
-  // built it is a change to that card, like a card's own "부탁하기".
-  const changeDecision = (answer: string) => {
-    if (!pickReview || !reviewing) return;
-    const words = plan.changeDecisionMessage(pickReview.card, pickReview.question.text, answer);
-    if (phase !== 'built') say(words);
-    else if (anyActive || busy) later.add(null, words, reviewing);
-    else void start('change', { node: nodeOf(reviewing), request: words });
-  };
   // "이대로 만들기" starts the build in a new conversation that reads only the map; 이어서 만들기 continues that one.
   const startBuild = async (request: string) => {
     if (!data || lock.current) return;
@@ -773,7 +762,10 @@ export function ProductMap({
     return {
       failed,
       recheck: again,
-      changed: treeMap ? changedCards(treeMap, seenAt ?? undefined) : new Set<string>(),
+      // Changed means a change since I last looked, not a promise waiting: that is its own choice beside it.
+      changed: new Set(
+        (seenAt ? (treeMap?.recent ?? []).filter((change) => change.at > seenAt) : []).map((change) => change.cardId),
+      ),
     };
   }, [treeMap, seenAt]);
 
@@ -822,7 +814,7 @@ export function ProductMap({
     const editable = (el: Element | null) =>
       !!el && (el.matches('input, textarea, select') || (el as HTMLElement).isContentEditable);
     const onKey = (event: KeyboardEvent) => {
-      if (hidden || event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (hidden || view === 'doc' || event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
       if (event.key === '/' && !editable(globalThis.document.activeElement) && search.current) {
         event.preventDefault();
         search.current.focus();
@@ -895,19 +887,21 @@ export function ProductMap({
   // Words from the map's one input: another answer while a decision of the AI is open, the plan's conversation (or
   // the build's) while it is a plan, else a request to the map.
   const sendWords = async (text: string, from: DOMRect | null) => {
-    if (approval && workId && text)
-      return answer.mutateAsync({ sessionId: workId, requestId: approval.id, decision: 'deny', feedback: text }).then(
-        () => true,
-        () => {
-          setError({ text: t.answerFailed });
-          return false;
-        },
-      );
-    if (pickReview && text) {
-      changeDecision(text);
-      nextReview();
-      return true;
-    }
+    if (waitingCall && text)
+      return answer
+        .mutateAsync({
+          sessionId: waitingCall.info.id,
+          requestId: waitingCall.approval.id,
+          decision: 'deny',
+          feedback: text,
+        })
+        .then(
+          () => true,
+          () => {
+            setError({ text: t.answerFailed });
+            return false;
+          },
+        );
     // A card's 부탁하기 names its card; looking at a screen in the app view names that screen (flow-spec 5.3).
     const looking = lookingAt(cwd);
     const about = aboutCard ? nodeOf(aboutCard) : looking ? nodeOf(looking) : null;
@@ -1032,56 +1026,51 @@ export function ProductMap({
   });
   useEffect(() => () => registerMenu(cwd, null), [registerMenu, cwd]);
 
-  return (
-    <main ref={area} className="flex min-h-0 min-w-0 grow flex-col bg-canvas contain-inline-size" aria-label={t.title}>
-      {/* Before the first card the map may already exist (being drawn, or stopped early): its menu (scope, delete)
-          is here too, so a map is never out of reach. */}
-      {!hasMap && data && (workBusy || data.exists) && mapMenu && (
-        <div className="flex min-h-11 shrink-0 items-center gap-2 bg-canvas-sunken px-10 py-1.5">
-          <span className="grow" />
-          {mapMenu}
-        </div>
+  // The board's own tools float over it (the bar above is the whole product's): on its left, beside the flows list,
+  // the look being tried and the search (a plan being decided has nothing to search yet); on its right what to look
+  // at, only when something wants a look, and the size the screens are drawn at.
+  const showChanged = lenses.changed.size > 0 && !planning && !building;
+  const boardTools = (
+    <>
+      {/* Every screen wears the look being tried: the map says whose. */}
+      {tryingLook && (
+        <p
+          role="status"
+          className="flex h-8 items-center gap-1.5 rounded-lg border border-line bg-canvas-raised px-3 text-meta text-fg-muted shadow-overlay"
+        >
+          <span aria-hidden="true" className="size-1.5 rounded-full bg-interactive" />
+          {plan.previewingLook(tryingLook.label)}
+        </p>
       )}
-      {/* Over the filmstrip, quiet: the search (a plan being decided has nothing to search yet), what wants a look
-          only when something does, and the map's menu. */}
-      {hasMap && data && (
-        <div className="flex min-h-11 shrink-0 flex-wrap items-center gap-2 bg-canvas-sunken px-10 py-1.5">
-          {/* Every screen wears the look being tried: the map says whose. */}
-          {tryingLook && (
-            <p role="status" className="flex items-center gap-1.5 text-meta text-fg-muted">
-              <span aria-hidden="true" className="size-1.5 rounded-full bg-interactive" />
-              {plan.previewingLook(tryingLook.label)}
-            </p>
-          )}
-          {!planning && (
-            <label className="relative flex w-52 min-w-36 items-center">
-              <span className="sr-only">{t.searchLabel}</span>
-              <Search size={13} className="pointer-events-none absolute left-2.5 text-fg-faint" />
-              <input
-                ref={search}
-                type="search"
-                value={query}
-                placeholder={t.searchPlaceholder}
-                onChange={(event) => {
+      {!planning && (
+        <div className="flex items-center gap-2 rounded-lg border border-line bg-canvas-raised pr-2 shadow-overlay has-[input:placeholder-shown]:pr-0">
+          <label className="relative flex w-52 items-center">
+            <span className="sr-only">{t.searchLabel}</span>
+            <Search size={13} className="pointer-events-none absolute left-2.5 text-fg-faint" />
+            <input
+              ref={search}
+              type="search"
+              value={query}
+              placeholder={t.searchPlaceholder}
+              onChange={(event) => {
+                hit.current = -1;
+                setQuery(event.target.value);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  event.stopPropagation();
                   hit.current = -1;
-                  setQuery(event.target.value);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === 'Escape') {
-                    event.stopPropagation();
-                    hit.current = -1;
-                    setQuery('');
-                  } else if (event.key === 'Enter' && query.trim()) {
-                    event.preventDefault();
-                    nextHit();
-                  }
-                }}
-                className="h-8 w-full min-w-0 rounded-lg border border-line bg-canvas-raised pr-2 pl-8 text-body"
-              />
-            </label>
-          )}
+                  setQuery('');
+                } else if (event.key === 'Enter' && query.trim()) {
+                  event.preventDefault();
+                  nextHit();
+                }
+              }}
+              className="h-8 w-full min-w-0 rounded-lg bg-transparent pr-2 pl-8 text-body outline-none"
+            />
+          </label>
           {query.trim() && (
-            <span className="flex items-center gap-2 text-meta text-fg-muted">
+            <span className="flex items-center gap-2 text-meta whitespace-nowrap text-fg-muted">
               <span className="tabular-nums">{t.found(hits.length)}</span>
               {hits.length > 1 && (
                 <LinkButton aria-label={t.nextMatch} onClick={nextHit}>
@@ -1095,547 +1084,538 @@ export function ProductMap({
               )}
             </span>
           )}
-          <span className="grow" />
+        </div>
+      )}
+    </>
+  );
+  const lensShown = lenses.failed.size > 0 || lenses.recheck.size > 0 || showChanged;
+  const boardCorner = treeMap && (
+    <>
+      {memoryWaiting > 0 && onMemory && (
+        <Chip pressed={false} tone="attention" onClick={onMemory}>
+          <Brain size={13} aria-hidden />
+          {t.memoryWaiting(memoryWaiting)}
+        </Chip>
+      )}
+      <ImportLink cwd={cwd} onOpen={openImported} />
+      {/* One choice of what to look at: every screen, or only those that broke, wait for a check or changed. */}
+      {lensShown && (
+        <div role="group" aria-label={t.lensLabel} className="flex gap-0.5 rounded-lg bg-hover p-0.5 shadow-overlay">
+          <LensButton pressed={lens === null} onClick={() => setLens(null)}>
+            {t.lensAll}
+          </LensButton>
           {lenses.failed.size > 0 && (
-            <Chip pressed={lens === 'failed'} tone="danger" onClick={() => pick('failed')}>
-              <CircleX size={13} aria-hidden />
+            <LensButton pressed={lens === 'failed'} tone="danger" onClick={() => pick('failed')}>
               {t.lensFailed(lenses.failed.size)}
-            </Chip>
+            </LensButton>
           )}
           {lenses.recheck.size > 0 && (
-            <Chip pressed={lens === 'recheck'} tone="attention" onClick={() => pick('recheck')}>
-              <RotateCcw size={13} aria-hidden />
+            <LensButton pressed={lens === 'recheck'} tone="attention" onClick={() => pick('recheck')}>
               {t.lensRecheck(lenses.recheck.size)}
-            </Chip>
+            </LensButton>
           )}
           {/* While a plan is drawn or built every card is the AI's change: only later ones are news. */}
-          {lenses.changed.size > 0 && !planning && !building && (
-            <Chip pressed={lens === 'changed'} onClick={() => pick('changed')}>
-              <Sparkles size={13} aria-hidden />
+          {showChanged && (
+            <LensButton pressed={lens === 'changed'} onClick={() => pick('changed')}>
               {t.lensChanged(lenses.changed.size)}
-            </Chip>
+            </LensButton>
           )}
-          {memoryWaiting > 0 && onMemory && (
-            <Chip pressed={false} tone="attention" onClick={onMemory}>
-              <Brain size={13} aria-hidden />
-              {t.memoryWaiting(memoryWaiting)}
-            </Chip>
-          )}
-          <ImportLink cwd={cwd} onOpen={openImported} />
-          {mapMenu}
         </div>
       )}
-      {notices && data && (
-        <ul
-          aria-label={t.noticesLabel}
-          className="flex shrink-0 flex-wrap items-center gap-1 border-b border-line bg-canvas-sunken px-8 py-1"
-        >
-          {!planned && uncovered > 0 && data.coverage && (
-            <Coverage coverage={data.coverage} exclude={data.exclude ?? []} disabled={locked} onSync={syncMap} />
-          )}
-          {!planned && <Unmapped parts={data.unmapped ?? []} disabled={locked} onContinue={continueMap} />}
-          {!planning && editedCount > 0 && (
-            <li data-edited className="flex min-h-7 items-center gap-2 px-2 text-body">
-              {t.editedPromises(editedCount)}
-              <LinkButton disabled={locked} onClick={checkEdited}>
-                {t.editedCheck}
-              </LinkButton>
-            </li>
-          )}
-          {!!data.removedCards?.length && (
-            <li>
-              <Popover.Root>
-                <Popover.Trigger className={noticeRow}>
-                  {t.removedCardsShort(data.removedCards.length)}
-                  <ChevronRight size={13} aria-hidden className="text-fg-muted" />
-                </Popover.Trigger>
-                <Popover.Popup align="start" className="w-96 gap-2 p-3">
-                  <section aria-label={t.removedCards} className="flex flex-col gap-1.5">
-                    <h2 className="text-meta text-attention">{t.removedCards}</h2>
-                    <ul className="flex flex-col gap-1.5">
-                      {data.removedCards.map((card) => (
-                        <li key={card.id} className="flex flex-wrap items-center gap-x-2 text-body">
-                          <span className="min-w-0 grow">{card.title}</span>
-                          <LinkButton
-                            disabled={review.isPending || anyActive || readOnly}
-                            onClick={() => review.mutate({ cwd, target: 'card', action: 'accept', nodeId: card.id })}
-                          >
-                            {t.acceptChange}
-                          </LinkButton>
-                          <LinkButton
-                            disabled={review.isPending || anyActive || readOnly}
-                            onClick={() => review.mutate({ cwd, target: 'card', action: 'restore', nodeId: card.id })}
-                          >
-                            {t.restoreMine}
-                          </LinkButton>
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-                </Popover.Popup>
-              </Popover.Root>
-            </li>
-          )}
-        </ul>
-      )}
-      {confirmRebuild && (
-        <div className="flex flex-wrap items-center gap-3 border-b border-line bg-canvas-sunken px-5 py-3 text-body">
-          <span className="min-w-0 grow">{t.rediscoverConfirm}</span>
-          {anyActive && !busy && <span className="text-meta text-fg-muted">{t.busyStartShort}</span>}
-          <Button variant="primary" disabled={locked} onClick={() => void start('discover')}>
-            {busy ? t.starting : t.rediscoverStart}
-          </Button>
-          <Button onClick={() => setConfirmRebuild(false)}>{t.cancel}</Button>
-        </div>
-      )}
-      {scopeOpen && data && (
-        <div className="flex items-start gap-3 border-b border-line bg-canvas-sunken px-5 py-3">
-          <div className="min-w-0 grow">
-            <ScopeEditor cwd={cwd} board={data} readOnly={readOnly} label={t.scopeTitle} />
+      <BoardSizeSwitch map={treeMap} />
+      {mapMenu}
+    </>
+  );
+
+  return (
+    <BoardSize.Provider value={boardSize}>
+      <main
+        ref={area}
+        className="flex min-h-0 min-w-0 grow flex-col bg-canvas contain-inline-size"
+        aria-label={t.title}
+      >
+        {/* Before the first card the map may already exist (being drawn, or stopped early): its menu (scope, delete)
+          is here too, so a map is never out of reach. */}
+        {!hasMap && data && (workBusy || data.exists) && mapMenu && (
+          <div className="flex min-h-11 shrink-0 items-center gap-2 bg-canvas-sunken px-10 py-1.5">
+            <span className="grow" />
+            {mapMenu}
           </div>
-          <Button onClick={() => setScopeOpen(false)}>{t.close}</Button>
-        </div>
-      )}
-      {deleting && <DeleteMap cwd={cwd} onClose={() => setDeleting(false)} onDeleted={startOver} />}
-      {readOnly && (
-        <p role="status" className="border-b border-line bg-canvas-sunken px-5 py-2 text-body">
-          {t.readOnlyBanner}
-        </p>
-      )}
-      {!!data?.problems?.length && (
-        <details className="border-b border-line bg-canvas-sunken px-5 py-2 text-body">
-          <summary className="cursor-pointer">{t.problemsBanner(data.problems.length)}</summary>
-          <ul className="mt-2 flex flex-col gap-1 text-meta text-fg-muted" aria-label={t.problemsDetail}>
-            {data.problems.map((problem) => (
-              <li key={`${problem.file}-${problem.message}`}>
-                {t.problemLine} <span className="font-mono break-all">{problem.file}</span>
-                <details className="text-fg-faint">
-                  <summary className="cursor-pointer">{t.technicalInfo}</summary>
-                  {problem.message}
-                </details>
+        )}
+        {notices && data && (
+          <ul
+            aria-label={t.noticesLabel}
+            className="flex shrink-0 flex-wrap items-center gap-1 border-b border-line bg-canvas-sunken px-8 py-1"
+          >
+            {!planned && uncovered > 0 && data.coverage && (
+              <Coverage coverage={data.coverage} exclude={data.exclude ?? []} disabled={locked} onSync={syncMap} />
+            )}
+            {!planned && <Unmapped parts={data.unmapped ?? []} disabled={locked} onContinue={continueMap} />}
+            {!planning && editedCount > 0 && (
+              <li data-edited className="flex min-h-7 items-center gap-2 px-2 text-body">
+                {t.editedPromises(editedCount)}
+                <LinkButton disabled={locked} onClick={checkEdited}>
+                  {t.editedCheck}
+                </LinkButton>
               </li>
-            ))}
+            )}
+            {!!data.removedCards?.length && (
+              <li>
+                <Popover.Root>
+                  <Popover.Trigger className={noticeRow}>
+                    {t.removedCardsShort(data.removedCards.length)}
+                    <ChevronRight size={13} aria-hidden className="text-fg-muted" />
+                  </Popover.Trigger>
+                  <Popover.Popup align="start" className="w-96 gap-2 p-3">
+                    <section aria-label={t.removedCards} className="flex flex-col gap-1.5">
+                      <h2 className="text-meta text-attention">{t.removedCards}</h2>
+                      <ul className="flex flex-col gap-1.5">
+                        {data.removedCards.map((card) => (
+                          <li key={card.id} className="flex flex-wrap items-center gap-x-2 text-body">
+                            <span className="min-w-0 grow">{card.title}</span>
+                            <LinkButton
+                              disabled={review.isPending || anyActive || readOnly}
+                              onClick={() => review.mutate({ cwd, target: 'card', action: 'accept', nodeId: card.id })}
+                            >
+                              {t.acceptChange}
+                            </LinkButton>
+                            <LinkButton
+                              disabled={review.isPending || anyActive || readOnly}
+                              onClick={() => review.mutate({ cwd, target: 'card', action: 'restore', nodeId: card.id })}
+                            >
+                              {t.restoreMine}
+                            </LinkButton>
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  </Popover.Popup>
+                </Popover.Root>
+              </li>
+            )}
           </ul>
-        </details>
-      )}
-      {data?.review && (
-        <div
-          data-review
-          className="flex flex-wrap items-center gap-3 border-b border-line bg-canvas-sunken px-5 py-3 text-body"
-        >
-          <div className="min-w-0 grow">
-            <p className="font-medium">{t.reviewTitle}</p>
-            {!!data.review.added?.length && (
-              <p className="text-meta text-fg-muted">{t.reviewAdded(data.review.added.join(', '))}</p>
-            )}
-            {!!data.review.removed?.length && (
-              <p className="text-meta text-fg-muted">{t.reviewRemoved(data.review.removed.join(', '))}</p>
-            )}
-            {!!data.review.changed?.length && (
-              <p className="text-meta text-fg-muted">{t.reviewChanged(data.review.changed.join(', '))}</p>
-            )}
-            {review.isError && (
-              <p role="alert" className="text-meta text-danger">
-                {review.error instanceof ServerError && review.error.data?.reason === 'flow_busy'
-                  ? t.busyEdit
-                  : t.editFailed}
-              </p>
-            )}
+        )}
+        {confirmRebuild && (
+          <div className="flex flex-wrap items-center gap-3 border-b border-line bg-canvas-sunken px-5 py-3 text-body">
+            <span className="min-w-0 grow">{t.rediscoverConfirm}</span>
+            {anyActive && !busy && <span className="text-meta text-fg-muted">{t.busyStartShort}</span>}
+            <Button variant="primary" disabled={locked} onClick={() => void start('discover')}>
+              {busy ? t.starting : t.rediscoverStart}
+            </Button>
+            <Button onClick={() => setConfirmRebuild(false)}>{t.cancel}</Button>
           </div>
-          <Button
-            variant="primary"
-            disabled={review.isPending || anyActive || readOnly}
-            onClick={() => review.mutate({ cwd, target: 'map', action: 'accept' })}
-          >
-            {t.acceptChange}
-          </Button>
-          <Button
-            disabled={review.isPending || anyActive || readOnly}
-            onClick={() => review.mutate({ cwd, target: 'map', action: 'restore' })}
-          >
-            {t.reviewRestore}
-          </Button>
-        </div>
-      )}
-      {!docked && errorBar}
-      {board.isError && data && (
-        <p role="alert" className="border-b border-line bg-diff-removed px-5 py-2 text-meta text-danger">
-          {t.loadFailed}
-        </p>
-      )}
-      <div className="relative flex min-h-0 min-w-0 grow">
-        {board.isError && !data ? (
-          <div className="flex grow flex-col items-center justify-center gap-3 p-8">
-            <p role="alert" className="text-body text-danger">
-              {t.loadFailed}
-            </p>
-            <Button onClick={() => void board.refetch()}>{t.retry}</Button>
+        )}
+        {scopeOpen && data && (
+          <div className="flex items-start gap-3 border-b border-line bg-canvas-sunken px-5 py-3">
+            <div className="min-w-0 grow">
+              <ScopeEditor cwd={cwd} board={data} readOnly={readOnly} label={t.scopeTitle} />
+            </div>
+            <Button onClick={() => setScopeOpen(false)}>{t.close}</Button>
           </div>
-        ) : !data ? (
-          <p className="p-8 text-body text-fg-muted">{t.loading}</p>
-        ) : !hasMap && planned ? (
-          // A plan before its first card: the place of its first screen, drawn as the AI reads the one line (or, when
-          // it stopped before a card, still a plan waiting to be drawn on; the bar under the conversation says so).
-          <div className="flex min-w-0 grow flex-col items-center justify-center gap-4 bg-canvas-sunken p-8">
-            <span
-              aria-hidden
-              className={clsx(
-                'h-100 w-50 border border-dashed border-line',
-                (drawing || busy) && 'animate-pulse motion-reduce:animate-none',
+        )}
+        {deleting && <DeleteMap cwd={cwd} onClose={() => setDeleting(false)} onDeleted={startOver} />}
+        {readOnly && (
+          <p role="status" className="border-b border-line bg-canvas-sunken px-5 py-2 text-body">
+            {t.readOnlyBanner}
+          </p>
+        )}
+        {!!data?.problems?.length && <MapProblems problems={data.problems} />}
+        {data?.review && (
+          <div
+            data-review
+            className="flex flex-wrap items-center gap-3 border-b border-line bg-canvas-sunken px-5 py-3 text-body"
+          >
+            <div className="min-w-0 grow">
+              <p className="font-medium">{t.reviewTitle}</p>
+              {!!data.review.added?.length && (
+                <p className="text-meta text-fg-muted">{t.reviewAdded(data.review.added.join(', '))}</p>
               )}
-              style={{ borderRadius: 26 }}
-            />
-            {(drawing || busy) && <p className="text-body text-fg-muted">{film.firstScreens}</p>}
-          </div>
-        ) : !hasMap && (drawing || busy) && flight ? (
-          // The stand-in card holds the first place until the first journey lands.
-          <div className="min-w-0 grow" />
-        ) : !hasMap && (drawing || busy) ? (
-          // The canvas, still empty: the first cards land here as soon as the AI writes them.
-          <div className="flex min-w-0 grow items-center justify-center">
-            <span aria-hidden className="h-16 w-44 animate-pulse rounded-xl border border-dashed border-line" />
-          </div>
-        ) : !hasMap && checkingFolder ? (
-          <p className="p-8 text-body text-fg-muted">{t.checkingFolder}</p>
-        ) : !hasMap && emptyFolder ? (
-          <div className="flex min-w-0 grow flex-col items-center justify-center gap-3 p-8 text-center">
-            <h2 className="text-title font-semibold">{t.emptyFolder}</h2>
-            <p className="max-w-90 text-body text-fg-muted">{t.emptyFolderLead}</p>
-            <Button variant="primary" onClick={() => onNewHere?.(cwd)}>
-              {t.newHere}
+              {!!data.review.removed?.length && (
+                <p className="text-meta text-fg-muted">{t.reviewRemoved(data.review.removed.join(', '))}</p>
+              )}
+              {!!data.review.changed?.length && (
+                <p className="text-meta text-fg-muted">{t.reviewChanged(data.review.changed.join(', '))}</p>
+              )}
+              {review.isError && (
+                <p role="alert" className="text-meta text-danger">
+                  {review.error instanceof ServerError && review.error.data?.reason === 'flow_busy'
+                    ? t.busyEdit
+                    : t.editFailed}
+                </p>
+              )}
+            </div>
+            <Button
+              variant="primary"
+              disabled={review.isPending || anyActive || readOnly}
+              onClick={() => review.mutate({ cwd, target: 'map', action: 'accept' })}
+            >
+              {t.acceptChange}
+            </Button>
+            <Button
+              disabled={review.isPending || anyActive || readOnly}
+              onClick={() => review.mutate({ cwd, target: 'map', action: 'restore' })}
+            >
+              {t.reviewRestore}
             </Button>
           </div>
-        ) : !hasMap ? (
-          <div className="flex min-w-0 grow flex-col items-center justify-center gap-3 p-8 text-center">
-            <h2 className="text-title font-semibold">{t.empty}</h2>
-            <p className="max-w-90 text-body text-fg-muted">{demo ? t.demo : t.emptyLead}</p>
-            {deletedHere && onNewProject && (
-              <p className="max-w-90 text-meta text-fg-muted">
-                {t.deletedNewLead}{' '}
-                <LinkButton className="min-h-5 px-0.5" onClick={onNewProject}>
-                  {t.newProject}
-                </LinkButton>
-              </p>
-            )}
-            <ImportLink cwd={cwd} onOpen={openImported} />
-            <details className="group mt-1 flex flex-col items-center">
-              <summary className="cursor-pointer list-none text-meta text-interactive">{t.scopeBefore}</summary>
-              <div className="mt-3 text-left">
-                <ScopeEditor cwd={cwd} board={data} readOnly={readOnly} label={t.scopeTitle} />
-              </div>
-            </details>
-          </div>
-        ) : (
-          treeMap && (
-            <JourneyMap
-              cwd={cwd}
-              map={treeMap}
-              board={data}
-              seenAt={seenAt}
-              start={(action, target) => start(action, target)}
-              drawing={drawing}
-              lit={lit}
-              reveal={reveal}
-              look={planned ? look : undefined}
-              touching={touching}
-              asked={phase === 'asking' ? (question?.about ?? null) : null}
-              planned={planned}
-              making={making}
-              onChangePick={planned ? setReviewing : undefined}
-              onPlan={planning ? (words) => void say(words) : undefined}
-              // A plan takes words while it works; checks and fixes wait until the AI is free, and say so.
-              waitNote={!planning && anyActive ? t.busyNote : null}
-              stepParts={(cardId) => {
-                const node = nodeOf(cardId);
-                if (!node) return {};
-                const mine = data.states?.[cardId];
-                const canEdit = !readOnly && !anyActive;
-                return {
-                  title: <Title key={cardId} cwd={cwd} node={node} mine={mine?.overridden?.title} canEdit={canEdit} />,
-                  howToTry: (
-                    <HowToTry
-                      key={`try-${cardId}`}
-                      cwd={cwd}
-                      node={node}
-                      mine={mine?.overridden?.howToTry}
-                      canEdit={canEdit}
-                    />
-                  ),
-                  extras: (
-                    <>
-                      {!!mine?.removedPromises?.length && <PromiseMore {...promiseProps(node)} only={REMOVED} />}
-                      {planned && aiPick(cardId) && (
-                        <p className="flex flex-wrap items-baseline gap-x-1.5 rounded-md bg-canvas-sunken px-2 py-1 text-meta">
-                          <span className="min-w-0 grow text-fg-muted">
-                            {plan.aiDecided} · {aiPick(cardId)!.answer}
-                          </span>
-                          <LinkButton className="min-h-5 px-0.5" onClick={() => setReviewing(cardId)}>
-                            {plan.change}
-                          </LinkButton>
-                        </p>
-                      )}
-                      {docked ? (
-                        <p className="flex flex-wrap gap-2">
-                          {/* The card closes: the input is beside the map, under the conversation. */}
-                          <Dialog.Close
-                            render={<Button />}
-                            disabled={readOnly}
-                            onClick={() => {
-                              setAboutCard(cardId);
-                              onShowTalk?.();
-                            }}
-                          >
-                            {t.askAboutCard}
-                          </Dialog.Close>
-                          {!planning && (
-                            <Button disabled={locked} onClick={() => void start('verify', { node })}>
-                              {t.askRecheck}
-                            </Button>
-                          )}
-                        </p>
-                      ) : (
-                        <CardAsk
-                          key={cardId}
-                          locked={locked}
-                          // Words are taken while the AI works: they go when it is free.
-                          askLocked={busy || readOnly}
-                          onAsk={(request) => askAbout(node, request)}
-                          onRecheck={planning ? undefined : () => void start('verify', { node })}
-                        />
-                      )}
-                      {canOpenInApp && node.kind === 'screen' && node.phase === 'built' && (
-                        <p>
-                          <Dialog.Close render={<LinkButton />} onClick={() => openInApp(cardId)}>
-                            {film.openInApp}
-                          </Dialog.Close>
-                        </p>
-                      )}
-                    </>
-                  ),
-                };
-              }}
-              promiseExtras={(cardId, promiseId) => {
-                const node = nodeOf(cardId);
-                return node && <PromiseMore key={promiseId} {...promiseProps(node)} only={promiseId} />;
-              }}
-              onSession={(id) => {
-                onSession(id);
-                onShowConversation?.();
-              }}
-            />
-          )
         )}
-        {flight && <AskFlight key={flight.at} {...flight} landed={landed} />}
-        {placeTalk(
-          <>
-            {docked && errorBar}
-            {phase && (
-              <PlanBar
-                docked={docked}
-                phase={phase}
-                thinking={talking && phase === 'asking'}
-                question={shownQuestion}
-                about={shownQuestion?.about ? (treeMap?.cards[shownQuestion.about]?.title ?? null) : null}
-                preview={previewing}
-                sample={
-                  pending?.sample ||
-                  Object.values(treeMap?.cards ?? {}).find((card) => card.screen?.kind === 'planned')?.screen?.src ||
-                  ''
-                }
-                activity={activity}
-                waiting={workInfo?.status === 'waiting'}
-                left={data?.undecided?.length ?? 0}
-                review={pickReview}
-                built={{
-                  checked: promisesAll.filter((p) => p.status === 'passed').length,
-                  total: promisesAll.length,
-                  aiPicks: aiPicked.length,
-                  cards: cardCount,
-                  done: builtCount,
-                  screens: Object.values(treeMap?.cards ?? {}).filter(hasScreenArea).length,
-                  tries: Object.values(treeMap?.cards ?? {})
-                    .filter((card) => card.howToTry?.trim())
-                    .map((card) => ({ cardId: card.id, card: card.title, text: card.howToTry!.trim() })),
-                  open: Object.values(treeMap?.cards ?? {}).flatMap((card) =>
-                    card.promises
-                      .filter((promise) => promise.status !== 'passed')
-                      .map((promise) => {
-                        // Broken stays broken while the AI works on its card (shown there as being checked).
-                        const failed = data?.states?.[card.id]?.promises?.[promise.id]?.status === 'failed';
-                        return {
-                          cardId: card.id,
-                          card: card.title,
-                          promiseId: promise.id,
-                          text: promise.then,
-                          note: failed ? promise.note : '',
-                          failed,
-                        };
-                      }),
-                  ),
-                }}
-                team={
-                  buildTeam?.status === 'proposed' || buildTeam?.status === 'over'
-                    ? {
-                        status: buildTeam.status,
-                        title: buildTeam.title,
-                        agents: roomOf(buildTeam).planned,
-                        minutes: buildTeam.minutes,
-                        needed: buildTeam.needed,
-                      }
-                    : null
-                }
-                stop={{ reason: stopReason(buildItems ?? []), team: buildTeam?.status === 'interrupted' }}
-                onTeam={answerTeam}
-                onContinue={continueBuild}
-                onAnswer={(option) => {
-                  const picked = shownQuestion?.options[option];
-                  if (!picked) return;
-                  if (picked.look) setPickedLook({ css: picked.look, before: mapLook ?? '' });
-                  say(picked.label);
-                }}
-                onPreview={(option) => shownQuestion && setLookPreview({ question: shownQuestion.id, option })}
-                onHoverLook={(option) =>
-                  setLookHover(option === null || !shownQuestion ? null : { question: shownQuestion.id, option })
-                }
-                onDecideRest={() => say(plan.decideRestMessage)}
-                onAskOn={() => say(plan.askOnMessage)}
-                onDrawOn={() => say(plan.drawOnMessage)}
-                onDecide={(option) => {
-                  const label = pickReview?.question.options[option]?.label;
-                  // The answer it already has needs nothing sent.
-                  if (label && option !== pickReview?.picked) changeDecision(label);
-                  nextReview();
-                }}
-                onCloseReview={() => setReviewing(null)}
-                onNextReview={nextReview}
-                onReviewPicks={() => reviewOrder[0] && setReviewing(reviewOrder[0])}
-                onFix={(cardId, promiseId) => {
-                  const node = nodeOf(cardId);
-                  const broken = node?.conditions?.find((condition) => condition.id === promiseId)?.expectation;
-                  if (node && broken) void askAbout(node, tree.fixRequest(node.title, broken));
-                }}
-                onRecheck={(ids) => void start('verify', { nodeIds: ids, request: t.recheckAllRequest })}
-                onOpenInApp={canOpenInApp ? openInApp : undefined}
-                onPublish={onPublish}
-                onFixConnection={() => onFixConnection?.()}
-                onStop={stopWork}
-                onLook={showWork}
-              />
-            )}
-            {!docked &&
-              ownLine &&
-              workBusy &&
-              (workInfo?.status === 'waiting' ? (
-                <Bar title={t.workWaiting} hint={t.workWaitingHint}>
-                  <Button variant="primary" onClick={showWork}>
-                    {t.workLook}
-                  </Button>
-                  <Button onClick={stopWork}>{t.stopDrawing}</Button>
-                </Bar>
-              ) : (
-                <Working key={workText} text={workText} stop={t.stopDrawing} onStop={stopWork} />
-              ))}
-            {!workBusy && others.length > 0 && (
-              <p className="pointer-events-auto flex flex-wrap items-center gap-x-2 self-center rounded-xl bg-canvas-raised px-3 py-1.5 text-meta text-fg-muted shadow-overlay">
-                <span>{t.otherWorking}</span>
-                <LinkButton
-                  className="min-h-5 px-0.5"
-                  onClick={() => {
-                    onSession(others[0]!.id);
-                    onShowConversation?.();
-                  }}
-                >
-                  {t.otherWorkingShow}
-                </LinkButton>
-              </p>
-            )}
-            {!docked && showReply && reply && (
-              <section
-                aria-label={t.replyFrom}
-                className="pointer-events-auto motion-step flex items-start gap-3 rounded-xl border border-line bg-canvas-raised p-3 shadow-overlay"
-              >
-                <p className="line-clamp-3 min-w-0 grow text-body whitespace-pre-line text-fg">{replyText}</p>
-                <span className="flex shrink-0 items-center gap-2">
-                  {/* Stopped on the model connection (sign-in, credits, a plan's limit): fixed there, not here. */}
-                  {replyStop && CONNECTION.has(replyStop) && (
-                    <LinkButton className="min-h-5 px-0.5" onClick={() => onFixConnection?.()}>
-                      {plan.fixConnection}
-                    </LinkButton>
-                  )}
-                  <LinkButton className="min-h-5 px-0.5" onClick={showWork}>
-                    {t.showConversation}
-                  </LinkButton>
-                  <LinkButton className="min-h-5 px-0.5" onClick={closeReply}>
-                    {t.replyClose}
-                  </LinkButton>
-                </span>
-              </section>
-            )}
-            {waitingWords.length > 0 && (
-              <section
-                aria-label={t.laterTitle}
-                className="pointer-events-auto motion-step flex flex-col gap-1.5 rounded-xl border border-line bg-canvas-raised p-3 shadow-overlay"
-              >
-                <p className="text-meta text-fg-muted">{t.laterTitle}</p>
-                <ul className="flex flex-col gap-1">
-                  {waitingWords.map((word) => (
-                    <li key={word.id} className="flex items-baseline gap-2 text-body">
-                      <span className="min-w-0 grow truncate">{word.text}</span>
-                      {word.failed && (
-                        <>
-                          <span className="shrink-0 text-meta text-danger">{t.laterFailed}</span>
-                          <LinkButton className="min-h-5 px-0.5" onClick={() => later.fail(word.id, false)}>
-                            {t.laterRetry}
-                          </LinkButton>
-                        </>
-                      )}
-                      <LinkButton className="min-h-5 px-0.5" onClick={() => later.drop(word.id)}>
-                        {t.laterCancel}
-                      </LinkButton>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-            {data && !readOnly && !board.isError && !checkingFolder && !(emptyFolder && !hasMap) && (
-              <MapAsk
-                empty={!hasMap && !planned}
-                disabled={busy || (!hasMap && !planned && anyActive && !approval)}
-                // Beside the conversation the input only sends: 멈추기 is the top bar's, and words written while the
-                // AI works wait for its turn.
-                placeholder={
-                  approval ? t.answerInstead : waitsForWork || (docked && (workBusy || talking)) ? t.busyAsk : undefined
-                }
-                onSend={sendWords}
-                about={aboutCard ? (nodeOf(aboutCard)?.title ?? null) : null}
-                onClearAbout={() => setAboutCard(null)}
-                agent={
-                  <>
-                    {agentChip}
-                    {modeChip}
-                  </>
-                }
-              />
-            )}
-          </>,
+        {!docked && errorBar}
+        {board.isError && data && (
+          <p role="alert" className="border-b border-line bg-diff-removed px-5 py-2 text-meta text-danger">
+            {t.loadFailed}
+          </p>
         )}
-        <div
-          data-overlay={overlay || undefined}
-          className={overlay ? 'absolute inset-y-0 right-0 z-20 flex bg-canvas shadow-overlay' : 'contents'}
-        >
-          <SlidingPanel open={!!data && changesOpen} width={PANEL_WIDTH}>
-            {changesOpen && data && (
-              <Changes
+        <div className="relative flex min-h-0 min-w-0 grow">
+          {board.isError && !data ? (
+            <div className="flex grow flex-col items-center justify-center gap-3 p-8">
+              <p role="alert" className="text-body text-danger">
+                {t.loadFailed}
+              </p>
+              <Button onClick={() => void board.refetch()}>{t.retry}</Button>
+            </div>
+          ) : !data ? (
+            <p className="p-8 text-body text-fg-muted">{t.loading}</p>
+          ) : !hasMap && planned ? (
+            // A plan before its first card: the place of its first screen, drawn as the AI reads the one line (or, when
+            // it stopped before a card, still a plan waiting to be drawn on; the bar under the conversation says so).
+            <div className="flex min-w-0 grow flex-col items-center justify-center gap-4 bg-canvas-sunken p-8">
+              <span
+                aria-hidden
+                className={clsx(
+                  'h-100 w-50 border border-dashed border-line',
+                  (drawing || busy) && 'animate-pulse motion-reduce:animate-none',
+                )}
+                style={{ borderRadius: 26 }}
+              />
+              {(drawing || busy) && <p className="text-body text-fg-muted">{film.firstScreens}</p>}
+            </div>
+          ) : !hasMap && (drawing || busy) && flight ? (
+            // The stand-in card holds the first place until the first journey lands.
+            <div className="min-w-0 grow" />
+          ) : !hasMap && (drawing || busy) ? (
+            // The canvas, still empty: the first cards land here as soon as the AI writes them.
+            <div className="flex min-w-0 grow items-center justify-center">
+              <span aria-hidden className="h-16 w-44 animate-pulse rounded-xl border border-dashed border-line" />
+            </div>
+          ) : !hasMap && checkingFolder ? (
+            <p className="p-8 text-body text-fg-muted">{t.checkingFolder}</p>
+          ) : !hasMap && emptyFolder ? (
+            <div className="flex min-w-0 grow flex-col items-center justify-center gap-3 p-8 text-center">
+              <h2 className="text-title font-semibold">{t.emptyFolder}</h2>
+              <p className="max-w-90 text-body text-fg-muted">{t.emptyFolderLead}</p>
+              <Button variant="primary" onClick={() => onNewHere?.(cwd)}>
+                {t.newHere}
+              </Button>
+            </div>
+          ) : !hasMap ? (
+            <div className="flex min-w-0 grow flex-col items-center justify-center gap-3 p-8 text-center">
+              <h2 className="text-title font-semibold">{t.empty}</h2>
+              <p className="max-w-90 text-body text-fg-muted">{demo ? t.demo : t.emptyLead}</p>
+              {deletedHere && onNewProject && (
+                <p className="max-w-90 text-meta text-fg-muted">
+                  {t.deletedNewLead}{' '}
+                  <LinkButton className="min-h-5 px-0.5" onClick={onNewProject}>
+                    {t.newProject}
+                  </LinkButton>
+                </p>
+              )}
+              <ImportLink cwd={cwd} onOpen={openImported} />
+              <details className="group mt-1 flex flex-col items-center">
+                <summary className="cursor-pointer list-none text-meta text-interactive">{t.scopeBefore}</summary>
+                <div className="mt-3 text-left">
+                  <ScopeEditor cwd={cwd} board={data} readOnly={readOnly} label={t.scopeTitle} />
+                </div>
+              </details>
+            </div>
+          ) : (
+            treeMap && (
+              <JourneyMap
+                cwd={cwd}
+                map={treeMap}
+                tools={boardTools}
+                corner={boardCorner}
                 board={data}
-                since={viewedSince}
-                onSelect={(id) => setReveal({ cardId: id, seq: Date.now() })}
-                onClose={() => setChangesOpen(false)}
+                seenAt={seenAt}
+                start={(action, target) => start(action, target)}
+                drawing={drawing}
+                lit={lit}
+                reveal={reveal}
+                look={planned ? look : undefined}
+                touching={touching}
+                asked={phase === 'asking' ? (question?.about ?? null) : null}
+                planned={planned}
+                making={making}
+                view={view}
+                onShowOnBoard={(cardId) => {
+                  onShowBoard?.();
+                  setReveal({ cardId, seq: Date.now() });
+                }}
+                onPlan={planning ? (words) => void say(words) : undefined}
+                // A plan takes words while it works; checks and fixes wait until the AI is free, and say so.
+                waitNote={!planning && anyActive ? t.busyNote : null}
+                stepParts={(cardId) => {
+                  const node = nodeOf(cardId);
+                  if (!node) return {};
+                  const mine = data.states?.[cardId];
+                  const canEdit = !readOnly && !anyActive;
+                  return {
+                    title: (
+                      <Title key={cardId} cwd={cwd} node={node} mine={mine?.overridden?.title} canEdit={canEdit} />
+                    ),
+                    howToTry: (
+                      <HowToTry
+                        key={`try-${cardId}`}
+                        cwd={cwd}
+                        node={node}
+                        mine={mine?.overridden?.howToTry}
+                        canEdit={canEdit}
+                      />
+                    ),
+                    extras: (
+                      <>
+                        {!!mine?.removedPromises?.length && <PromiseMore {...promiseProps(node)} only={REMOVED} />}
+                        {docked ? (
+                          <p className="flex flex-wrap gap-2">
+                            {/* The card closes: the input is beside the map, under the conversation. */}
+                            <Dialog.Close
+                              render={<Button />}
+                              disabled={readOnly}
+                              onClick={() => {
+                                setAboutCard(cardId);
+                                onShowTalk?.();
+                              }}
+                            >
+                              {t.askAboutCard}
+                            </Dialog.Close>
+                            {!planning && (
+                              <Button disabled={locked} onClick={() => void start('verify', { node })}>
+                                {t.askRecheck}
+                              </Button>
+                            )}
+                          </p>
+                        ) : (
+                          <CardAsk
+                            key={cardId}
+                            locked={locked}
+                            // Words are taken while the AI works: they go when it is free.
+                            askLocked={busy || readOnly}
+                            onAsk={(request) => askAbout(node, request)}
+                            onRecheck={planning ? undefined : () => void start('verify', { node })}
+                          />
+                        )}
+                        {canOpenInApp && node.kind === 'screen' && node.phase === 'built' && (
+                          <p>
+                            <Dialog.Close render={<LinkButton />} onClick={() => openInApp(cardId)}>
+                              {film.openInApp}
+                            </Dialog.Close>
+                          </p>
+                        )}
+                      </>
+                    ),
+                  };
+                }}
+                promiseExtras={(cardId, promiseId) => {
+                  const node = nodeOf(cardId);
+                  return node && <PromiseMore key={promiseId} {...promiseProps(node)} only={promiseId} />;
+                }}
+                onSession={(id) => {
+                  onSession(id);
+                  onShowConversation?.();
+                }}
               />
-            )}
-          </SlidingPanel>
+            )
+          )}
+          {flight && <AskFlight key={flight.at} {...flight} landed={landed} />}
+          {placeTalk(
+            <>
+              {docked && errorBar}
+              {phase && (
+                <PlanBar
+                  docked={docked}
+                  phase={phase}
+                  thinking={talking && phase === 'asking'}
+                  busy={talking}
+                  question={shownQuestion}
+                  about={shownQuestion?.about ? (treeMap?.cards[shownQuestion.about]?.title ?? null) : null}
+                  preview={previewing}
+                  sample={
+                    pending?.sample ||
+                    Object.values(treeMap?.cards ?? {}).find((card) => card.screen?.kind === 'planned')?.screen?.src ||
+                    ''
+                  }
+                  activity={activity}
+                  waiting={workInfo?.status === 'waiting'}
+                  left={data?.undecided?.length ?? 0}
+                  built={{
+                    checked: promisesAll.filter((p) => p.status === 'passed').length,
+                    total: promisesAll.length,
+                    cards: cardCount,
+                    done: builtCount,
+                    screens: Object.values(treeMap?.cards ?? {}).filter(hasScreenArea).length,
+                    tries: Object.values(treeMap?.cards ?? {})
+                      .filter((card) => card.howToTry?.trim())
+                      .map((card) => ({ cardId: card.id, card: card.title, text: card.howToTry!.trim() })),
+                    open: openPromises(treeMap, data),
+                  }}
+                  team={
+                    buildTeam?.status === 'proposed' || buildTeam?.status === 'over'
+                      ? {
+                          status: buildTeam.status,
+                          title: buildTeam.title,
+                          agents: roomOf(buildTeam).planned,
+                          ...teamShape(buildTeam),
+                          needed: buildTeam.needed,
+                        }
+                      : null
+                  }
+                  stop={{ reason: stopReason(buildItems ?? []), team: buildTeam?.status === 'interrupted' }}
+                  onTeam={answerTeam}
+                  onContinue={continueBuild}
+                  onAnswer={(option) => {
+                    const picked = shownQuestion?.options[option];
+                    if (!picked) return;
+                    if (picked.look) setPickedLook({ css: picked.look, before: mapLook ?? '' });
+                    say(picked.label);
+                  }}
+                  onPreview={(option) => shownQuestion && setLookPreview({ question: shownQuestion.id, option })}
+                  onHoverLook={(option) =>
+                    setLookHover(option === null || !shownQuestion ? null : { question: shownQuestion.id, option })
+                  }
+                  onDecideRest={() => say(plan.decideRestMessage)}
+                  onAskOn={() => say(plan.askOnMessage)}
+                  onDrawOn={() => say(plan.drawOnMessage)}
+                  onFix={(cardId, promiseId) => {
+                    const node = nodeOf(cardId);
+                    const broken = node?.conditions?.find((condition) => condition.id === promiseId)?.expectation;
+                    if (node && broken) void askAbout(node, tree.fixRequest(node.title, broken));
+                  }}
+                  onRecheck={(ids) => void start('verify', { nodeIds: ids, request: t.recheckAllRequest })}
+                  onOpenInApp={canOpenInApp ? openInApp : undefined}
+                  onPublish={onPublish}
+                  onFixConnection={() => onFixConnection?.()}
+                  onStop={stopWork}
+                  onLook={showWork}
+                />
+              )}
+              {!docked &&
+                ownLine &&
+                workBusy &&
+                (workInfo?.status === 'waiting' ? (
+                  <Bar title={t.workWaiting} hint={t.workWaitingHint}>
+                    <Button variant="primary" onClick={showWork}>
+                      {t.workLook}
+                    </Button>
+                    <Button onClick={stopWork}>{t.stopDrawing}</Button>
+                  </Bar>
+                ) : (
+                  <Working key={workText} text={workText} stop={t.stopDrawing} onStop={stopWork} />
+                ))}
+              {!workBusy && others.length > 0 && (
+                <p className="pointer-events-auto flex flex-wrap items-center gap-x-2 self-center rounded-xl bg-canvas-raised px-3 py-1.5 text-meta text-fg-muted shadow-overlay">
+                  <span>{t.otherWorking}</span>
+                  <LinkButton
+                    className="min-h-5 px-0.5"
+                    onClick={() => {
+                      onSession(others[0]!.id);
+                      onShowConversation?.();
+                    }}
+                  >
+                    {t.otherWorkingShow}
+                  </LinkButton>
+                </p>
+              )}
+              {!docked && showReply && reply && (
+                <section
+                  aria-label={t.replyFrom}
+                  className="pointer-events-auto motion-step flex items-start gap-3 rounded-xl border border-line bg-canvas-raised p-3 shadow-overlay"
+                >
+                  <p className="line-clamp-3 min-w-0 grow text-body whitespace-pre-line text-fg">{replyText}</p>
+                  <span className="flex shrink-0 items-center gap-2">
+                    {/* Stopped on the model connection (sign-in, credits, a plan's limit): fixed there, not here. */}
+                    {replyStop && CONNECTION.has(replyStop) && (
+                      <LinkButton className="min-h-5 px-0.5" onClick={() => onFixConnection?.()}>
+                        {plan.fixConnection}
+                      </LinkButton>
+                    )}
+                    <LinkButton className="min-h-5 px-0.5" onClick={showWork}>
+                      {t.showConversation}
+                    </LinkButton>
+                    <LinkButton className="min-h-5 px-0.5" onClick={closeReply}>
+                      {t.replyClose}
+                    </LinkButton>
+                  </span>
+                </section>
+              )}
+              {waitingWords.length > 0 && (
+                <section
+                  aria-label={t.laterTitle}
+                  className="pointer-events-auto motion-step flex flex-col gap-1.5 rounded-xl border border-line bg-canvas-raised p-3 shadow-overlay"
+                >
+                  <p className="text-meta text-fg-muted">{t.laterTitle}</p>
+                  <ul className="flex flex-col gap-1">
+                    {waitingWords.map((word) => (
+                      <li key={word.id} className="flex items-baseline gap-2 text-body">
+                        <span className="min-w-0 grow truncate">{word.text}</span>
+                        {word.failed && (
+                          <>
+                            <span className="shrink-0 text-meta text-danger">{t.laterFailed}</span>
+                            <LinkButton className="min-h-5 px-0.5" onClick={() => later.fail(word.id, false)}>
+                              {t.laterRetry}
+                            </LinkButton>
+                          </>
+                        )}
+                        <LinkButton className="min-h-5 px-0.5" onClick={() => later.drop(word.id)}>
+                          {t.laterCancel}
+                        </LinkButton>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+              {data && !readOnly && !board.isError && !checkingFolder && !(emptyFolder && !hasMap) && (
+                <MapAsk
+                  empty={!hasMap && !planned}
+                  disabled={busy || (!hasMap && !planned && anyActive && !approval)}
+                  // Beside the conversation the input only sends: 멈추기 is the top bar's, and words written while the
+                  // AI works wait for its turn.
+                  placeholder={
+                    approval
+                      ? t.answerInstead
+                      : waitsForWork || (docked && (workBusy || talking))
+                        ? t.busyAsk
+                        : undefined
+                  }
+                  onSend={sendWords}
+                  about={aboutCard ? (nodeOf(aboutCard)?.title ?? null) : null}
+                  onClearAbout={() => setAboutCard(null)}
+                  agent={
+                    <>
+                      {agentChip}
+                      {modeChip}
+                    </>
+                  }
+                />
+              )}
+            </>,
+          )}
+          <div
+            data-overlay={overlay || undefined}
+            className={overlay ? 'absolute inset-y-0 right-0 z-20 flex bg-canvas shadow-overlay' : 'contents'}
+          >
+            <SlidingPanel open={!!data && changesOpen} width={PANEL_WIDTH}>
+              {changesOpen && data && (
+                <Changes
+                  board={data}
+                  since={viewedSince}
+                  onSelect={(id) => setReveal({ cardId: id, seq: Date.now() })}
+                  onClose={() => setChangesOpen(false)}
+                />
+              )}
+            </SlidingPanel>
+          </div>
         </div>
-      </div>
-    </main>
+      </main>
+    </BoardSize.Provider>
   );
 }
 
@@ -1664,5 +1644,71 @@ function Chip({
     >
       {children}
     </button>
+  );
+}
+
+/** One choice of what the board lights, drawn like the size switch beside it: the pressed one is raised. */
+function LensButton({
+  pressed,
+  tone,
+  onClick,
+  children,
+}: {
+  pressed: boolean;
+  tone?: 'danger' | 'attention';
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={pressed}
+      onClick={onClick}
+      className={clsx(
+        'flex h-7 cursor-pointer items-center rounded-md px-2.5 text-meta whitespace-nowrap tabular-nums',
+        pressed ? 'bg-canvas-raised font-medium shadow-overlay' : 'hover:text-fg',
+        tone === 'danger'
+          ? 'text-danger'
+          : tone === 'attention'
+            ? 'text-attention'
+            : pressed
+              ? 'text-fg'
+              : 'text-fg-muted',
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
+ * What in the map files Alpine could not use, one line per file (dogfood 7: nine files were counted as 28): the files
+ * it could not read at all, and the ones it shows without their wrong parts, in the person's words, with the server's
+ * own sentence as 기술 정보.
+ */
+function MapProblems({ problems }: { problems: readonly MapProblem[] }) {
+  const t = useMessages(messages);
+  const w = useMessages(problemWordMessages);
+  const files = problemFiles(problems);
+  const unread = files.filter((file) => !file.partial).length;
+  const partial = files.length - unread;
+  return (
+    <details className="border-b border-line bg-canvas-sunken px-5 py-2 text-body">
+      <summary className="cursor-pointer">
+        {[unread && t.problemsBanner(unread), partial && t.problemsPartial(partial)].filter(Boolean).join(' · ')}
+      </summary>
+      <ul className="mt-2 flex flex-col gap-1 text-meta text-fg-muted" aria-label={t.problemsDetail}>
+        {files.map((file) => (
+          <li key={file.file}>
+            {file.partial ? t.problemPartLine : t.problemLine} <span className="font-mono break-all">{file.file}</span>
+            <p className="text-fg">{file.messages.map((message) => problemWords(message, w)).join(' · ')}</p>
+            <details className="text-fg-faint">
+              <summary className="cursor-pointer">{t.technicalInfo}</summary>
+              {file.messages.join('\n')}
+            </details>
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }

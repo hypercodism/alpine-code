@@ -42,6 +42,10 @@ export function appPeople(board: FlowGetResult, product: string, unnamed: string
               path: card!.path ?? null,
               real: card!.screen?.kind === 'shot',
               howToTry: card!.howToTry ?? '',
+              // The app draws a situation only when its code handles it.
+              situations: (card!.states ?? [])
+                .filter((state) => state.handled !== false)
+                .map((state) => ({ id: state.id, title: state.title })),
               promises: card!.promises.map((promise) => ({
                 id: promise.id,
                 text: promise.then,
@@ -76,9 +80,8 @@ export function useAppPeople(cwd: string, product: string): AppPerson[] {
  */
 export function useHasApp(cwd: string): boolean {
   const board = useProductMap(cwd).data;
-  const { buildWorking, buildTeam } = useMapTalk(cwd);
+  const { buildState } = useMapTalk(cwd);
   if (!board) return false;
-  if (board.planned)
-    return planPhase(board, false, false, { working: buildWorking, team: buildTeam?.status ?? null }) === 'built';
+  if (board.planned) return planPhase(board, false, false, buildState) === 'built';
   return (board.document?.nodes ?? []).some((node) => node.kind === 'screen' || !!board.previews?.[node.id]);
 }

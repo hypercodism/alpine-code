@@ -61,7 +61,7 @@ Their own pictures are always better for a real business. Tell them once, in pla
 photo: the files are in `public/images/` (or ask you to swap them), and the credits line can go when no credited
 photo is left.
 
-## In sketches
+## In the look question's previews
 
-Planned screens cannot load pictures. Draw the slot at its real crop with `bg-surface` and a short muted line of what
-goes there; fetch the photos when you build.
+Planned screens are real code and use real pictures as above. Only the look question's `html` previews cannot load
+pictures: draw the slot at its real crop with `bg-surface` and a short muted line of what goes there.

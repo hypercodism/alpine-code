@@ -2,7 +2,7 @@ import type { ProjectInfo, SessionInfo } from '@alpine/protocol';
 import { Menu, Popover } from '@alpine/ui/primitives';
 import { useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
-import { Archive, ChevronDown, Ellipsis, FolderPlus, SquarePen } from 'lucide-react';
+import { Archive, ChevronDown, Ellipsis, SquarePen } from 'lucide-react';
 import { useState } from 'react';
 
 import { planPhase } from '@/features/product-map/planData';
@@ -10,7 +10,6 @@ import { ArchiveDialog } from '@/features/rail/ArchiveDialog';
 import { DeleteProjectDialog } from '@/features/rail/DeleteProjectDialog';
 import { messages as railMessages } from '@/features/rail/messages';
 import { projectState } from '@/features/rail/projectState';
-import { ProjectAddDialog } from '@/shared/components/project-add';
 import { useMessages } from '@/shared/i18n';
 import { useNavigation } from '@/shared/navigation';
 import { revealInFinder } from '@/shared/platform';
@@ -26,8 +25,8 @@ const row =
 
 /**
  * The project's name with ⌄, where the rail's work went (flow-spec): the recent projects, each with its one word
- * (질문 대기, 만드는 중, 다 만들었어요, 확인을 기다려요) and its ⋯ (기억, Finder에서 열기, 보관, 삭제…), then 새 프로젝트,
- * 프로젝트 추가… and 보관함. An orange dot by the name says another project waits for me.
+ * (질문 대기, 만드는 중, 다 만들었어요, 확인을 기다려요) and its ⋯ (기억, Finder에서 열기, 보관, 삭제…), then 새 프로젝트
+ * and 보관함. 새 프로젝트 is also where a project already made is opened or got (under its input). An orange dot by the name says another project waits for me.
  */
 export function ProjectMenu({ current }: { current: string | null }) {
   const t = useMessages(shellMessages);
@@ -40,7 +39,6 @@ export function ProjectMenu({ current }: { current: string | null }) {
   const asking = useAsking((state) => state.ids);
   const pinned = useNavigation((state) => state.pinnedProjects);
   const [open, setOpen] = useState(false);
-  const [adding, setAdding] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [deleting, setDeleting] = useState<ProjectInfo | null>(null);
   const archiveProject = useArchiveProject();
@@ -149,17 +147,6 @@ export function ProjectMenu({ current }: { current: string | null }) {
             className={row}
             onClick={() => {
               setOpen(false);
-              setAdding(true);
-            }}
-          >
-            <FolderPlus size={15} strokeWidth={1.6} aria-hidden="true" className="text-fg-muted" />
-            {t.addProject}
-          </button>
-          <button
-            type="button"
-            className={row}
-            onClick={() => {
-              setOpen(false);
               setArchiveOpen(true);
             }}
           >
@@ -173,12 +160,6 @@ export function ProjectMenu({ current }: { current: string | null }) {
           </button>
         </Popover.Popup>
       </Popover.Root>
-      <ProjectAddDialog
-        open={adding}
-        onOpenChange={setAdding}
-        onDone={(path) => void navigate({ to: '/', search: { project: path } })}
-        onNew={() => void navigate({ to: '/' })}
-      />
       <ArchiveDialog open={archiveOpen} onOpenChange={setArchiveOpen} onRestored={go} />
       <DeleteProjectDialog project={deleting} onClose={() => setDeleting(null)} onDeleted={leave} />
     </>

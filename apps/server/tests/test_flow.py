@@ -293,6 +293,36 @@ def test_dangling_references_are_dropped_with_a_problem_each(proj):
         assert needle in messages
 
 
+def test_a_card_with_a_wrong_check_still_shows_and_so_do_its_journeys(proj):
+    """Dogfood 7: one check pointing at a promise the card does not have took the card, and every journey it was in,
+    off the map ("지도 파일 28개를 읽지 못했어요" for nine files)."""
+    card = {
+        "id": "order",
+        "title": "Order",
+        "conditions": [{"id": "c1", "expectation": "주문이 들어간다"}],
+        "checks": [
+            {"id": "k1", "conditionId": "c1", "result": "passed", "summary": "s", "command": "x", "output": "ok"},
+            {"id": "k2", "conditionId": "gone", "result": "passed", "summary": "s", "command": "x", "output": "ok"},
+        ],
+    }
+    write_map(proj, features=[card, {"id": "pay", "title": "Pay"}])
+    board = get(proj)
+    assert [n.id for n in board.document.nodes] == ["order", "pay"]
+    order = next(n for n in board.document.nodes if n.id == "order")
+    assert [c.id for c in order.checks] == ["k1"]
+    assert next(f for f in board.document.flows if f.id == "web").node_ids == ["order", "pay"]
+    [problem] = board.problems
+    assert problem.partial and problem.file.endswith("features/order.json")
+    assert "Unknown or duplicate condition check" in problem.message
+
+
+def test_a_card_that_cannot_be_read_is_said_once_not_again_by_every_journey(proj):
+    write_map(proj, features=[{"id": "order"}, {"id": "pay", "title": "Pay"}])  # no title: nothing to show
+    board = get(proj)
+    assert [n.id for n in board.document.nodes] == ["pay"]
+    assert [p.file.rsplit("/", 1)[1] for p in board.problems] == ["order.json"]
+
+
 def test_newer_format_is_read_only_and_tolerates_unknown_fields(proj):
     write_map(proj, features=[{"id": "order", "title": "Order", "future": {"x": 1}}], flows=[])
     put(proj, "map.json", {"formatVersion": 2, "areas": [{"id": "a", "title": "A", "color": "red"}], "extra": 1})
@@ -974,7 +1004,19 @@ def test_planning_starts_from_words_with_the_planning_skill(proj):
     assert get(proj).planned  # a map that began as a plan stays one
     assert '<skill_content name="product-planning">' in prepared.prompt and "ask_user" in prepared.prompt
     assert '<skill_content name="product-design">' in prepared.prompt  # the look is planned too
-    assert "a `device` (phone or computer)" in prepared.prompt and "about 1280 px wide" in prepared.prompt
+    assert "a `device` (phone or computer)" in prepared.prompt and "around 1280 px" in prepared.prompt
+    # The planned screens are the product's real screens on made-up data, every situation included, and carry the
+    # marks the map reads (where a screen is, where its buttons go, where its promises are).
+    assert "write each one in\nthe project's own code on made-up data" in prepared.prompt
+    assert "their `states`" in prepared.prompt and "?alpine-state=<id>" in prepared.prompt
+    for mark in ("data-alpine-screen", "data-alpine-to", "data-alpine-promise"):
+        assert mark in prepared.prompt
+    assert "screens/<card id>.html" not in prepared.prompt
+    # Finding every situation besides the usual day is the AI's job, done before the first question.
+    assert '<skill_content name="product-situations">' in prepared.prompt
+    flat = " ".join(prepared.prompt.split())
+    assert "walk every screen and journey for its situations" in flat
+    assert flat.index("walk every screen and journey for its situations") < flat.index("then ask what is left")
     assert "Do not record checks" not in prepared.prompt and "ALREADY implemented" not in prepared.prompt
     with pytest.raises(MethodError, match="Describe"):
         prepare(proj, action="plan", request=" ", nodeId=None, flowId=None)
@@ -985,13 +1027,15 @@ def test_building_a_plan_goes_on_without_asking_and_checks_the_promises(proj):
     prepared = prepare(proj, action="build", request="이대로 만들어 주세요.", nodeId=None, flowId=None)
     assert "Choose your own order" in prepared.prompt and '"by": "ai"' in prepared.prompt
     assert "new unique `id`" in prepared.prompt  # building records checks
-    assert "write its `path`" in prepared.prompt  # so the app view can open each built screen
+    assert "check that its `path` still opens it" in prepared.prompt  # the map and the app view open each screen
+    assert "replacing what is inside\nthe made-up data functions" in prepared.prompt  # the planned screens stay
     # The planning skill came with the plan, in the same conversation; the design skill comes again, since the
     # screens are made and looked at now.
     assert '<skill_content name="product-planning">' not in prepared.prompt
     assert '<skill_content name="product-design">' in prepared.prompt and "look at it" in prepared.prompt
     # The person watches the map: each card moves as its screen is built, not all at the end.
-    assert "The person watches\nthe map while you build" in prepared.prompt and "need not watch" not in prepared.prompt
+    flat = " ".join(prepared.prompt.split())
+    assert "The person watches the map while you build" in flat and "need not watch" not in prepared.prompt
     assert "one card at a time, never all at the end" in prepared.prompt
     assert prepared.prompt.index("set its card's phase to building") < prepared.prompt.index("Choose your own order")
     # What it takes to try a screen is on its card, where the person looks, not buried in the last message.
@@ -1042,10 +1086,11 @@ def test_only_a_change_is_told_to_recheck_what_it_touched(proj, action):
     assert "Before you end, check again" not in prepare(proj, action=action, request="고쳐 줘", **where).prompt
 
 
-def test_the_map_is_written_without_asking_only_while_its_product_is_planned(proj):
+def test_the_project_is_written_without_asking_only_while_its_product_is_planned(proj):
+    """Planning writes the screens as real code on made-up data, so the whole new project, not only the map."""
     assert planning_files(proj) == []
     prepare(proj, action="plan", request="블로그", nodeId=None, flowId=None)
-    assert planning_files(proj) == [(proj / BASE).resolve()]
+    assert planning_files(proj) == [proj.resolve()]
     prepare(proj, action="build", request="만들어 주세요.", nodeId=None, flowId=None)
     assert planning_files(proj) == []
 
@@ -1130,13 +1175,16 @@ def test_a_journey_keeps_its_device_and_a_screen_its_path(proj):
 def test_a_screen_path_is_an_address_inside_the_app(proj, path):
     write_map(proj, features=[{"id": "order", "title": "Order", "path": path}], flows=[])
     board = get(proj)
-    assert not board.document.nodes and any(p.file.endswith("features/order.json") for p in board.problems)
+    # The card still shows, without an address that is not one; its file says what was left out.
+    assert [(n.id, n.path) for n in board.document.nodes] == [("order", None)]
+    assert any(p.file.endswith("features/order.json") and p.partial for p in board.problems)
 
 
 def test_a_journey_device_is_phone_or_computer(proj):
     write_map(proj, flows=[{"id": "web", "title": "Order", "device": "tablet", "nodeIds": ["order"]}])
     board = get(proj)
-    assert not board.document.flows and any(p.file.endswith("flows/web.json") for p in board.problems)
+    assert [(f.id, f.device, f.node_ids) for f in board.document.flows] == [("web", None, ["order"])]
+    assert any(p.file.endswith("flows/web.json") and p.partial for p in board.problems)
 
 
 def test_branch_is_attached_and_existing_work_survives(proj):
@@ -2159,3 +2207,94 @@ def test_a_flow_can_call_another_flow_as_one_step(proj):
     assert [(e.source, e.target) for e in work.edges] == [("flow:connect", "order")]
     messages = sorted(p.message for p in result.problems)
     assert "A flow cannot call itself" in messages and "The flow 'nope' does not exist" in messages
+
+
+@pytest.mark.parametrize("action", ["discover", "sync", "extend", "build"])
+def test_drawing_and_building_walk_the_situations_too(proj, action):
+    """Situations are found wherever screens and journeys are drawn or built, and missing ones become proposals."""
+    if action == "build":
+        prepare(proj, action="plan", request="블로그", nodeId=None, flowId=None)
+        where = {"nodeId": None, "flowId": None}
+    else:
+        write_map(proj)
+        where = {}
+    prompt = prepare(proj, action=action, request="" if action == "sync" else "더 해 줘", **where).prompt
+    assert '<skill_content name="product-situations">' in prompt
+    flat = " ".join(prompt.split())
+    if action != "build":
+        assert '`"handled": false`' in flat and "never a promise of what the code does" in flat
+    if action == "discover":
+        assert "one agent that walks every screen and journey through the situations skill" in flat
+
+
+def test_a_situation_the_person_does_not_want_goes_with_its_promises(proj):
+    """A proposed situation the person drops leaves the card with its promises, and the journeys that point at it."""
+    order = {
+        "id": "order",
+        "title": "Order",
+        "kind": "screen",
+        "states": [{"id": "empty", "title": "아무것도 없을 때", "handled": False}],
+        "conditions": [
+            {"id": "shown", "expectation": "주문이 보인다"},
+            {"id": "empty-note", "expectation": "없으면 무엇을 할지 알려 준다", "state": "empty"},
+        ],
+    }
+    write_map(
+        proj,
+        features=[order],
+        flows=[
+            {
+                "id": "web",
+                "title": "Place an order",
+                "nodeIds": ["order"],
+                "situations": [{"id": "empty", "title": "아무것도 없을 때", "screen": "order"}],
+            }
+        ],
+    )
+    with pytest.raises(MethodError, match="Unknown situation"):
+        edit_flow(FlowEditParams(cwd=str(proj), node_id="order", field="state", condition_id="other", value=""))
+    board = edit_flow(FlowEditParams(cwd=str(proj), node_id="order", field="state", condition_id="empty", value=""))
+    after = json.loads((proj / BASE / "features/order.json").read_text())
+    assert after["states"] == [] and [c["id"] for c in after["conditions"]] == ["shown"]
+    assert json.loads((proj / BASE / "flows/web.json").read_text())["situations"] == []
+    assert board.document.flows[0].situations == []
+
+
+# ---- writing map files: Alpine checks them as the AI writes
+
+
+def test_a_map_file_alpine_could_not_show_is_refused_as_it_is_written(proj):
+    from alpineagents import ToolError
+
+    from alpine_core.tools import Workspace
+    from alpine_core.tools.write import Write
+    from alpine_server import map_files  # noqa: F401  (registers the check)
+
+    write_map(proj)
+    writer = Write(Workspace(proj))
+
+    def write(path, content):
+        return writer.write.invoke({"path": path, "content": content}, None)
+
+    card = {
+        "id": "order",
+        "title": "Order",
+        "conditions": [{"id": "c1", "expectation": "주문이 들어간다"}],
+        "checks": [
+            {"id": "k2", "conditionId": "gone", "result": "passed", "summary": "s", "command": "x", "output": "ok"}
+        ],
+    }
+    target = proj / BASE / "features/order.json"
+    before = target.read_text()
+    with pytest.raises(ToolError) as refused:
+        write(str(target), json.dumps(card))
+    assert "Alpine did not write .alpine-code/map/features/order.json" in str(refused.value)
+    assert "conditionId must be the id of one of this card's own conditions" in str(refused.value)
+    assert target.read_text() == before  # nothing was written
+    with pytest.raises(ToolError, match="file name must be the card id"):
+        write(str(target), json.dumps({"id": "other", "title": "x"}))
+    with pytest.raises(ToolError, match="Alpine keeps it itself"):
+        write(str(proj / BASE / "state/x.json"), "{}")
+    # A flow whose card is not written yet is kept, and the AI is told.
+    said = write(str(proj / BASE / "flows/web.json"), json.dumps({"id": "web", "title": "W", "nodeIds": ["later"]}))
+    assert "no card file yet for 'later'" in said

@@ -72,11 +72,11 @@ function mount(path: string, { sessions = [], importable = [], plan, extra = {} 
 const calls = (request: { mock: { calls: unknown[][] } }, method: string) =>
   request.mock.calls.filter(([name]) => name === method).map(([, params]) => params as Record<string, unknown>);
 const mapMenu = async () => {
-  // The map's menu is the "지도" part of the window's ⋯: the map's page has one ⋯.
+  // The map's menu is the "보드" part of the window's ⋯: the map's page has one ⋯.
   fireEvent.click(await screen.findByRole('button', { name: '더 보기' }));
   return screen.findByRole('menu');
 };
-const mapInput = () => screen.getByRole('textbox', { name: '지도에 부탁하기' });
+const mapInput = () => screen.getByRole('textbox', { name: '보드에 부탁하기' });
 const write = (text: string) => {
   fireEvent.change(mapInput(), { target: { value: text } });
   fireEvent.keyDown(mapInput(), { key: 'Enter' });
@@ -126,7 +126,7 @@ describe('what can not start now says why (#30)', () => {
     expect(within(menu).getByRole('menuitem', { name: '기능 더 찾기' }).getAttribute('aria-disabled')).toBe('true');
     fireEvent.keyDown(menu, { key: 'Escape' });
     // A check from a person's panel: it used to be ignored without a word.
-    const map = screen.getByRole('main', { name: '제품 지도' });
+    const map = screen.getByRole('main', { name: '제품 보드' });
     // A person's name over their rows opens their details.
     const first = within(map)
       .getAllByRole('region')
@@ -146,10 +146,10 @@ describe('a plan shows only what fits a plan (#32)', () => {
   it('has no code checks, and puts a new journey to the plan in planning words', async () => {
     const { request } = mount('/board' + q(app), {
       plan: 'asking',
-      sessions: [{ info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '지도' }) }],
+      sessions: [{ info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '보드' }) }],
     });
     const menu = await mapMenu();
-    for (const name of ['기능 더 찾기', '매일 자동으로 확인', '지도 범위 바꾸기'])
+    for (const name of ['기능 더 찾기', '매일 자동으로 확인', '보드 범위 바꾸기'])
       expect(within(menu).queryByRole('menuitem', { name })).toBeNull();
     expect(within(menu).queryByRole('menuitemcheckbox')).toBeNull();
     fireEvent.keyDown(menu, { key: 'Escape' });
@@ -173,17 +173,17 @@ describe('a plan once its build began is code (#32)', () => {
   it('keeps the code checks after a build stopped halfway', async () => {
     mount('/board' + q(app), {
       plan: 'stopped',
-      sessions: [{ info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '지도' }) }],
+      sessions: [{ info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '보드' }) }],
     });
     expect(await screen.findByText('만들기가 멈췄어요')).toBeTruthy();
     const menu = await mapMenu();
-    for (const name of ['기능 더 찾기', '지도 범위 바꾸기'])
+    for (const name of ['기능 더 찾기', '보드 범위 바꾸기'])
       expect(within(menu).getByRole('menuitem', { name })).toBeTruthy();
   });
 });
 
 const building = (items: Item[] = []) => [
-  { info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '지도' }) },
+  { info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '보드' }) },
   { info: sessionInfo({ id: 'build-1', cwd: app, purpose: 'build', title: 'Build the planned product' }), items },
 ];
 
@@ -208,33 +208,36 @@ describe('the conversation beside the map points at the map (#35)', () => {
   });
 });
 
-describe('another conversation beside the map is answered where it is shown (#35)', () => {
-  it('gets an input of its own while it waits, since the map’s input does not reach it', async () => {
+describe('a call of another conversation beside the map waits above the map’s input (#35)', () => {
+  it('holds its card above the input, which answers it, so words never go somewhere unseen', async () => {
     const open = renderHook(() => useDockOpen());
     act(() => open.result.current[1](true));
     open.unmount();
     const { connection, request, router } = mount('/board' + q(app), {
       sessions: [
-        { info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '지도' }) },
+        { info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '보드' }) },
         { info: sessionInfo({ id: 'old', cwd: app, title: 'README 다시 쓰기' }) },
       ],
     });
     await connection.request('session/send', { sessionId: 'old', text: 'README를 고쳐 줘' });
     await router.navigate({ to: '/board', search: { project: app, session: 'old' } });
     const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
-    expect(await within(dock).findByText('지금 지도 대화가 아닌 다른 대화를 보고 있어요')).toBeTruthy();
-    const card = await within(dock).findByRole('region', { name: '승인 요청' });
+    expect(await within(dock).findByText('지금 보드 대화가 아닌 다른 대화를 보고 있어요')).toBeTruthy();
+    const held = await within(dock).findByRole('region', { name: '확인을 기다려요' });
+    expect(within(held).getByText('README 다시 쓰기 · 확인을 기다려요')).toBeTruthy();
+    const card = within(held).getByRole('region', { name: '승인 요청' });
     expect(within(card).getByText('다르게 하려면 아래 입력창에 적어 주세요')).toBeTruthy();
-    const own = within(dock).getByPlaceholderText('어떻게 다르게 할지 적어 주세요');
-    fireEvent.change(own, { target: { value: '고치지 말고 읽기만 해 줘' } });
-    fireEvent.keyDown(own, { key: 'Enter' });
+    // The chat says where it is, instead of a second card.
+    expect(within(dock).getAllByRole('region', { name: '승인 요청' })).toHaveLength(1);
+    expect(mapInput().getAttribute('placeholder')).toBe('건너뛰고 대신 할 일을 적어 주세요');
+    write('고치지 말고 읽기만 해 줘');
     await waitFor(() =>
       expect(calls(request, 'session/answer')).toContainEqual(
         expect.objectContaining({ sessionId: 'old', decision: 'deny', feedback: '고치지 말고 읽기만 해 줘' }),
       ),
     );
-    // Answered, it is only read here again: the map's input is the one input.
-    await waitFor(() => expect(within(dock).queryByPlaceholderText('어떻게 다르게 할지 적어 주세요')).toBeNull());
+    // What I wrote reads as my words under the call it replaced.
+    expect(await within(dock).findByText('대신 이렇게 해 달라고 했어요')).toBeTruthy();
   });
 });
 
@@ -272,7 +275,7 @@ describe('memory is reached from the map (#69, #82)', () => {
     fireEvent.click(await screen.findByRole('button', { name: '기억할까요? 2' }));
     await waitFor(() => expect(router.state.location.pathname).toBe('/memory'));
     expect(await screen.findByText('기다리는 제안')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '← 지도로' }));
+    fireEvent.click(screen.getByRole('button', { name: '← 보드로' }));
     await waitFor(() => expect(router.state.location.pathname).toBe('/board'));
     expect(router.state.location.search).toEqual({ project: app });
     // The map's menu has it too, and the memory page's project name goes back to the map.
@@ -305,20 +308,20 @@ describe('a deleted map starts over from the code (#72)', () => {
   it('says what goes, draws the map again from the code, and leads to 새 프로젝트 for something new', async () => {
     const { request, router } = mount('/board' + q(app), {
       plan: 'built',
-      sessions: [{ info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '지도' }) }],
+      sessions: [{ info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '보드' }) }],
     });
-    fireEvent.click(within(await mapMenu()).getByRole('menuitem', { name: '지도 삭제' }));
-    const strip = await screen.findByRole('region', { name: '지도 삭제' });
+    fireEvent.click(within(await mapMenu()).getByRole('menuitem', { name: '보드 삭제' }));
+    const strip = await screen.findByRole('region', { name: '보드 삭제' });
     expect(within(strip).getByText(/기획 때 정한 답과 화면 스케치/)).toBeTruthy();
     expect(within(strip).getByText(/폴더의 코드와 파일은 그대로 남아요/)).toBeTruthy();
     fireEvent.click(within(strip).getByRole('button', { name: '삭제' }));
-    expect(await screen.findByText(/지도를 지웠어요/)).toBeTruthy();
+    expect(await screen.findByText(/보드를 지웠어요/)).toBeTruthy();
     // No second way to start something new here (map-first 39): the folder has code, so the map is drawn from it.
     expect(screen.queryByRole('button', { name: '처음부터 다시 기획하기' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '새 프로젝트로 시작하기' }));
     await waitFor(() => expect(router.state.location.pathname).toBe('/'));
     await router.navigate({ to: '/board', search: { project: app } });
-    await screen.findByRole('heading', { name: '이 프로젝트를 지도로 펼쳐볼게요' });
+    await screen.findByRole('heading', { name: '이 프로젝트를 보드로 펼쳐볼게요' });
     write('');
     await waitFor(() =>
       expect(calls(request, 'flow/prepare')).toContainEqual(expect.objectContaining({ action: 'discover' })),
@@ -327,17 +330,17 @@ describe('a deleted map starts over from the code (#72)', () => {
 });
 
 describe("the map's page has one ⋯", () => {
-  it("puts the map's own items in the window's ⋯, under 지도", async () => {
+  it("puts the map's own items in the window's ⋯, under 보드", async () => {
     mount('/board' + q(app), {
       plan: 'built',
-      sessions: [{ info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '지도' }) }],
+      sessions: [{ info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '보드' }) }],
     });
     const menu = await mapMenu();
-    expect(within(menu).getByText('지도')).toBeTruthy();
+    expect(within(menu).getByText('보드')).toBeTruthy();
     expect(within(menu).getByRole('menuitem', { name: /^설정/ })).toBeTruthy();
-    expect(within(menu).getByRole('menuitem', { name: '지도 삭제' })).toBeTruthy();
+    expect(within(menu).getByRole('menuitem', { name: '보드 삭제' })).toBeTruthy();
     expect(within(menu).getAllByRole('menuitem', { name: '기억' })).toHaveLength(1);
-    expect(screen.queryByRole('button', { name: '지도 메뉴' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '보드 메뉴' })).toBeNull();
     expect(screen.getAllByRole('button', { name: '더 보기' })).toHaveLength(1);
   });
 });
@@ -369,15 +372,18 @@ describe('the same words everywhere (#47, #54, #67, #74, #77, #80, #84, #89)', (
     expect(screen.queryByText(/프로토콜/)).toBeNull();
   });
 
-  it('names the developer tools in plain words under ⋯ beside the map', async () => {
+  it('names the places on the rail in plain words, each word under its icon', async () => {
     mount('/board' + q(app));
+    const rail = await screen.findByRole('navigation', { name: '도구' });
+    expect(
+      within(rail)
+        .getAllByRole('button')
+        .map((item) => item.textContent),
+    ).toEqual(['대화', '명령', '터미널', '로그', '브라우저', '더 보기']);
+    fireEvent.click(within(rail).getByRole('button', { name: '명령' }));
     const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
-    fireEvent.click(within(dock).getByRole('button', { name: '더 보기' }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: '개발 도구' }));
-    for (const name of ['터미널', '바뀐 파일', '파일', 'AI가 실행한 명령'])
-      expect(await screen.findByRole('menuitem', { name })).toBeTruthy();
-    fireEvent.click(screen.getByRole('menuitem', { name: 'AI가 실행한 명령' }));
-    expect(await within(dock).findByText('AI가 실행한 명령이 없어요.')).toBeTruthy();
+    expect(await within(dock).findByText('AI나 Alpine이 띄운 명령이 없어요.')).toBeTruthy();
+    expect(within(dock).getByText(/Alpine 밖에서 띄운 것은 여기 보이지 않아요/)).toBeTruthy();
   });
 
   it('shows no 준비 중 places on the agents screen', async () => {
@@ -425,5 +431,58 @@ describe('words kept for a conversation that is gone (#34, edge)', () => {
       ),
     );
     expect(calls(request, 'session/send').filter((params) => params.sessionId === 'gone')).toEqual([]);
+  });
+});
+
+describe('a call waiting for my OK is never hidden (dogfood 2, 4, 15)', () => {
+  it('stays above the input with another place open, and is answered there', async () => {
+    const { connection, request } = mount('/board' + q(app), {
+      sessions: [{ info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '보드' }) }],
+    });
+    await connection.request('session/send', { sessionId: 'map-1', text: 'README를 고쳐 줘' });
+    const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
+    const held = await within(dock).findByRole('region', { name: '확인을 기다려요' });
+    expect(within(held).getByText('보드 대화 · 확인을 기다려요')).toBeTruthy();
+    // Another place takes the conversation's place; the card does not go with it.
+    fireEvent.click(within(screen.getByRole('navigation', { name: '도구' })).getByRole('button', { name: '명령' }));
+    expect(await within(dock).findByRole('heading', { name: '명령' })).toBeTruthy();
+    fireEvent.click(
+      within(within(dock).getByRole('region', { name: '확인을 기다려요' })).getByRole('button', { name: '허용' }),
+    );
+    await waitFor(() =>
+      expect(calls(request, 'session/answer')).toContainEqual(
+        expect.objectContaining({ sessionId: 'map-1', decision: 'allow' }),
+      ),
+    );
+    await waitFor(() => expect(within(dock).queryByRole('region', { name: '확인을 기다려요' })).toBeNull());
+  });
+
+  it('is said on every other page, with the way to its map', async () => {
+    const { connection, router } = mount('/settings', {
+      sessions: [{ info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '보드' }) }],
+    });
+    await connection.request('session/send', { sessionId: 'map-1', text: 'README를 고쳐 줘' });
+    fireEvent.click(await screen.findByRole('button', { name: /확인을 기다려요 · alpine-code/ }));
+    await waitFor(() => expect(router.state.location.search).toEqual({ project: app }));
+    expect(await screen.findByRole('region', { name: '확인을 기다려요' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /확인을 기다려요 · alpine-code/ })).toBeNull();
+  });
+});
+
+describe('the bar over the map stays (dogfood 17)', () => {
+  it('has no part of the window around it that can be scrolled, even by a script', async () => {
+    mount('/board' + q(app), {
+      sessions: [{ info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '보드' }) }],
+    });
+    // A card brought into view, or a screen in a frame focusing a field, scrolls every ancestor that can scroll: one
+    // that only hides its overflow then stays scrolled, taking the bar with it, with no way back.
+    const bar = (await screen.findByRole('button', { name: /^alpine-code · 다른 프로젝트로/ })).closest(
+      '[data-tauri-drag-region]',
+    )!;
+    for (let element = bar.parentElement; element && element !== document.body; element = element.parentElement)
+      expect(element.className).not.toMatch(/\boverflow-(hidden|auto|scroll|y-auto|x-auto)\b/);
+    const wall = await screen.findByRole('region', { name: '화면 필름스트립' });
+    for (let element = wall.parentElement; element && element !== document.body; element = element.parentElement)
+      expect(element.className).not.toMatch(/\boverflow-(hidden|auto|scroll|y-auto|x-auto)\b/);
   });
 });

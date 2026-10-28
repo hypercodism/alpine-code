@@ -127,6 +127,10 @@
       "params": "ProjectsInstallNodeToolsParams",
       "result": "ProjectsInstallNodeToolsResult"
     },
+    "screens/captured": {
+      "params": "ScreensCapturedParams",
+      "result": "ScreensCapturedResult"
+    },
     "devServers/list": {
       "params": "DevServersListParams",
       "result": "DevServersListResult"
@@ -359,6 +363,10 @@
       "params": "ProjectsGitParams",
       "result": "ProjectsGitResult"
     },
+    "projects/diff": {
+      "params": "ProjectsDiffParams",
+      "result": "ProjectsDiffResult"
+    },
     "projects/judge": {
       "params": "ProjectsJudgeParams",
       "result": "ProjectsJudgeResult"
@@ -526,7 +534,8 @@
     "cloud/signInFinished": "CloudSignInFinishedParams",
     "cloud/changed": "CloudChangedParams",
     "publish/changed": "PublishChangedParams",
-    "projects/nodeToolsChanged": "ProjectsNodeToolsChangedParams"
+    "projects/nodeToolsChanged": "ProjectsNodeToolsChangedParams",
+    "screens/capture": "ScreensCaptureParams"
   },
   "$defs": {
     "Activity": {
@@ -2787,6 +2796,17 @@
           ],
           "default": null
         },
+        "boardUrl": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "processId": {
           "anyOf": [
             {
@@ -3387,6 +3407,13 @@
           "maxLength": 1000,
           "type": "string"
         },
+        "states": {
+          "items": {
+            "$ref": "#/$defs/ScreenState"
+          },
+          "maxItems": 20,
+          "type": "array"
+        },
         "conditions": {
           "items": {
             "$ref": "#/$defs/FlowCondition"
@@ -3950,6 +3977,19 @@
           "maxLength": 2000,
           "minLength": 1,
           "type": "string"
+        },
+        "state": {
+          "anyOf": [
+            {
+              "maxLength": 60,
+              "pattern": "^[a-z0-9][a-z0-9-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -3995,7 +4035,7 @@
       "type": "object"
     },
     "FlowEditParams": {
-      "description": "The user rewrites one sentence of a card in the app. Alpine writes it into the card file and records it as the\nuser's own (decision 16). An empty ``value`` removes a promise or clears ``how_to_try``.",
+      "description": "The user rewrites one sentence of a card in the app. Alpine writes it into the card file and records it as the\nuser's own (decision 16). An empty ``value`` removes a promise or clears ``how_to_try``. ``state`` only drops a\nsituation the person does not want (``condition_id`` is its id, ``value`` empty), with its promises.",
       "properties": {
         "cwd": {
           "type": "string"
@@ -4007,7 +4047,8 @@
           "enum": [
             "title",
             "how_to_try",
-            "promise"
+            "promise",
+            "state"
           ],
           "type": "string"
         },
@@ -4093,6 +4134,13 @@
             "$ref": "#/$defs/FlowEdge"
           },
           "maxItems": 400,
+          "type": "array"
+        },
+        "situations": {
+          "items": {
+            "$ref": "#/$defs/FlowSituation"
+          },
+          "maxItems": 20,
           "type": "array"
         }
       },
@@ -4396,6 +4444,13 @@
           "default": "",
           "maxLength": 1000,
           "type": "string"
+        },
+        "states": {
+          "items": {
+            "$ref": "#/$defs/ScreenState"
+          },
+          "maxItems": 20,
+          "type": "array"
         },
         "conditions": {
           "items": {
@@ -4828,6 +4883,47 @@
         "field"
       ],
       "title": "FlowSetParams",
+      "type": "object"
+    },
+    "FlowSituation": {
+      "additionalProperties": false,
+      "description": "A situation of a whole journey, not of one screen: the connection drops halfway, the sign-in expires, someone\nelse books the last slot first, the person comes back from a link or presses back. It is seen on one screen, as one\nof that screen's ``states`` with the same id.",
+      "properties": {
+        "id": {
+          "maxLength": 60,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9-]*$",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 80,
+          "minLength": 1,
+          "type": "string"
+        },
+        "why": {
+          "default": "",
+          "maxLength": 300,
+          "type": "string"
+        },
+        "screen": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "pattern": "^[a-zA-Z0-9_-]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "id",
+        "title"
+      ],
+      "title": "FlowSituation",
       "type": "object"
     },
     "GitHubAccountInfo": {
@@ -5545,6 +5641,10 @@
         },
         "message": {
           "type": "string"
+        },
+        "partial": {
+          "default": false,
+          "type": "boolean"
         }
       },
       "required": [
@@ -6439,6 +6539,13 @@
           },
           "maxItems": 400,
           "type": "array"
+        },
+        "situations": {
+          "items": {
+            "$ref": "#/$defs/FlowSituation"
+          },
+          "maxItems": 20,
+          "type": "array"
         }
       },
       "required": [
@@ -6472,6 +6579,45 @@
         }
       },
       "title": "ProductMap",
+      "type": "object"
+    },
+    "ProjectDiffFile": {
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "modified",
+            "added",
+            "deleted",
+            "renamed",
+            "untracked"
+          ],
+          "type": "string"
+        },
+        "added": {
+          "type": "integer"
+        },
+        "deleted": {
+          "type": "integer"
+        },
+        "patch": {
+          "type": "string"
+        },
+        "binary": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "path",
+        "status",
+        "added",
+        "deleted",
+        "patch"
+      ],
+      "title": "ProjectDiffFile",
       "type": "object"
     },
     "ProjectInfo": {
@@ -6803,6 +6949,42 @@
     "ProjectsDeleteResult": {
       "properties": {},
       "title": "ProjectsDeleteResult",
+      "type": "object"
+    },
+    "ProjectsDiffParams": {
+      "properties": {
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "ProjectsDiffParams",
+      "type": "object"
+    },
+    "ProjectsDiffResult": {
+      "description": "What ``git diff HEAD`` shows, plus new files git does not track yet (the 코드 tab's 바뀐 파일).",
+      "properties": {
+        "git": {
+          "type": "boolean"
+        },
+        "files": {
+          "items": {
+            "$ref": "#/$defs/ProjectDiffFile"
+          },
+          "type": "array"
+        },
+        "truncated": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "git",
+        "files"
+      ],
+      "title": "ProjectsDiffResult",
       "type": "object"
     },
     "ProjectsGitParams": {
@@ -7910,6 +8092,181 @@
         "message"
       ],
       "title": "RunStoppedItem",
+      "type": "object"
+    },
+    "ScreenRead": {
+      "description": "What a screen says and shows, read from the page itself.",
+      "properties": {
+        "screen": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "title": {
+          "default": "",
+          "type": "string"
+        },
+        "text": {
+          "default": "",
+          "type": "string"
+        },
+        "targets": {
+          "items": {
+            "$ref": "#/$defs/ScreenTarget"
+          },
+          "type": "array"
+        },
+        "promises": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "errors": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "href": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "ScreenRead",
+      "type": "object"
+    },
+    "ScreenState": {
+      "additionalProperties": false,
+      "description": "A situation a screen must handle besides the ordinary one (nothing to show, an error, sold out, not allowed...).\nThe running app shows it at the screen's address with ``?alpine-state=<id>`` on made-up data, so the map can show\nevery situation as a real screen.",
+      "properties": {
+        "id": {
+          "maxLength": 60,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9-]*$",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 80,
+          "minLength": 1,
+          "type": "string"
+        },
+        "why": {
+          "default": "",
+          "maxLength": 300,
+          "type": "string"
+        },
+        "handled": {
+          "default": true,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "title"
+      ],
+      "title": "ScreenState",
+      "type": "object"
+    },
+    "ScreenTarget": {
+      "properties": {
+        "to": {
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "required": [
+        "to"
+      ],
+      "title": "ScreenTarget",
+      "type": "object"
+    },
+    "ScreensCaptureParams": {
+      "description": "``screens/capture`` (a notification to the app): the AI asked to see one screen of the project's running app.\nThe app opens ``url`` out of sight at ``width`` x ``height``, then answers with ``screens/captured`` and the same\n``id``: a picture of it and what it says.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "width": {
+          "maximum": 2560,
+          "minimum": 200,
+          "type": "integer"
+        },
+        "height": {
+          "maximum": 4000,
+          "minimum": 200,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "url",
+        "width",
+        "height"
+      ],
+      "title": "ScreensCaptureParams",
+      "type": "object"
+    },
+    "ScreensCapturedParams": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "image": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "read": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScreenRead"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "ScreensCapturedParams",
+      "type": "object"
+    },
+    "ScreensCapturedResult": {
+      "properties": {},
+      "title": "ScreensCapturedResult",
       "type": "object"
     },
     "ServerInfo": {

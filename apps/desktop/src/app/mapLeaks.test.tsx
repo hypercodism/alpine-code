@@ -194,9 +194,9 @@ describe("a map's conversations open on the map (#24, #41, #64)", () => {
     expect(link.getAttribute('href')).toBe('/board' + q(app) + '&session=build-1');
   });
 
-  it("opens the project's own map from a conversation's 제품 지도", async () => {
+  it("opens the project's own map from a conversation's 제품 보드", async () => {
     mount('/session/cart', [sessionInfo({ id: 'cart', cwd: app, title: '장바구니 고치기' })]);
-    const link = await screen.findByRole('link', { name: '제품 지도' });
+    const link = await screen.findByRole('link', { name: '제품 보드' });
     expect(link.getAttribute('href')).toBe('/board' + q(app));
   });
 });
@@ -204,7 +204,7 @@ describe("a map's conversations open on the map (#24, #41, #64)", () => {
 describe('going back after opening a project (#19)', () => {
   it('goes back to the map before it instead of bouncing to the opened one', async () => {
     const { router } = mount('/board' + q(docs), []);
-    await screen.findByRole('main', { name: '제품 지도' });
+    await screen.findByRole('main', { name: '제품 보드' });
     void router.navigate({ to: '/', search: { project: app } });
     await waitFor(() => expect(router.state.location.href).toBe('/board' + q(app)));
     router.history.back();
@@ -256,7 +256,7 @@ describe('Ctrl+Tab and search with a map (#24, #41)', () => {
 
   it("goes round the conversations of their own, past the map's, from the map too", async () => {
     const { router } = mount('/board' + q(app), sessions);
-    await screen.findByRole('main', { name: '제품 지도' });
+    await screen.findByRole('main', { name: '제품 보드' });
     ctrlTab();
     await waitFor(() => expect(router.state.location.pathname).toBe('/session/cart'));
     ctrlTab();
@@ -265,21 +265,24 @@ describe('Ctrl+Tab and search with a map (#24, #41)', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/session/cart'));
   });
 
-  it("names the map's conversations as the rail does, and opens them on the map", async () => {
+  it("names the map's conversations as the rail does, and opens the one picked on the map", async () => {
     const { router } = mount('/board' + q(docs), sessions);
-    await screen.findByRole('main', { name: '제품 지도' });
+    await screen.findByRole('main', { name: '제품 보드' });
     fireEvent.keyDown(window, { key: 'k', metaKey: true });
     const list = await screen.findByRole('listbox', { name: '프로젝트와 대화 찾기' });
-    expect(within(list).getByRole('option', { name: /^지도 대화/ })).toBeTruthy();
+    expect(within(list).getByRole('option', { name: /^보드 대화/ })).toBeTruthy();
     fireEvent.click(within(list).getByRole('option', { name: /^만든 기록/ }));
     await waitFor(() => expect(router.state.location.search).toEqual({ project: app, session: 'build-1' }));
     fireEvent.keyDown(window, { key: 'k', metaKey: true });
     fireEvent.click(
       within(await screen.findByRole('listbox', { name: '프로젝트와 대화 찾기' })).getByRole('option', {
-        name: /^지도 대화/,
+        name: /^보드 대화/,
       }),
     );
-    await waitFor(() => expect(router.state.location.href).toBe('/board' + q(app)));
+    // The conversation picked shows, even when the map's input goes elsewhere right then.
+    await waitFor(() =>
+      expect(router.state.location.search).toMatchObject({ project: app, session: expect.any(String) }),
+    );
   });
 });
 
@@ -330,7 +333,7 @@ describe('restarting to update (#18)', () => {
       throw new Error('install failed');
     });
     mount('/board' + q(app), []);
-    await screen.findByRole('main', { name: '제품 지도' });
+    await screen.findByRole('main', { name: '제품 보드' });
     fireEvent.click(await screen.findByRole('button', { name: '다시 시작해서 업데이트' }));
     expect(update.restart).toHaveBeenCalledOnce();
     expect((await screen.findByRole('alert')).textContent).toMatch(/업데이트하지 못했어요/);

@@ -95,6 +95,7 @@ def test_alpines_skills_come_first_then_other_apps_and_the_project_wins(home, tm
         ("notes", "claude"),
         ("product-design", "builtin"),
         ("product-planning", "builtin"),
+        ("product-situations", "builtin"),
     ]
     assert library.get("pdf").source == "anthropics/skills/pdf"
 

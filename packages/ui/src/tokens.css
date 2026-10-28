@@ -46,6 +46,8 @@
   --color-interactive: #2c5a7a; /* can be pressed, selected, focused */
   --color-interactive-hover: #234c68;
   --color-attention: #7d630b; /* my turn; dark enough to be text on every surface */
+  --color-note: #fdf3c4; /* a sticky note on the map (a decision) */
+  --color-note-ink: #5b4a12; /* words on a sticky note */
   --color-danger: #a3372a; /* risky approval, failure */
   --color-danger-hover: #8a2d22;
   --color-diff-added: #e3efe0; /* behind an added line of a diff */
@@ -111,6 +113,7 @@
 
   --shadow-*: initial;
   --shadow-overlay: 0 8px 24px rgb(27 45 64 / 0.12); /* modals, menus */
+  --shadow-card: 0 6px 16px -12px rgb(27 45 64 / 0.35); /* a card lying on the map */
   --motion-fast: 140ms;
   --motion-normal: 220ms;
   --motion-panel: 360ms;

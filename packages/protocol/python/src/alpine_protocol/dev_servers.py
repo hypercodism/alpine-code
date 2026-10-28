@@ -13,6 +13,9 @@ class DevServerInfo(Message):
     command: str
     port: int
     url: str | None = None
+    board_url: str | None = None
+    """The same server through Alpine's relay, which adds the map's bridge script to every page (where each screen's
+    buttons and promises are). The map opens its screens here; ``None`` until the relay listens."""
     process_id: str | None = None
     status: Literal["starting", "running", "stopping", "stopped", "failed"]
     external: bool = False
@@ -86,7 +89,56 @@ class DevServersLogsResult(Message):
     total: int
 
 
+class ScreensCaptureParams(Message):
+    """``screens/capture`` (a notification to the app): the AI asked to see one screen of the project's running app.
+    The app opens ``url`` out of sight at ``width`` x ``height``, then answers with ``screens/captured`` and the same
+    ``id``: a picture of it and what it says."""
+
+    id: str
+    url: str
+    width: int = Field(ge=200, le=2560)
+    height: int = Field(ge=200, le=4000)
+
+
+class ScreenTarget(Message):
+    to: str
+    label: str = ""
+
+
+class ScreenRead(Message):
+    """What a screen says and shows, read from the page itself."""
+
+    screen: str | None = None
+    """Its ``data-alpine-screen`` mark; ``None`` when the page has none (still loading, or written without the marks)."""
+    title: str = ""
+    text: str = ""
+    """The words on it, as a person reads them, cut to a few thousand characters."""
+    targets: list[ScreenTarget] = Field(default_factory=list)
+    """Its buttons to other screens (``data-alpine-to``)."""
+    promises: list[str] = Field(default_factory=list)
+    """The promises it marks (``data-alpine-promise``)."""
+    errors: list[str] = Field(default_factory=list)
+    """What the page reported going wrong: uncaught errors, rejected promises, ``console.error``."""
+    href: str = ""
+
+
+class ScreensCapturedParams(Message):
+    id: str
+    image: str | None = None
+    """The screen as a PNG, base64; ``None`` when no picture could be taken."""
+    read: ScreenRead | None = None
+    error: str | None = None
+    """Why the screen could not be opened."""
+
+
+class ScreensCapturedResult(Message):
+    pass
+
+
+SCREEN_NOTIFICATIONS = {"screens/capture": ScreensCaptureParams}
+
 DEV_SERVER_METHODS = {
+    "screens/captured": (ScreensCapturedParams, ScreensCapturedResult),
     "devServers/list": (DevServersListParams, DevServersListResult),
     "devServers/start": (DevServersStartParams, DevServersStartResult),
     "devServers/open": (DevServersOpenParams, DevServersOpenResult),
