@@ -1,4 +1,4 @@
-import type { ApprovalItem, ToolCallItem, TerminalProcess } from '@alpine/protocol';
+import type { ApprovalItem, ToolCallItem } from '@alpine/protocol';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRouter, RouterProvider } from '@tanstack/react-router';
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
@@ -57,7 +57,7 @@ const approval: ApprovalItem = {
 };
 
 /** `extra` answers after the defaults, so a test can change one result (e.g. an archived project). */
-function mount(path: string, extra: Script = {}, running = false) {
+function mount(path: string, extra: Script = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const connection = scriptedConnection(
     mergeScripts(
@@ -66,7 +66,7 @@ function mount(path: string, extra: Script = {}, running = false) {
       sessionScript({
         sessions: [
           {
-            info: sessionInfo({ id: 'work', cwd, title: '장바구니 고치기', status: running ? 'running' : 'idle' }),
+            info: sessionInfo({ id: 'work', cwd, title: '장바구니 고치기' }),
             items: [approval, edit],
           },
           { info: sessionInfo({ id: 'elsewhere', cwd: '/Users/me/docs-site' }), items: [approval, edit] },
@@ -89,7 +89,6 @@ function mount(path: string, extra: Script = {}, running = false) {
 }
 
 const board = (session?: string) => `/board?project=${encodeURIComponent(cwd)}${session ? `&session=${session}` : ''}`;
-const toggle = () => screen.findByRole('button', { name: '오른쪽 창 닫기', pressed: true });
 /** The dock's open state is shared across a test file: set it for each test (it is remembered, as in the app). */
 function setDock(value: boolean) {
   const { result, unmount } = renderHook(() => useDockOpen());
@@ -122,113 +121,6 @@ afterEach(() => {
 });
 
 describe('right dock on the routes', () => {
-  it('stops without opening the dock, and leads to the commands only while some still run', async () => {
-    const command: TerminalProcess = {
-      id: 'dev',
-      command: 'pnpm dev',
-      cwd,
-      sessionId: 'work',
-      title: 'pnpm dev',
-      pty: false,
-      pid: 42,
-      status: 'running',
-      exitCode: null,
-      cancelled: false,
-      createdAt: 1,
-      outputSize: 0,
-    };
-    mount('/session/work', { results: { 'processes/list': { processes: [command] } } }, true);
-    fireEvent.click(await screen.findByRole('button', { name: '멈추기' }));
-    // Not while the stop ends the run's own commands, only a moment after: an ordinary stop shows nothing by.
-    expect(screen.queryByText('멈춘 뒤에도 실행 중인 명령이 1개 있어요')).toBeNull();
-    expect(await screen.findByText('멈춘 뒤에도 실행 중인 명령이 1개 있어요', {}, { timeout: 3000 })).toBeTruthy();
-    expect(screen.queryByRole('complementary', { name: '오른쪽 창' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: '보기' }));
-    const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
-    // A rarer place, under ⋮: the ⋮ button stands for it while it is shown.
-    expect(within(dock).queryByRole('tab', { name: '명령' })).toBeNull();
-    expect(await within(dock).findByRole('region', { name: '명령' })).toBeTruthy();
-  });
-
-  it('says nothing after a stop when no command is left', async () => {
-    mount('/session/work', { results: { 'processes/list': { processes: [] } } }, true);
-    fireEvent.click(await screen.findByRole('button', { name: '멈추기' }));
-    await waitFor(() => expect(screen.queryByText(/실행 중인 명령이/)).toBeNull());
-    expect(screen.queryByRole('complementary', { name: '오른쪽 창' })).toBeNull();
-  });
-
-  it('opens the actual source viewer from a changed file and exposes the project execution tools', async () => {
-    let shell: TerminalProcess | null = null;
-    let launches = 0;
-    mount('/session/work', {
-      results: {
-        'files/read': ({ cwd: project, path, line = 1 }) => ({
-          path: `${project}/${path}`,
-          relativePath: path,
-          line,
-          content: 'export const cart = true;',
-          startLine: 1,
-          totalLines: 1,
-          truncated: false,
-        }),
-        'terminals/list': () => ({ processes: shell ? [shell] : [] }),
-        'terminals/start': ({ command, title, kind, sessionId }) => {
-          launches++;
-          shell = {
-            id: 'default-shell',
-            command,
-            title: title!,
-            kind,
-            sessionId,
-            cwd,
-            pty: true,
-            pid: 42,
-            status: 'running',
-            createdAt: 1,
-            outputSize: 0,
-            cancelled: false,
-          };
-          return { process: shell };
-        },
-        'devServers/list': { servers: [] },
-      },
-    });
-    fireEvent.click(await screen.findByRole('button', { name: '오른쪽 창 열기, 바뀐 파일 1개' }));
-    const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
-    fireEvent.click(within(dock).getByRole('tab', { name: '바뀐 파일' }));
-    fireEvent.click(await within(dock).findByRole('button', { name: /Cart\.tsx/ }));
-    expect(within(dock).getByRole('tab', { name: '바뀐 파일', selected: true })).toBeTruthy();
-    expect(within(dock).getByRole('region', { name: 'Cart.tsx 바뀐 내용' })).toBeTruthy();
-    fireEvent.click(await within(dock).findByRole('button', { name: '전체 파일 보기' }));
-    expect(within(dock).getByRole('tab', { name: '파일', selected: true })).toBeTruthy();
-    expect(await within(dock).findByText('export const cart = true;')).toBeTruthy();
-    fireEvent.click(within(dock).getByRole('button', { name: '바뀐 파일로 돌아가기' }));
-    expect(within(dock).getByRole('region', { name: 'Cart.tsx 바뀐 내용' })).toBeTruthy();
-    expect(within(dock).getByRole('tab', { name: '바뀐 파일', selected: true })).toBeTruthy();
-    fireEvent.click(within(dock).getByRole('tab', { name: '터미널' }));
-    expect(await within(dock).findByRole('textbox', { name: '터미널 입력: 터미널 1' })).toBeTruthy();
-    expect(launches).toBe(1);
-    fireEvent.click(within(dock).getByRole('button', { name: '터미널 메뉴' }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: '앱 미리보기 열기…' }));
-    expect(await within(dock).findByRole('tab', { name: '앱 미리보기', selected: true })).toBeTruthy();
-    expect(await within(dock).findByRole('button', { name: '서버 실행' })).toBeTruthy();
-    fireEvent.click(within(dock).getByRole('tab', { name: '터미널' }));
-    expect(await within(dock).findByRole('textbox', { name: '터미널 입력: 터미널 1' })).toBeTruthy();
-    expect(launches).toBe(1);
-  });
-
-  it('opens from the top bar on a session on its summary, which leads to its work result', async () => {
-    mount('/session/work');
-    fireEvent.click(await screen.findByRole('button', { name: '오른쪽 창 열기, 바뀐 파일 1개' }));
-    const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
-    expect(within(dock).getByRole('tab', { name: '요약', selected: true })).toBeTruthy();
-    fireEvent.click(await within(dock).findByRole('button', { name: /바뀐 파일/ }));
-    expect(within(dock).getByRole('tab', { name: '바뀐 파일', selected: true })).toBeTruthy();
-    expect(await within(dock).findByRole('button', { name: /Cart\.tsx/ })).toBeTruthy();
-    fireEvent.click(await toggle());
-    await waitFor(() => expect(screen.queryByRole('complementary', { name: '오른쪽 창' })).toBeNull());
-  });
-
   it("keeps the map's conversation on the right, and the rail opens a place there and folds it", async () => {
     mount(board('work'));
     expect(await screen.findByText('alpine-code', { selector: 'span' })).toBeTruthy();
@@ -328,27 +220,4 @@ describe('right dock on the routes', () => {
     expect(panel.closest('[data-overlay]') !== null).toBe(overlaid);
     expect(screen.getByRole('complementary', { name: '오른쪽 창' })).toBeTruthy();
   });
-});
-
-it('shows a discovered server under 미리보기', async () => {
-  mount('/session/work', {
-    results: {
-      'devServers/list': {
-        servers: [
-          {
-            id: 'web',
-            cwd,
-            command: 'pnpm dev',
-            port: 5173,
-            status: 'running',
-            url: 'http://localhost:5173',
-            external: false,
-          },
-        ],
-      },
-    },
-  });
-  fireEvent.click(await screen.findByRole('button', { name: '오른쪽 창 열기, 바뀐 파일 1개' }));
-  fireEvent.click(await screen.findByRole('tab', { name: '앱 미리보기' }));
-  expect(await screen.findByTitle('미리보기')).toBeTruthy();
 });

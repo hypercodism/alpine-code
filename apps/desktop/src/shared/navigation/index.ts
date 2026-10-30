@@ -21,6 +21,17 @@ interface NavigationState {
   rememberProject: (path: string) => void;
 }
 
+export {
+  closeMemory,
+  closeSettings,
+  openMemory,
+  openSettings,
+  useMemorySheet,
+  useSettingsSheet,
+  type AgentsSearch,
+  type SettingsPlace,
+} from './settingsSheet';
+
 /** Local navigation preferences; conversation names, pins and archives belong to the server. */
 export const useNavigation = create<NavigationState>()(
   persist(
@@ -65,21 +76,3 @@ export const useNavigation = create<NavigationState>()(
     },
   ),
 );
-
-export function isUnread(session: SessionInfo, seen: Record<string, string>, since: string) {
-  return session.status === 'idle' && !!session.summary && session.updatedAt > (seen[session.id] ?? since);
-}
-
-/** Keep important work visible even when the recent list is shortened. */
-export function visibleSessions(
-  sessions: SessionInfo[],
-  currentId: string | undefined,
-  all: boolean,
-  keep: string[] = [],
-) {
-  if (all) return sessions;
-  const recent = new Set(sessions.slice(0, 5).map((s) => s.id));
-  return sessions.filter(
-    (s) => recent.has(s.id) || s.id === currentId || s.pinned || s.status !== 'idle' || keep.includes(s.id),
-  );
-}

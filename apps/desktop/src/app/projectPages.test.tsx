@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRouter, RouterProvider } from '@tanstack/react-router';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { LocaleProvider } from '@/shared/i18n';
+import { useMemorySheet, useSettingsSheet } from '@/shared/navigation';
 import {
   EXAMPLE_MAP,
   flowScript,
@@ -45,6 +46,8 @@ function mount(path: string, projects = PROJECTS) {
 
 beforeEach(() => {
   localStorage.clear();
+  useSettingsSheet.setState({ place: null });
+  useMemorySheet.setState({ project: null });
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -61,28 +64,18 @@ afterEach(() => {
 });
 
 describe('project pages', () => {
-  it('has no page links under the project or in the top bar: the project name opens its map', async () => {
-    mount('/memory' + q(cwd));
-    const name = await screen.findByRole('button', { name: 'alpine-code 열기' });
-    expect(screen.queryByRole('link', { name: '보드' })).toBeNull();
-    expect(screen.queryByRole('link', { name: '기억' })).toBeNull();
-    fireEvent.click(name);
-    expect(await screen.findByRole('main', { name: '제품 보드' })).toBeTruthy();
-  });
-
-  it('opens the memory from the project menu', async () => {
+  it('opens the memory from the project menu as a sheet over the board, and Esc goes back to the board', async () => {
     const router = mount('/board' + q(cwd));
     await screen.findByRole('main', { name: '제품 보드' });
     fireEvent.click(await screen.findByRole('button', { name: /^alpine-code · 다른 프로젝트로/ }));
     fireEvent.click(await screen.findByRole('button', { name: 'alpine-code 메뉴' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: '기억 열기' }));
-    expect(await screen.findByRole('link', { name: 'alpine-code' })).toBeTruthy();
-    expect(router.state.location.pathname).toBe('/memory');
-  });
-
-  it('shows the memory without a dock button', async () => {
-    mount('/memory' + q(cwd));
-    expect(await screen.findByRole('link', { name: 'alpine-code' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /오른쪽 창/ })).toBeNull();
+    const memory = await screen.findByRole('dialog');
+    expect(within(memory).getByRole('heading', { name: '기억' })).toBeTruthy();
+    expect(within(memory).getByText(/alpine-code에서 일하며 배운 것/)).toBeTruthy();
+    expect(router.state.location.href).toBe('/board' + q(cwd));
+    fireEvent.keyDown(memory, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByRole('main', { name: '제품 보드' })).toBeTruthy();
   });
 });

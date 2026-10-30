@@ -1,11 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRouter, RouterProvider } from '@tanstack/react-router';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ExternalSessionInfo, SessionInfo } from '@alpine/protocol';
 import { LocaleProvider } from '@/shared/i18n';
-import { useNavigation } from '@/shared/navigation';
+import { openSettings, useMemorySheet, useNavigation, useSettingsSheet } from '@/shared/navigation';
 import {
   EXAMPLE_MAP,
   flowScript,
@@ -19,7 +19,7 @@ import {
 
 import { routeTree } from './routeTree.gen';
 
-/** The map's own conversations stay on the map: no other way in shows them as a chat, and the rail knows their state. */
+/** The map's own conversations stay on the map: no other way in shows them as a chat, and the project menu knows their state. */
 
 const update = vi.hoisted(() => ({ ready: null as string | null, restart: vi.fn(async () => {}) }));
 vi.mock('@/shared/platform', async (original) => ({
@@ -53,9 +53,6 @@ function mount(path: string, sessions: SessionInfo[], importable: ExternalSessio
   );
   return { router, connection };
 }
-const rail = () => screen.findByRole('navigation', { name: '주 메뉴' });
-const projectRow = async (name: string) =>
-  (await within(await rail()).findByRole('button', { name: new RegExp(`^${name} 열기`) })).parentElement!;
 /** A project's row in the project menu, where the rail's work went on the map: opens the menu if it is closed. */
 const menuRow = async (name: string) => {
   if (!screen.queryByRole('list', { name: '최근 프로젝트' }))
@@ -76,6 +73,8 @@ beforeEach(() => {
     sort: 'recent',
     searchOpen: false,
   });
+  useSettingsSheet.setState({ place: null });
+  useMemorySheet.setState({ project: null });
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -94,23 +93,7 @@ afterEach(() => {
   update.restart.mockImplementation(async () => {});
 });
 
-describe('the rail knows the map (#25, #39, #66, #90)', () => {
-  it('shows one word for a waiting map and a running build, and counts them in the filters', async () => {
-    mount('/session/readme', [
-      sessionInfo({ id: 'readme', cwd: docs, title: 'README 다시 쓰기' }),
-      sessionInfo({ id: 'plan', cwd: app, purpose: 'map', status: 'waiting' }),
-      sessionInfo({ id: 'build', cwd: '/Users/me/infra-terraform', purpose: 'build', status: 'running' }),
-    ]);
-    expect(within(await projectRow('alpine-code')).getByText('내 확인 필요')).toBeTruthy();
-    expect(within(await projectRow('infra-terraform')).getByText('만드는 중')).toBeTruthy();
-    const filters = within(await rail()).getByRole('group', { name: '대화 보기' });
-    fireEvent.click(within(filters).getByRole('button', { name: '작업 중 1' }));
-    expect(await within(await rail()).findByRole('button', { name: /^infra-terraform 열기/ })).toBeTruthy();
-    expect(within(await rail()).queryByRole('button', { name: /^docs-site 열기/ })).toBeNull();
-    // A map's answers are read on the map, so they never count as unread here.
-    expect(within(filters).getByRole('button', { name: '새 결과 0' })).toBeTruthy();
-  });
-
+describe('the project menu knows the map (#25, #39, #66, #90)', () => {
   it('says the same words in the project menu on the map, with the orange dot for the one that waits', async () => {
     mount('/board' + q(docs), [
       sessionInfo({ id: 'readme', cwd: docs, title: 'README 다시 쓰기' }),
@@ -123,23 +106,6 @@ describe('the rail knows the map (#25, #39, #66, #90)', () => {
     expect(within(await menuRow('alpine-code')).getByText('확인을 기다려요')).toBeTruthy();
     expect(within(await menuRow('infra-terraform')).getByText('만드는 중')).toBeTruthy();
     expect(within(await menuRow('docs-site')).queryByText(/확인을 기다려요|만드는 중|질문 대기/)).toBeNull();
-  });
-
-  it('has nothing to unfold for a project whose conversations are all on its map', async () => {
-    mount('/settings', [sessionInfo({ id: 'plan', cwd: app, purpose: 'map' })]);
-    await projectRow('alpine-code');
-    expect(within(await rail()).queryByRole('button', { name: /alpine-code (펼치기|접기)/ })).toBeNull();
-  });
-
-  it('keeps a build as a record that opens on the map, beside it', async () => {
-    const { router } = mount('/settings', [
-      sessionInfo({ id: 'plan', cwd: app, purpose: 'map' }),
-      sessionInfo({ id: 'build-1', cwd: app, purpose: 'build', title: 'Build the planned product' }),
-    ]);
-    const record = await within(await rail()).findByRole('link', { name: /만든 기록/ });
-    fireEvent.click(record);
-    await waitFor(() => expect(router.state.location.search).toEqual({ project: app, session: 'build-1' }));
-    expect(router.state.location.pathname).toBe('/board');
   });
 
   it('will not archive or delete a project while its build runs', async () => {
@@ -165,14 +131,6 @@ describe('deleting (#22, #43, #68, #62, #56)', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/board'));
     await waitFor(() => expect(router.state.location.search.project).not.toBe(app));
   });
-
-  it("goes to the project's map after deleting the open conversation, not to 새 프로젝트", async () => {
-    const { router } = mount('/session/cart', [sessionInfo({ id: 'cart', cwd: app, title: '장바구니 고치기' })]);
-    fireEvent.click(await screen.findByRole('button', { name: '장바구니 고치기 메뉴' }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: '삭제…' }));
-    fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: /^삭제/ }));
-    await waitFor(() => expect(router.state.location.href).toBe('/board' + q(app)));
-  });
 });
 
 describe("a map's conversations open on the map (#24, #41, #64)", () => {
@@ -188,16 +146,16 @@ describe("a map's conversations open on the map (#24, #41, #64)", () => {
   });
 
   it('names the project, not a chat, for a map at work on the agents screen', async () => {
-    mount('/agents', [sessionInfo({ id: 'build-1', cwd: app, purpose: 'build', status: 'running', title: 'Build' })]);
+    const { router } = mount('/board' + q(docs), [
+      sessionInfo({ id: 'build-1', cwd: app, purpose: 'build', status: 'running', title: 'Build' }),
+    ]);
+    act(() => openSettings('agents'));
     const working = await screen.findByText('지금 일하는 중');
     const link = within(working.parentElement!).getByRole('link', { name: 'alpine-code' });
     expect(link.getAttribute('href')).toBe('/board' + q(app) + '&session=build-1');
-  });
-
-  it("opens the project's own map from a conversation's 제품 보드", async () => {
-    mount('/session/cart', [sessionInfo({ id: 'cart', cwd: app, title: '장바구니 고치기' })]);
-    const link = await screen.findByRole('link', { name: '제품 보드' });
-    expect(link.getAttribute('href')).toBe('/board' + q(app));
+    fireEvent.click(link);
+    await waitFor(() => expect(router.state.location.search).toEqual({ project: app, session: 'build-1' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '설정' })).toBeNull());
   });
 });
 
@@ -214,7 +172,8 @@ describe('going back after opening a project (#19)', () => {
 
 describe('the agents screen (#28)', () => {
   it('says the button starts a new project, which is where it goes', async () => {
-    mount('/agents', []);
+    mount('/', []);
+    act(() => openSettings('agents'));
     const start = await screen.findByRole('link', { name: '이 에이전트로 새 프로젝트' });
     expect(start.getAttribute('href')).toMatch(/^\/\?agent=/);
   });
@@ -258,11 +217,11 @@ describe('Ctrl+Tab and search with a map (#24, #41)', () => {
     const { router } = mount('/board' + q(app), sessions);
     await screen.findByRole('main', { name: '제품 보드' });
     ctrlTab();
-    await waitFor(() => expect(router.state.location.pathname).toBe('/session/cart'));
+    await waitFor(() => expect(router.state.location.search).toEqual({ project: app, session: 'cart' }));
     ctrlTab();
-    await waitFor(() => expect(router.state.location.pathname).toBe('/session/readme'));
+    await waitFor(() => expect(router.state.location.search).toEqual({ project: docs, session: 'readme' }));
     ctrlTab();
-    await waitFor(() => expect(router.state.location.pathname).toBe('/session/cart'));
+    await waitFor(() => expect(router.state.location.search).toEqual({ project: app, session: 'cart' }));
   });
 
   it("names the map's conversations as the rail does, and opens the one picked on the map", async () => {

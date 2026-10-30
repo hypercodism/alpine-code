@@ -11,7 +11,7 @@ import { DeleteProjectDialog } from '@/features/rail/DeleteProjectDialog';
 import { messages as railMessages } from '@/features/rail/messages';
 import { projectState } from '@/features/rail/projectState';
 import { useMessages } from '@/shared/i18n';
-import { useNavigation } from '@/shared/navigation';
+import { openMemory, useNavigation } from '@/shared/navigation';
 import { revealInFinder } from '@/shared/platform';
 import { useArchiveProject, useAsking, useProductMap, useProjects, useSessions } from '@/shared/server';
 
@@ -111,7 +111,7 @@ export function ProjectMenu({ current }: { current: string | null }) {
                 onGo={() => go(project.path)}
                 onMemory={() => {
                   setOpen(false);
-                  void navigate({ to: '/memory', search: { project: project.path } });
+                  openMemory(project.path);
                 }}
                 onArchive={() => archiveProject.mutate(project.path, { onSuccess: () => leave(project.path) })}
                 onDelete={() => {

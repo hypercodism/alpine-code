@@ -1,11 +1,10 @@
 import { Menu } from '@alpine/ui/primitives';
-import { useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { Bot, Brain, Ellipsis, History, Settings } from 'lucide-react';
 
 import { useMapMenu } from '@/features/product-map/mapActions';
 import { useMessages } from '@/shared/i18n';
-import { useNavigation } from '@/shared/navigation';
+import { openMemory, openSettings, useNavigation } from '@/shared/navigation';
 
 import { shellMessages } from './shellMessages';
 import { railItem } from './railItem';
@@ -18,7 +17,6 @@ import { railItem } from './railItem';
  */
 export function MoreMenu({ project, inRail = false }: { project: string | null; inRail?: boolean }) {
   const t = useMessages(shellMessages);
-  const navigate = useNavigate();
   const map = useMapMenu(project);
   return (
     <Menu.Root>
@@ -44,17 +42,17 @@ export function MoreMenu({ project, inRail = false }: { project: string | null; 
         )}
       </Menu.Trigger>
       <Menu.Popup {...(inRail ? { side: 'left' as const, align: 'end' as const } : { align: 'end' as const })}>
-        <Menu.Item onClick={() => void navigate({ to: '/settings' })}>
+        <Menu.Item onClick={() => openSettings('general')}>
           <Settings size={15} strokeWidth={1.6} aria-hidden="true" />
           <span className="grow">{t.settings}</span>
           <kbd className="text-meta font-normal text-fg-faint">⌘,</kbd>
         </Menu.Item>
-        <Menu.Item onClick={() => void navigate({ to: '/agents' })}>
+        <Menu.Item onClick={() => openSettings('agents')}>
           <Bot size={15} strokeWidth={1.6} aria-hidden="true" />
           {t.agents}
         </Menu.Item>
         {project && (
-          <Menu.Item onClick={() => void navigate({ to: '/memory', search: { project } })}>
+          <Menu.Item onClick={() => openMemory(project)}>
             <Brain size={15} strokeWidth={1.6} aria-hidden="true" />
             {t.memory}
           </Menu.Item>

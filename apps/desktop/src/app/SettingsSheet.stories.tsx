@@ -1,5 +1,7 @@
 import type { SettingsGetResult } from '@alpine/protocol';
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
+import { useState } from 'react';
 import { expect, screen, userEvent, within } from 'storybook/test';
 
 import {
@@ -13,14 +15,29 @@ import {
   statefulScript,
   withRouterScript,
 } from '@/shared/server';
+import { openSettings, type SettingsPlace } from '@/shared/navigation';
 
-import { Settings } from './Settings';
+import { SettingsSheet } from './SettingsSheet';
+
+/** The settings sheet opened at `tab`, as ⌘, or the rail's 설정 (에이전트) or a link to 모델 연결 opens it. */
+function Example({ tab = 'general' }: { tab?: SettingsPlace }) {
+  useState(() => openSettings(tab));
+  return <SettingsSheet />;
+}
 
 const meta = {
   title: 'Settings/Settings',
-  component: Settings,
-  args: { onChange: () => {} },
-} satisfies Meta<typeof Settings>;
+  component: Example,
+  parameters: { layout: 'fullscreen' },
+  decorators: [
+    (Story) => {
+      const router = createRouter({
+        routeTree: createRootRoute({ component: () => <div className="h-screen">{Story()}</div> }),
+      });
+      return <RouterProvider router={router} />;
+    },
+  ],
+} satisfies Meta<typeof Example>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;

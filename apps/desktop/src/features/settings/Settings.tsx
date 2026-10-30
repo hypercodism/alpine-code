@@ -1,4 +1,4 @@
-import { LinkButton, Tabs } from '@alpine/ui/primitives';
+import { LinkButton } from '@alpine/ui/primitives';
 
 import { LOCALES, useLocale, useMessages, type Locale } from '@/shared/i18n';
 import { MODES, modeMessages, type Mode } from '@/shared/components/composer';
@@ -14,46 +14,12 @@ import {
 } from '@/shared/server';
 
 import { AlpineAccount } from './AlpineAccount';
-import { ConnectionTab } from './Connection';
 import { messages } from './messages';
 
 const LANGUAGE_NAMES: Record<Locale, string> = { ko: '한국어', en: 'English' };
 
-export type SettingsTab = 'general' | 'connection';
-
-/** One page with tabs: general and model connection. A tab comes when it has something to show. */
-export function Settings({
-  tab = 'general',
-  onChange,
-}: {
-  tab?: SettingsTab;
-  onChange: (search: { tab: SettingsTab }) => void;
-}) {
-  const t = useMessages(messages);
-  return (
-    <div className="flex min-h-0 grow flex-col gap-6 px-6 pt-5">
-      <h1 className="text-title">{t.title}</h1>
-      <Tabs.Root
-        value={tab}
-        onValueChange={(value: SettingsTab) => onChange({ tab: value })}
-        className="flex min-h-0 grow flex-col"
-      >
-        <Tabs.List>
-          <Tabs.Tab value="general">{t.general}</Tabs.Tab>
-          <Tabs.Tab value="connection">{t.connection}</Tabs.Tab>
-        </Tabs.List>
-        <Tabs.Panel value="general">
-          <General onReviewModel={() => onChange({ tab: 'connection' })} />
-        </Tabs.Panel>
-        <Tabs.Panel value="connection">
-          <ConnectionTab onAlpineAccount={() => onChange({ tab: 'general' })} />
-        </Tabs.Panel>
-      </Tabs.Root>
-    </div>
-  );
-}
-
-function General({ onReviewModel }: { onReviewModel: () => void }) {
+/** 일반: the language, the safety new conversations start with, where projects go, and the accounts. */
+export function General({ onReviewModel }: { onReviewModel: () => void }) {
   const t = useMessages(messages);
   const { locale, setLocale } = useLocale();
   const server = useServerInfo();

@@ -38,7 +38,7 @@ describe('the menu bar', () => {
   it('makes every item with an action as an item of its own and hands them back to be held', async () => {
     const t = menuMessages.ko;
     const get = () => ({ t, q: quitMessages.ko, working: false }) as unknown as Latest;
-    const { items } = await buildMenu(false, get);
+    const { items } = await buildMenu(get);
 
     expect(inlineItems(made.inline).filter((item) => 'action' in item)).toEqual([]);
     expect(items.map((item) => (item as unknown as { text: string }).text)).toEqual(

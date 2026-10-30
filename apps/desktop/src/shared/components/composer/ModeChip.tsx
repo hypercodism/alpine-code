@@ -1,10 +1,10 @@
 import type { SessionInfo } from '@alpine/protocol';
 import { Menu } from '@alpine/ui/primitives';
-import { useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { ChevronDown } from 'lucide-react';
 
 import { useMessages } from '@/shared/i18n';
+import { openSettings } from '@/shared/navigation';
 
 import { modeMessages } from './modeMessages';
 
@@ -35,7 +35,6 @@ export function ModeChip({
   disabled?: boolean;
 }) {
   const t = useMessages(modeMessages);
-  const navigate = useNavigate();
   return (
     <Menu.Root>
       <Menu.Trigger disabled={disabled} className={chip} title={t.chipTitle} aria-label={t.chipLabel(t.name(mode))}>
@@ -54,9 +53,7 @@ export function ModeChip({
           ))}
         </Menu.RadioGroup>
         <Menu.Separator />
-        <Menu.Item onClick={() => void navigate({ to: '/settings', search: { tab: 'general' } })}>
-          {t.changeDefault}
-        </Menu.Item>
+        <Menu.Item onClick={() => openSettings('general')}>{t.changeDefault}</Menu.Item>
       </Menu.Popup>
     </Menu.Root>
   );

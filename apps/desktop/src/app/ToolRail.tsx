@@ -1,7 +1,8 @@
 import clsx from 'clsx';
-import type { LucideIcon } from 'lucide-react';
+import { Settings, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 
+import { openSettings } from '@/shared/navigation';
 import { useMessages } from '@/shared/i18n';
 
 import { MoreMenu } from './MoreMenu';
@@ -22,8 +23,8 @@ export interface RailPlace {
 }
 
 /**
- * The icon rail on the window's right edge (2c): 대화 · 명령 · 터미널 · 로그 · 데이터, 브라우저 to come, and 더 보기 at
- * the bottom (the old ⋯). It picks the place beside the board; the place already open folds its panel away, and
+ * The icon rail on the window's right edge (2c): 대화 · 명령 · 터미널 · 로그 · 데이터, 브라우저 to come, and 설정 and
+ * 더 보기 (the old ⋯) at the bottom. It picks the place beside the board; the place already open folds its panel away, and
  * the rail stays with its counts and dots.
  */
 export function ToolRail({
@@ -67,6 +68,9 @@ export function ToolRail({
         </RailItem>
       ))}
       <span data-tauri-drag-region className="grow self-stretch" />
+      <RailItem label={t.settings} on={false} onClick={() => openSettings()} mark={null}>
+        <Settings size={19} strokeWidth={1.7} aria-hidden="true" />
+      </RailItem>
       <MoreMenu project={project} inRail />
     </nav>
   );

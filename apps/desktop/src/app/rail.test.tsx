@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Item } from '@/shared/server';
 import { LocaleProvider } from '@/shared/i18n';
-import { useNavigation, visibleSessions } from '@/shared/navigation';
+import { useMemorySheet, useNavigation, useSettingsSheet } from '@/shared/navigation';
 import {
   EXAMPLE_MAP,
   flowScript,
@@ -56,12 +56,13 @@ function mount(
   );
   return { router, connection };
 }
-const rail = () => screen.findByRole('navigation', { name: '주 메뉴' });
-const toggle = (name: string, open: boolean) =>
-  screen.findByRole('button', { name: `${name} ${open ? '접기' : '펼치기'}`, expanded: open });
+const at = (project: string, session?: string) =>
+  '/board' + q(project) + (session ? `&session=${encodeURIComponent(session)}` : '');
 
 beforeEach(() => {
   localStorage.clear();
+  useSettingsSheet.setState({ place: null });
+  useMemorySheet.setState({ project: null });
   useNavigation.setState({
     expanded: {},
     lastSessions: {},
@@ -88,68 +89,17 @@ afterEach(() => {
 });
 
 describe('independent project browsing', () => {
-  it('expands and collapses multiple projects without leaving the current conversation', async () => {
-    const { router } = mount('/session/cart');
-    fireEvent.click(await toggle('docs-site', false));
-    expect(await within(await rail()).findByRole('link', { name: /README 다시 쓰기/ })).toBeTruthy();
-    expect(within(await rail()).getByRole('link', { name: /장바구니 고치기/ })).toBeTruthy();
-    expect(router.state.location.pathname).toBe('/session/cart');
-    fireEvent.click(await toggle('docs-site', true));
-    expect(within(await rail()).queryByRole('link', { name: /README 다시 쓰기/ })).toBeNull();
-    fireEvent.click(await toggle('alpine-code', true));
-    await toggle('alpine-code', false);
-    expect(router.state.location.pathname).toBe('/session/cart');
-  });
-
-  it("keeps a project's map conversation off the list", async () => {
-    mount('/session/cart', [
+  it("opens a conversation's address beside its project's board, and the map's own as the board", async () => {
+    const { router } = mount('/session/readme', [
       ...infos(),
       sessionInfo({ id: 'map-talk', cwd: app, title: '지도 그려 줘', purpose: 'map' }),
     ]);
-    expect(await within(await rail()).findByRole('link', { name: /장바구니 고치기/ })).toBeTruthy();
-    expect(within(await rail()).queryByRole('link', { name: /지도 그려 줘/ })).toBeNull();
-  });
-
-  it('opens the map of a project when its name is clicked, not a conversation or a new one', async () => {
-    const { router } = mount('/session/readme');
-    fireEvent.click(await screen.findByRole('button', { name: 'alpine-code 열기' }));
-    await waitFor(() => expect(router.state.location.href).toBe('/board' + q(app)));
-    // On the map the rail's place is the project menu, under the project's name.
+    await waitFor(() => expect(router.state.location.href).toBe(at(docs, 'readme')));
+    await router.navigate({ to: '/session/$sessionId', params: { sessionId: 'map-talk' } });
+    await waitFor(() => expect(router.state.location.href).toBe(at(app)));
     fireEvent.click(await screen.findByRole('button', { name: /^alpine-code · 다른 프로젝트로/ }));
     fireEvent.click(await screen.findByRole('button', { name: /^docs-site(?! 메뉴)/ }));
-    await waitFor(() => expect(router.state.location.href).toBe('/board' + q(docs)));
-  });
-
-  it("opens the picked project's map, also from the memory page", async () => {
-    const { router } = mount('/memory' + q(app));
-    fireEvent.click(await screen.findByRole('button', { name: 'docs-site 열기' }));
-    await waitFor(() => expect(router.state.location.href).toBe('/board' + q(docs)));
-  });
-
-  it('starts nothing in a project from the rail: a project is its map, and 새 프로젝트 is the one new thing', async () => {
-    const { router } = mount('/session/cart');
-    expect(screen.queryByRole('link', { name: /에서 새 세션/ })).toBeNull();
-    const top = within(await rail()).getByRole('link', { name: /새 프로젝트\s*⌘N/ });
-    expect(top.getAttribute('href')).toBe('/');
-    fireEvent.click(top);
-    await waitFor(() => expect(router.state.location.href).toBe('/'));
-    expect(await screen.findByRole('heading', { name: '무엇을 만들어 볼까요?' })).toBeTruthy();
-  });
-
-  it('offers 새 프로젝트 first in the project dialog, and it opens 새 프로젝트', async () => {
-    const { router } = mount('/session/cart');
-    fireEvent.click(await screen.findByRole('button', { name: '프로젝트 추가' }));
-    const dialog = await screen.findByRole('dialog');
-    const rows = within(dialog).getAllByRole('button');
-    expect(rows.map((row) => row.textContent)).toEqual([
-      '새 프로젝트아이디어를 적으면 구성을 골라 줘요',
-      '회사·팀 프로젝트 받기GitHub, GitLab 같은 저장소 주소로',
-      '내 컴퓨터의 프로젝트 열기이미 이 컴퓨터에 있는 폴더⌘O',
-    ]);
-    fireEvent.click(rows[0]!);
-    await waitFor(() => expect(router.state.location.href).toBe('/'));
-    expect(await screen.findByRole('heading', { name: '무엇을 만들어 볼까요?' })).toBeTruthy();
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(router.state.location.href).toBe(at(docs)));
   });
 
   it('keeps project pages when changing project, and ⌘N opens 새 프로젝트 from anywhere', async () => {
@@ -159,107 +109,49 @@ describe('independent project browsing', () => {
     await waitFor(() => expect(router.state.location.href).toBe('/board' + q(docs)));
     fireEvent.click(await screen.findByRole('button', { name: '더 보기' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: /설정/ }));
-    await waitFor(() => expect(router.state.location.pathname).toBe('/settings'));
+    // Settings is a sheet over the board: the board stays where it was, and closing the sheet is going back.
+    const sheet = await screen.findByRole('dialog', { name: '설정' });
+    expect(router.state.location.href).toBe('/board' + q(docs));
+    fireEvent.click(within(sheet).getByRole('button', { name: '닫기' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '설정' })).toBeNull());
     fireEvent.keyDown(window, { key: 'n', metaKey: true });
     await waitFor(() => expect(router.state.location.href).toBe('/'));
   });
 
-  it('finds a waiting conversation across closed projects with one filter', async () => {
-    mount('/session/cart');
-    fireEvent.click(await screen.findByRole('button', { name: /내 확인 필요\s*1/ }));
-    expect(await within(await rail()).findByRole('link', { name: /배포 확인/ })).toBeTruthy();
-    expect(within(await rail()).queryByRole('link', { name: /장바구니 고치기/ })).toBeNull();
-  });
-
-  it('always offers All and restores the existing tree from an empty filter', async () => {
-    const { router } = mount('/session/cart', [
-      ...infos().filter((s) => s.status === 'idle'),
-      ...Array.from({ length: 5 }, (_, i) =>
-        sessionInfo({ id: `older-${i}`, cwd: app, title: `이전 대화 ${i}`, updatedAt: `2026-10-01T00:00:0${i}.000Z` }),
-      ),
-    ]);
-    const nav = await rail();
-    const filters = within(nav).getByRole('group', { name: '대화 보기' });
-    expect(within(filters).getByRole('button', { name: '전체', pressed: true })).toBeTruthy();
-    fireEvent.click(await toggle('docs-site', false));
-    await within(nav).findByRole('link', { name: /README 다시 쓰기/ });
-    fireEvent.click(within(nav).getByRole('button', { name: '1개 더 보기' }));
-    expect(await within(nav).findByRole('link', { name: /이전 대화 0/ })).toBeTruthy();
-
-    for (const name of ['내 확인 필요 0', '작업 중 0', '새 결과 0']) {
-      fireEvent.click(within(filters).getByRole('button', { name }));
-      expect(await within(nav).findByText('이곳에 표시할 대화가 없어요.')).toBeTruthy();
-      expect(within(filters).getByRole('button', { name: '전체', pressed: false })).toBeTruthy();
-      fireEvent.click(within(nav).getByRole('button', { name: '전체 대화 보기' }));
-      expect(within(filters).getByRole('button', { name: '전체', pressed: true })).toBeTruthy();
-      expect(await within(nav).findByRole('link', { name: /장바구니 고치기/ })).toBeTruthy();
-      expect(within(nav).getByRole('link', { name: /README 다시 쓰기/ })).toBeTruthy();
-      expect(within(nav).getByRole('link', { name: /이전 대화 0/ })).toBeTruthy();
-      expect(router.state.location.pathname).toBe('/session/cart');
-    }
-
-    fireEvent.click(within(filters).getByRole('button', { name: '내 확인 필요 0' }));
-    fireEvent.click(within(filters).getByRole('button', { name: '전체' }));
-    expect(await within(nav).findByRole('link', { name: /장바구니 고치기/ })).toBeTruthy();
-  });
-
-  it('keeps current, pinned, failed and waiting sessions past the recent limit', () => {
-    const sessions = Array.from({ length: 10 }, (_, i) => sessionInfo({ id: String(i) }));
-    sessions[6] = sessionInfo({ id: '6', pinned: true });
-    sessions[7] = sessionInfo({ id: '7', status: 'waiting' });
-    sessions[8] = sessionInfo({ id: '8', status: 'failed' });
-    expect(visibleSessions(sessions, '9', false).map((s) => s.id)).toEqual([
-      '0',
-      '1',
-      '2',
-      '3',
-      '4',
-      '6',
-      '7',
-      '8',
-      '9',
-    ]);
-  });
-
-  it('searches and opens a session with the keyboard even with the sidebar hidden', async () => {
-    const { router } = mount('/session/cart');
-    await rail();
-    fireEvent.click(screen.getByRole('button', { name: '사이드바 닫기' }));
+  it('searches and opens a session with the keyboard', async () => {
+    const { router } = mount(at(app, 'cart'));
+    await screen.findByRole('main', { name: '제품 보드' });
     fireEvent.keyDown(window, { key: 'k', metaKey: true });
     const input = await screen.findByRole('combobox', { name: '프로젝트와 대화 찾기' });
     fireEvent.change(input, { target: { value: 'README' } });
     await screen.findByRole('option', { name: /README 다시 쓰기/ });
     fireEvent.keyDown(input, { key: 'Enter' });
-    await waitFor(() => expect(router.state.location.pathname).toBe('/session/readme'));
+    await waitFor(() => expect(router.state.location.href).toBe(at(docs, 'readme')));
   });
 
-  it('renames, pins, archives and undoes an archive without losing history', async () => {
-    const { connection } = mount('/session/readme');
-    fireEvent.click(await toggle('alpine-code', false));
-    fireEvent.click(await screen.findByRole('button', { name: '장바구니 고치기 메뉴' }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: '이름 바꾸기…' }));
-    const input = await screen.findByRole('textbox', { name: '대화 이름' });
-    fireEvent.change(input, { target: { value: '결제 개선' } });
-    fireEvent.submit(input.closest('form')!);
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    fireEvent.click(screen.getByRole('button', { name: '결제 개선 메뉴' }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: '고정' }));
-    await waitFor(async () =>
-      expect((await connection.request('session/list', {})).sessions.find((s) => s.id === 'cart')?.pinned).toBe(true),
-    );
-    fireEvent.click(screen.getByRole('button', { name: '결제 개선 메뉴' }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: '보관' }));
-    expect(await screen.findByText('보관함으로 옮겼어요.')).toBeTruthy();
-    expect((await connection.request('session/list', {})).sessions.find((s) => s.id === 'cart')?.archived).toBe(true);
-    fireEvent.click(screen.getByRole('button', { name: '실행 취소' }));
-    await waitFor(async () =>
-      expect((await connection.request('session/list', {})).sessions.find((s) => s.id === 'cart')?.archived).toBe(
-        false,
-      ),
-    );
+  it('deletes a conversation from the past conversations, leaving its board when it was open beside it', async () => {
+    const { router } = mount(at(app, 'cart'));
+    await screen.findByRole('main', { name: '제품 보드' });
+    fireEvent.keyDown(window, { key: 'k', metaKey: true });
+    const search = await screen.findByRole('dialog', { name: '프로젝트와 대화 찾기' });
+    // Its button, asked first: Enter never confirms, only a click or ⌘Enter.
+    fireEvent.click(within(search).getByRole('button', { name: 'README 다시 쓰기 삭제…' }));
+    let ask = await screen.findByRole('alertdialog', { name: 'README 다시 쓰기를 삭제할까요?' });
+    fireEvent.keyDown(ask, { key: 'Enter' });
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+    fireEvent.click(within(ask).getByRole('button', { name: /삭제/ }));
+    await waitFor(() => expect(within(search).queryByRole('option', { name: /README 다시 쓰기/ })).toBeNull());
+    // ⌘⌫ on the one chosen: the conversation open beside the board goes, the board stays.
+    const input = within(search).getByRole('combobox', { name: '프로젝트와 대화 찾기' });
+    fireEvent.change(input, { target: { value: '장바구니' } });
+    await within(search).findByRole('option', { name: /장바구니 고치기/, selected: true });
+    fireEvent.keyDown(input, { key: 'Backspace', metaKey: true });
+    ask = await screen.findByRole('alertdialog', { name: '장바구니 고치기를 삭제할까요?' });
+    fireEvent.keyDown(ask, { key: 'Enter', metaKey: true });
+    await waitFor(() => expect(router.state.location.href).toBe('/board' + q(app)));
   });
 
-  it('finds important and older work across twenty projects and two hundred conversations', async () => {
+  it('finds older work across twenty projects and two hundred conversations', async () => {
     const projects = Array.from({ length: 20 }, (_, i) => ({
       path: `/Users/me/scale-${i}`,
       name: `scale-${i}`,
@@ -280,85 +172,50 @@ describe('independent project browsing', () => {
         }),
       ),
     );
-    const { router } = mount('/session/load-0-0', sessions, projects);
-    expect(await within(await rail()).findByRole('link', { name: /업무 0-9/ })).toBeTruthy();
-    expect(within(await rail()).getByRole('link', { name: /업무 0-8/ })).toBeTruthy();
+    const { router } = mount(at('/Users/me/scale-0', 'load-0-0'), sessions, projects);
+    await screen.findByRole('main', { name: '제품 보드' });
     fireEvent.keyDown(window, { key: 'k', metaKey: true });
     const input = await screen.findByRole('combobox', { name: '프로젝트와 대화 찾기' });
     fireEvent.change(input, { target: { value: '업무 19-9' } });
     await screen.findByRole('option', { name: /업무 19-9/ });
     fireEvent.keyDown(input, { key: 'Enter' });
-    await waitFor(() => expect(router.state.location.pathname).toBe('/session/load-19-9'));
-  });
-
-  it('shows unseen answers across projects and marks them read when opened', async () => {
-    const sessions = infos();
-    sessions[1] = sessionInfo({
-      id: 'readme',
-      cwd: docs,
-      title: '새 답변',
-      summary: '문서 점검을 끝냈어요.',
-      updatedAt: new Date(Date.now() + 60_000).toISOString(),
-    });
-    const { router } = mount('/session/cart', sessions);
-    fireEvent.click(await screen.findByRole('button', { name: '새 결과 1' }));
-    fireEvent.click(await within(await rail()).findByRole('link', { name: /새 답변/ }));
-    await waitFor(() => expect(router.state.location.pathname).toBe('/session/readme'));
-    await screen.findByRole('button', { name: '새 결과 0' });
-    expect(useNavigation.getState().seen.readme).toBe(sessions[1]!.updatedAt);
+    await waitFor(() => expect(router.state.location.href).toBe(at('/Users/me/scale-19', 'load-19-9')));
   });
 
   it('finds a phrase from the transcript that is absent from the title and answer preview', async () => {
-    const { router } = mount('/session/cart', infos(), undefined, {
+    const { router } = mount(at(app, 'cart'), infos(), undefined, {
       readme: [{ id: 'body-only', kind: 'user_message', text: '독특한본문구절을 점검해 줘' }],
     });
-    await within(await rail()).findByRole('link', { name: /장바구니 고치기/ });
+    await screen.findByRole('main', { name: '제품 보드' });
     fireEvent.keyDown(window, { key: 'k', metaKey: true });
     const input = await screen.findByRole('combobox', { name: '프로젝트와 대화 찾기' });
     fireEvent.change(input, { target: { value: '독특한본문구절' } });
     const found = await screen.findByRole('option', { name: /README 다시 쓰기.*독특한본문구절/ });
     fireEvent.click(found);
-    await waitFor(() => expect(router.state.location.pathname).toBe('/session/readme'));
+    await waitFor(() => expect(router.state.location.href).toBe(at(docs, 'readme')));
   });
 
   it('cycles conversations in both directions with Ctrl+Tab', async () => {
     const sessions = infos().map((s, i) => ({ ...s, createdAt: `2026-10-01T00:00:0${i}.000Z` }));
-    const { router } = mount('/session/cart', sessions);
-    await within(await rail()).findByRole('link', { name: /장바구니 고치기/ });
+    const { router } = mount(at(app, 'cart'), sessions);
+    await screen.findByRole('main', { name: '제품 보드' });
     fireEvent.keyDown(window, { key: 'Tab', ctrlKey: true });
-    await waitFor(() => expect(router.state.location.pathname).toBe('/session/readme'));
+    await waitFor(() => expect(router.state.location.href).toBe(at(docs, 'readme')));
     fireEvent.keyDown(window, { key: 'Tab', ctrlKey: true, shiftKey: true });
-    await waitFor(() => expect(router.state.location.pathname).toBe('/session/cart'));
+    await waitFor(() => expect(router.state.location.href).toBe(at(app, 'cart')));
   });
 
-  it('remembers project expansion and opens the last project on its map after navigation state is reloaded', async () => {
-    mount('/session/readme');
-    fireEvent.click(await toggle('alpine-code', false));
+  it('opens the last project on its map after navigation state is reloaded', async () => {
+    const first = mount('/board' + q(docs));
+    await screen.findByRole('main', { name: '제품 보드' });
+    await waitFor(() => expect(useNavigation.getState().lastProject).toBe(docs));
+    expect(first.router.state.location.href).toBe('/board' + q(docs));
     const saved = localStorage.getItem('alpine.navigation.v1')!;
     cleanup();
-    useNavigation.setState({ expanded: {}, lastSessions: {}, lastProject: null });
+    useNavigation.setState({ lastProject: null });
     localStorage.setItem('alpine.navigation.v1', saved);
     await useNavigation.persist.rehydrate();
     const reopened = mount('/');
     await waitFor(() => expect(reopened.router.state.location.href).toBe('/board' + q(docs)));
-    // The map has no rail; the expansion is there again on a page that has one.
-    await reopened.router.navigate({ to: '/settings' });
-    await toggle('alpine-code', true);
-    await toggle('docs-site', true);
-    expect(useNavigation.getState().lastSessions[docs]).toBe('readme');
-  });
-
-  it('restores archived projects from the archive', async () => {
-    const { connection } = mount('/session/cart');
-    fireEvent.click(await screen.findByRole('button', { name: 'infra-terraform 메뉴' }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: '보관' }));
-    await screen.findByText('보관함으로 옮겼어요.');
-    fireEvent.click(screen.getByRole('button', { name: '보관함' }));
-    fireEvent.click(await screen.findByRole('button', { name: '복원' }));
-    await waitFor(async () =>
-      expect(
-        (await connection.request('projects/list', {})).projects.find((p) => p.name === 'infra-terraform')?.archived,
-      ).toBe(false),
-    );
   });
 });

@@ -7,6 +7,7 @@ import { useState, type KeyboardEvent } from 'react';
 
 import { agentMessages, agentName } from '@/shared/components/agent';
 import { useMessages } from '@/shared/i18n';
+import { closeSettings } from '@/shared/navigation';
 import { useDeleteAgent, useProjects, useSaveAgent, useSessions } from '@/shared/server';
 
 import { CharacterPicker } from './CharacterPicker';
@@ -113,6 +114,8 @@ export function AgentHeader({
         </span>
         <AgentMenu agent={agent} onSelect={onSelect} />
         <Link
+          // The agents are a sheet over the window: going to the work closes it.
+          onClick={closeSettings}
           to="/"
           search={{ agent: agent.id }}
           className="inline-flex min-h-8 items-center rounded-lg border border-interactive bg-interactive px-3 text-body font-medium whitespace-nowrap text-on-fill hover:bg-interactive-hover"
@@ -205,6 +208,8 @@ export function WorkingLine({ agentId }: { agentId: string }) {
       {/* The map's own conversations are seen on the map, as the project. */}
       {first.purpose ? (
         <Link
+          // The agents are a sheet over the window: going to the work closes it.
+          onClick={closeSettings}
           to="/board"
           search={{ project: first.cwd, ...(first.purpose === 'build' ? { session: first.id } : {}) }}
           className="text-interactive hover:text-interactive-hover hover:underline"
@@ -213,8 +218,10 @@ export function WorkingLine({ agentId }: { agentId: string }) {
         </Link>
       ) : (
         <Link
-          to="/session/$sessionId"
-          params={{ sessionId: first.id }}
+          // The agents are a sheet over the window: going to the work closes it.
+          onClick={closeSettings}
+          to="/board"
+          search={{ project: first.cwd, session: first.id }}
           className="text-interactive hover:text-interactive-hover hover:underline"
         >
           {first.title || t.untitledSession}

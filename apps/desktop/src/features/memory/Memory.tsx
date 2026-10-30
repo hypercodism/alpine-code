@@ -1,7 +1,6 @@
 import { Collapse } from '@alpine/ui/primitives';
 import type { MemoryEvidence, MemoryInfo } from '@alpine/protocol';
 import { Button, LinkButton } from '@alpine/ui/primitives';
-import { useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { useState } from 'react';
 
@@ -16,26 +15,17 @@ const SCOPES: MemoryInfo['scope'][] = ['team', 'project_me', 'me'];
 /**
  * A project's memory: the suggestions waiting for me, then what is kept, by scope. Each memory is the line the
  * agent sees in its prompt; it opens to the reason, where it came from, when I said it again, and its file. Opened
- * from the project's menu in the rail, or from a kept suggestion in the chat.
+ * from the project's menu, ⋯, or a kept suggestion in the chat, as a sheet over the board.
  */
 export function Memory({ project }: { project: string | null }) {
   const t = useMessages(messages);
   const words = useMemoryWords();
   const memory = useMemory(project);
   const list = memory.data;
-  const navigate = useNavigate();
 
   return (
     <div className="mx-auto flex w-full max-w-175 flex-col gap-6 px-6 pt-5 pb-10">
       <header className="flex flex-col items-start gap-1">
-        {project && (
-          <LinkButton
-            className="-ml-0.5 min-h-5 px-0.5"
-            onClick={() => void navigate({ to: '/board', search: { project } })}
-          >
-            {t.toMap}
-          </LinkButton>
-        )}
         <h1 className="text-title">{t.title}</h1>
         {project && <p className="text-body text-fg-muted">{t.lead(project.split('/').pop() || project)}</p>}
       </header>

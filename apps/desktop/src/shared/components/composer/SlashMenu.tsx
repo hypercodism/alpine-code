@@ -1,10 +1,10 @@
-import { useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { Plus } from 'lucide-react';
 import { useMemo } from 'react';
 
 import { skillDoes, skillTitle } from '@/shared/components/skills';
 import { useLocale, useMessages } from '@/shared/i18n';
+import { openSettings } from '@/shared/navigation';
 import { useSkills } from '@/shared/server';
 
 import { messages } from './messages';
@@ -19,13 +19,12 @@ export interface SlashSkill {
 /** What the composer's `/` menu offers in a project: its skills and the user's, and a way to find more. */
 export function useSlashSkills(cwd?: string | null): { skills: SlashSkill[]; onFind: () => void } {
   const { locale } = useLocale();
-  const navigate = useNavigate();
   const data = useSkills(cwd).data?.skills;
   const skills = useMemo(
     () => (data ?? []).map((s) => ({ name: s.name, title: skillTitle(s.name, locale), does: skillDoes(s, locale) })),
     [data, locale],
   );
-  return { skills, onFind: () => void navigate({ to: '/agents', search: { library: 'skill' } }) };
+  return { skills, onFind: () => openSettings('agents', { library: 'skill' }) };
 }
 
 /** The word after `/` while it is the whole message so far (`/pd`), else `null`. */

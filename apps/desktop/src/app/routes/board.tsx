@@ -9,7 +9,7 @@ import { useAppPeople, useHasApp } from '@/app/appScreens';
 import { shellMessages } from '@/app/shellMessages';
 import { ProjectCode } from '@/app/ProjectCode';
 import { MapTopBar, StartTopBar } from '@/app/ShellTopBar';
-import { UpdateButton } from '@/app/TopBar';
+import { UpdateButton } from '@/app/UpdateButton';
 import { ToolRail, type RailPlace } from '@/app/ToolRail';
 import { DataPlace, SUMMARY_TAB } from '@/app/WorkspaceDock';
 import { AppView } from '@/features/app-view/AppView';
@@ -35,6 +35,7 @@ import { useTaskForceTab } from '@/features/taskforce/useTaskForceTab';
 import { Terminal } from '@/features/terminal';
 import { FileNavigationProvider } from '@/shared/files';
 import { useMessages } from '@/shared/i18n';
+import { openMemory, openSettings } from '@/shared/navigation';
 import {
   useCloudEnabled,
   useDataSources,
@@ -287,8 +288,8 @@ function BoardRoute() {
                 onOpenApp={() => showApp(cwd)}
                 onOpenInApp={openInApp}
                 onPublish={publishable ? (from) => openPublish(cwd, from) : undefined}
-                onFixConnection={() => void navigate({ to: '/settings', search: { tab: 'connection' } })}
-                onMemory={() => void navigate({ to: '/memory', search: { project: cwd } })}
+                onFixConnection={() => openSettings('connection')}
+                onMemory={() => openMemory(cwd)}
                 onNewHere={(folder) => void navigate({ to: '/', search: { folder } })}
                 onNewProject={() => void navigate({ to: '/' })}
                 // An empty id lets go of the session (the map started over).

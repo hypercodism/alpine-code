@@ -1,9 +1,9 @@
 import type { MemoryReviewItem, ToolCallItem } from '@alpine/protocol';
 import { LinkButton } from '@alpine/ui/primitives';
-import { useNavigate } from '@tanstack/react-router';
 
 import { SuggestionCard, useMemoryWords } from '@/shared/components/memory';
 import { useFormat, useMessages } from '@/shared/i18n';
+import { openMemory } from '@/shared/navigation';
 import { useMemory } from '@/shared/server';
 
 import { messages } from './messages';
@@ -16,7 +16,6 @@ import { messages } from './messages';
 export function MemoryCard({ sessionId, cwd, call }: { sessionId: string; cwd: string; call: ToolCallItem }) {
   const t = useMessages(messages);
   const words = useMemoryWords();
-  const navigate = useNavigate();
   const memory = useMemory(cwd);
   const headline = typeof call.args.headline === 'string' ? call.args.headline.trim() : '';
   const list = memory.data;
@@ -31,7 +30,7 @@ export function MemoryCard({ sessionId, cwd, call }: { sessionId: string; cwd: s
   return (
     <p className="text-meta text-fg-muted">
       {t.memoryKept(words.scope(kept.scope))} ·{' '}
-      <LinkButton className="min-h-5 px-0.5" onClick={() => void navigate({ to: '/memory', search: { project: cwd } })}>
+      <LinkButton className="min-h-5 px-0.5" onClick={() => openMemory(cwd)}>
         {t.memoryOpen}
       </LinkButton>
     </p>
@@ -45,12 +44,11 @@ export function MemoryCard({ sessionId, cwd, call }: { sessionId: string; cwd: s
 export function MemoryReviewLine({ cwd, item }: { cwd: string; item: MemoryReviewItem }) {
   const t = useMessages(messages);
   const format = useFormat();
-  const navigate = useNavigate();
   const count = format.number(item.count);
   return (
     <p className="text-meta text-fg-muted">
       {item.source === 'missing_paths' ? t.review_missing_paths(count) : t.review_other(count)} ·{' '}
-      <LinkButton className="min-h-5 px-0.5" onClick={() => void navigate({ to: '/memory', search: { project: cwd } })}>
+      <LinkButton className="min-h-5 px-0.5" onClick={() => openMemory(cwd)}>
         {t.reviewOpen} ›
       </LinkButton>
     </p>

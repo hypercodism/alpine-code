@@ -1,6 +1,6 @@
 import type { SessionInfo } from '@alpine/protocol';
 import { Button, Dialog } from '@alpine/ui/primitives';
-import { useNavigate, useParams } from '@tanstack/react-router';
+import { useNavigate, useSearch } from '@tanstack/react-router';
 import type { KeyboardEvent } from 'react';
 
 import { useMessages } from '@/shared/i18n';
@@ -13,13 +13,13 @@ export function DeleteSessionDialog({ session, onClose }: { session: SessionInfo
   const t = useMessages(messages);
   const remove = useDeleteSession();
   const navigate = useNavigate();
-  const shown = useParams({ strict: false, select: (params: { sessionId?: string }) => params.sessionId });
+  const shown = useSearch({ strict: false, select: (search: { session?: string }) => search.session });
 
   const confirm = () => {
     if (!session) return;
     remove.mutate(session.id, {
       onSuccess: () => {
-        // Its project's map stays: deleting one conversation never leaves the project.
+        // Open beside the board, it leaves the board alone: deleting one conversation never leaves the project.
         if (shown === session.id) void navigate({ to: '/board', search: { project: session.cwd } });
         onClose();
       },
