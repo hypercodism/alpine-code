@@ -1,2 +1,2 @@
-export { Markdown } from './Markdown';
+export { Markdown, ScreenLinksProvider } from './Markdown';
 export { useHighlighted } from './useHighlighted';

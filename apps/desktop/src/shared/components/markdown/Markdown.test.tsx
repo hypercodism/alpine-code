@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FileNavigationProvider } from '@/shared/files';
 import { LocaleProvider } from '@/shared/i18n';
 
-import { Markdown } from './Markdown';
+import { Markdown, ScreenLinksProvider } from './Markdown';
 
 const draw = (text: string, streaming = false) =>
   render(
@@ -33,6 +33,24 @@ describe('Markdown', () => {
     expect(container.textContent).not.toContain('**');
     // Code keeps its stars.
     expect(draw('`a**b**c`').textContent).toBe('a**b**c');
+  });
+
+  it('opens a screen the AI links to where a page can, and leaves it as text where none can', () => {
+    const open = vi.fn();
+    render(
+      <LocaleProvider locale="ko">
+        <ScreenLinksProvider value={open}>
+          <Markdown text="고쳤어요. [RSS 화면 보기](#screen:rss)" streaming={false} />
+        </ScreenLinksProvider>
+      </LocaleProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /RSS 화면 보기/ }));
+    expect(open).toHaveBeenCalledWith('rss');
+    cleanup();
+
+    draw('고쳤어요. [RSS 화면 보기](#screen:rss)');
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(screen.getByText('RSS 화면 보기')).toBeTruthy();
   });
 
   it('keeps HTML the model wrote as text', () => {

@@ -121,7 +121,7 @@ function mount(
       <ServerProvider connection={connection}>
         <LocaleProvider locale="ko">
           <div style={{ height: 900 }}>
-            <ProductMap cwd={cwd} onSession={vi.fn()} onPublish={vi.fn()} onOpenInApp={vi.fn()} />
+            <ProductMap cwd={cwd} onSession={vi.fn()} onOpenInApp={vi.fn()} />
           </div>
         </LocaleProvider>
       </ServerProvider>

@@ -48,7 +48,6 @@ import { Coverage } from './Coverage';
 import { noticeRow, recheckIds } from './Focus';
 import { filmMessages } from './filmMessages';
 import { toTreeMap } from './flowTreeData';
-import { hasScreenArea } from './flowTreeModel';
 import { flowTreeMessages } from './flowTreeMessages';
 import { JourneyMap } from './JourneyMap';
 import { useMapActionStore, useMapMenuStore } from './mapActions';
@@ -56,7 +55,6 @@ import { Bar, CONNECTION, PlanBar, Working, type PlanTeamAnswer } from './PlanBa
 import {
   buildActivity,
   lastReply,
-  openPromises,
   pendingQuestion,
   planPhase,
   stopReason,
@@ -111,7 +109,6 @@ export function ProductMap({
   onSession,
   onShowConversation,
   onOpenApp,
-  onPublish,
   onNewHere,
   onNewProject,
   onFixConnection,
@@ -133,9 +130,7 @@ export function ProductMap({
   onShowConversation?: () => void;
   /** Runs and shows the project's app (its development server, in the dock). */
   onOpenApp?: () => void;
-  /** Puts the app online, offered beside 앱 열기 once it is built; absent without Alpine Cloud or a web app. */
-  onPublish?: (from?: HTMLElement) => void;
-  /** Opens 새 프로젝트 for this folder, which is empty (map-first 41). */
+    /** Opens 새 프로젝트 for this folder, which is empty (map-first 41). */
   onNewHere?: (folder: string) => void;
   /** Opens 새 프로젝트, the one place something new starts. */
   onNewProject?: () => void;
@@ -502,7 +497,6 @@ export function ProductMap({
     buildTeam &&
     buildSessionId &&
     teamAction.mutate({ action: answer, sessionId: buildSessionId, runId: buildTeam.id });
-  const promisesAll = Object.values(treeMap?.cards ?? {}).flatMap((card) => card.promises);
   // The card the build works on now: the one its latest edit touched, else one the AI marked as being built.
   const making =
     phase === 'building'
@@ -1430,7 +1424,6 @@ export function ProductMap({
                   docked={docked}
                   phase={phase}
                   thinking={talking && phase === 'asking'}
-                  busy={talking}
                   question={shownQuestion}
                   about={shownQuestion?.about ? (treeMap?.cards[shownQuestion.about]?.title ?? null) : null}
                   preview={previewing}
@@ -1442,17 +1435,7 @@ export function ProductMap({
                   activity={activity}
                   waiting={workInfo?.status === 'waiting'}
                   left={data?.undecided?.length ?? 0}
-                  built={{
-                    checked: promisesAll.filter((p) => p.status === 'passed').length,
-                    total: promisesAll.length,
-                    cards: cardCount,
-                    done: builtCount,
-                    screens: Object.values(treeMap?.cards ?? {}).filter(hasScreenArea).length,
-                    tries: Object.values(treeMap?.cards ?? {})
-                      .filter((card) => card.howToTry?.trim())
-                      .map((card) => ({ cardId: card.id, card: card.title, text: card.howToTry!.trim() })),
-                    open: openPromises(treeMap, data),
-                  }}
+                  built={{ cards: cardCount, done: builtCount }}
                   team={
                     buildTeam?.status === 'proposed' || buildTeam?.status === 'over'
                       ? {
@@ -1480,14 +1463,6 @@ export function ProductMap({
                   onDecideRest={() => say(plan.decideRestMessage)}
                   onAskOn={() => say(plan.askOnMessage)}
                   onDrawOn={() => say(plan.drawOnMessage)}
-                  onFix={(cardId, promiseId) => {
-                    const node = nodeOf(cardId);
-                    const broken = node?.conditions?.find((condition) => condition.id === promiseId)?.expectation;
-                    if (node && broken) void askAbout(node, tree.fixRequest(node.title, broken));
-                  }}
-                  onRecheck={(ids) => void start('verify', { nodeIds: ids, request: t.recheckAllRequest })}
-                  onOpenInApp={canOpenInApp ? openInApp : undefined}
-                  onPublish={onPublish}
                   onFixConnection={() => onFixConnection?.()}
                   onStop={stopWork}
                   onLook={showWork}
