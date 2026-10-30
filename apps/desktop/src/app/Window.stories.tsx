@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { createMemoryHistory, createRouter, RouterProvider } from '@tanstack/react-router';
+import type { FlowGetResult } from '@alpine/protocol';
 import { useState } from 'react';
 
 import { blogBoard, blogBuild } from '@/features/product-map/planExample';
@@ -65,3 +66,59 @@ export const Board: Story = {};
 
 /** Settings opened from the rail: the agents first, since giving the AI skills and tools is what it is opened for. */
 export const SettingsOpen: Story = { args: { open: 'agents' } };
+
+/** A board whose 글 쓰기 screen breaks its first promise. */
+function brokenBlog(): FlowGetResult {
+  const board = { ...blogBoard('built'), build: 'ended' as const };
+  const write = board.document!.nodes!.find((node) => node.id === 'write')!;
+  const promise = write.conditions![0]!.id;
+  return {
+    ...board,
+    states: {
+      ...board.states,
+      write: {
+        ...board.states!.write!,
+        promises: { ...board.states!.write!.promises, [promise]: { status: 'failed' } },
+      },
+    },
+  };
+}
+
+/** The app running (here a page standing in for it) with a promise broken: one red line over it, never on it. */
+export const AppBroken: Story = {
+  parameters: {
+    server: mergeScripts(
+      setUpScript(),
+      (() => {
+        const server = {
+          id: 'dev-1',
+          cwd,
+          command: 'npm run dev',
+          port: 5173,
+          status: 'running' as const,
+          url: 'about:blank#app',
+          external: false,
+        };
+        return { results: { 'devServers/open': { server }, 'devServers/list': { servers: [server] } } };
+      })(),
+      sessionScript({
+        sessions: [
+          {
+            info: sessionInfo({ id: 'map-1', cwd, purpose: 'map', title: '보드' }),
+            items: [
+              { id: 'u1', kind: 'user_message', text: 'RSS 주소 안내가 헷갈려요. 고쳐 줘' },
+              {
+                id: 'a1',
+                kind: 'agent_message',
+                agent: null,
+                text: '고쳤어요. 인터넷에 올리기 전에는 주소 대신 "올리면 주소가 생겨요"라고 보여 줘요.\n\n[글 쓰기 화면 보기](#screen:write)',
+              },
+            ],
+          },
+          { info: sessionInfo({ id: 'build-1', cwd, purpose: 'build', title: '만들기' }), items: blogBuild('built') },
+        ],
+      }),
+      boardScript(brokenBlog()),
+    ),
+  },
+};
