@@ -2,6 +2,7 @@ import { Button } from '@alpine/ui/primitives';
 import { useEffect, useState } from 'react';
 
 import { useMessages } from '@/shared/i18n';
+import { closeMemory, closeSettings } from '@/shared/navigation';
 import { restartApp } from '@/shared/platform';
 import { SERVER_EXITED, useServer } from '@/shared/server';
 
@@ -18,7 +19,14 @@ export function EngineStopped() {
   const [stopped, setStopped] = useState(false);
   const [failed, setFailed] = useState(false);
   useEffect(
-    () => server.subscribe((notification) => notification.method === SERVER_EXITED && setStopped(true)),
+    () =>
+      server.subscribe((notification) => {
+        if (notification.method !== SERVER_EXITED) return;
+        setStopped(true);
+        // A sheet over the window would hide the way back, and nothing in it can be read any more.
+        closeSettings();
+        closeMemory();
+      }),
     [server],
   );
   if (!stopped) return null;

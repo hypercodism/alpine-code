@@ -1,8 +1,8 @@
 import type { SessionInfo } from '@alpine/protocol';
 import { Dialog, Input } from '@alpine/ui/primitives';
-import { useMatch, useNavigate } from '@tanstack/react-router';
+import { useMatch, useNavigate, useSearch } from '@tanstack/react-router';
 import clsx from 'clsx';
-import { Archive, Folder, Map as MapIcon, MessageSquare, Search } from 'lucide-react';
+import { Archive, Folder, Map as MapIcon, MessageSquare, Search, Trash2 } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 
 import { StatusWord } from '@/shared/components/status';
@@ -11,6 +11,7 @@ import { useNavigation } from '@/shared/navigation';
 import { useOpenProject, useProjects, useSearchSessions, useSessions } from '@/shared/server';
 
 import { useCurrentProject } from './currentProject';
+import { DeleteSessionDialog } from './DeleteSessionDialog';
 import { messages } from './messages';
 
 /**
@@ -21,13 +22,12 @@ import { messages } from './messages';
 export function NavigationController({ onRestored }: { onRestored?: () => void }) {
   const sessionsQuery = useSessions();
   const sessions = sessionsQuery.data;
-  const match = useMatch({ from: '/session/$sessionId', shouldThrow: false });
-  const id = match?.params.sessionId;
-  const info = sessions?.find((s) => s.id === id);
-  const current = useCurrentProject();
+  // The conversation open beside the board, which Ctrl+Tab goes on from.
+  const id = useSearch({ strict: false, select: (search: { session?: string }) => search.session });
+  // Remembers the project shown, which opening the app goes back to.
+  useCurrentProject();
   const start = useMatch({ from: '/', shouldThrow: false });
   const restored = useRef(false);
-  const visit = useNavigation((s) => s.visit);
   const navigate = useNavigate();
   const projectsQuery = useProjects();
   const projects = projectsQuery.data?.projects;
@@ -48,19 +48,6 @@ export function NavigationController({ onRestored }: { onRestored?: () => void }
       void navigate({ to: '/board', search: { project: last }, replace: true }).finally(() => onRestored?.());
     } else onRestored?.();
   }, [sessions, projects, unanswered, start, navigate, onRestored]);
-  useEffect(() => {
-    if (!current) return;
-    useNavigation.setState((state) => ({ expanded: { ...state.expanded, [current]: true } }));
-  }, [current, id]);
-  useEffect(() => {
-    if (!info) return;
-    const read = () => {
-      if (document.visibilityState !== 'hidden') visit(info);
-    };
-    read();
-    document.addEventListener('visibilitychange', read);
-    return () => document.removeEventListener('visibilitychange', read);
-  }, [info, visit]);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === 'k') {
@@ -84,7 +71,7 @@ export function NavigationController({ onRestored }: { onRestored?: () => void }
         event.preventDefault();
         const index = listed.findIndex((s) => s.id === id);
         const next = listed[(index + (event.shiftKey ? -1 : 1) + listed.length) % listed.length]!;
-        void navigate({ to: '/session/$sessionId', params: { sessionId: next.id } });
+        void navigate({ to: '/board', search: { project: next.cwd, session: next.id } });
       }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -130,6 +117,7 @@ function SearchContents({ onClose, title }: { onClose: () => void; title: string
   const restore = useOpenProject();
   const id = useId();
   const listRef = useRef<HTMLDivElement>(null);
+  const [deleting, setDeleting] = useState<SessionInfo | null>(null);
   const needle = term.trim().toLocaleLowerCase();
   const byPath = new Map(projects.map((p) => [p.path, p]));
   // The map's own conversations are named as the rail names them, not as chats.
@@ -176,14 +164,16 @@ function SearchContents({ onClose, title }: { onClose: () => void; title: string
   useEffect(() => {
     listRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
   }, [selectedKey]);
+  // Only a conversation of its own is deleted here; the map's and its build records go with the project.
+  const deletable = (entry: SearchEntry | undefined) =>
+    entry?.session && !entry.session.purpose ? entry.session : null;
   const choose = (entry: SearchEntry) => {
     const go = () => {
       // A project opens its map, as on the rail; so does the map's own conversation, and a record opens beside it.
       const session = entry.session;
       // The conversation picked is the one that shows, the map's own included (it may not be where the map's input
       // goes right then, as while a build is unfinished).
-      if (session && !session.purpose) void navigate({ to: '/session/$sessionId', params: { sessionId: session.id } });
-      else if (session) void navigate({ to: '/board', search: { project: entry.path, session: session.id } });
+      if (session) void navigate({ to: '/board', search: { project: entry.path, session: session.id } });
       else void navigate({ to: '/board', search: { project: entry.path } });
       onClose();
     };
@@ -193,7 +183,9 @@ function SearchContents({ onClose, title }: { onClose: () => void; title: string
   return (
     <Dialog.Popup className="gap-3">
       <Dialog.Title>{title}</Dialog.Title>
-      <Dialog.Description>{t.searchDescription}</Dialog.Description>
+      <Dialog.Description>
+        {t.searchDescription} {t.deleteSessionKey}
+      </Dialog.Description>
       <div className="flex items-center gap-2">
         <Search size={18} className="shrink-0 text-fg-muted" aria-hidden="true" />
         <Input
@@ -219,6 +211,9 @@ function SearchContents({ onClose, title }: { onClose: () => void; title: string
             } else if (event.key === 'Enter' && entries[selected]) {
               event.preventDefault();
               choose(entries[selected]);
+            } else if (event.key === 'Backspace' && event.metaKey && deletable(entries[selected])) {
+              event.preventDefault();
+              setDeleting(deletable(entries[selected]));
             }
           }}
         />
@@ -232,18 +227,16 @@ function SearchContents({ onClose, title }: { onClose: () => void; title: string
         className="flex max-h-100 min-h-0 flex-col gap-1 overflow-y-auto"
       >
         {entries.map((entry, i) => (
-          <button
+          <div
             key={entry.key}
             id={`${id}-${i}`}
             role="option"
             aria-selected={i === selected}
-            tabIndex={-1}
-            type="button"
-            disabled={restore.isPending}
+            aria-disabled={restore.isPending || undefined}
             onMouseMove={() => setIndex(i)}
-            onClick={() => choose(entry)}
+            onClick={() => !restore.isPending && choose(entry)}
             className={clsx(
-              'flex shrink-0 cursor-pointer items-start gap-3 rounded-lg p-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-interactive disabled:opacity-50',
+              'group flex shrink-0 cursor-pointer items-start gap-3 rounded-lg p-3 text-left aria-disabled:opacity-50',
               i === selected ? 'bg-selected' : 'hover:bg-hover',
             )}
           >
@@ -268,7 +261,25 @@ function SearchContents({ onClose, title }: { onClose: () => void; title: string
               )}
               {entry.session && entry.session.status !== 'idle' && <StatusWord status={entry.session.status} />}
             </span>
-          </button>
+            {deletable(entry) && (
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-label={t.deleteSession(entry.title)}
+                title={t.deleteSession(entry.title)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setDeleting(deletable(entry));
+                }}
+                className={clsx(
+                  'inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-fg-muted hover:bg-hover hover:text-danger',
+                  i === selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
+                )}
+              >
+                <Trash2 size={15} strokeWidth={1.6} aria-hidden="true" />
+              </button>
+            )}
+          </div>
         ))}
       </div>
       {needle && (query !== term.trim() || result.isFetching) && (
@@ -290,6 +301,7 @@ function SearchContents({ onClose, title }: { onClose: () => void; title: string
         <p className="py-4 text-body text-fg-muted">{needle ? t.noResults : t.emptyView}</p>
       )}
       {hits.length >= 50 && <p className="text-meta text-fg-muted">{t.resultsLimit}</p>}
+      <DeleteSessionDialog session={deleting} onClose={() => setDeleting(null)} />
     </Dialog.Popup>
   );
 }

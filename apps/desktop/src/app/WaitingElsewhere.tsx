@@ -6,8 +6,8 @@ import { useProjects, useSessions, waitsForMe } from '@/shared/server';
 import { messages } from './messages';
 
 /**
- * A project whose AI waits for my OK, said on every other page (another project's map, settings, a conversation), with
- * the way to it: its map holds the cards above its input. On that project's map nothing is added.
+ * A project whose AI waits for my OK, said on another project's board and on 새 프로젝트, with the way to it: its map
+ * holds the cards above its input. On that project's map nothing is added.
  */
 export function WaitingElsewhere() {
   const t = useMessages(messages);

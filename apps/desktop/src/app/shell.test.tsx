@@ -9,7 +9,7 @@ import { showDockTab } from '@/features/dock/state';
 import { blogBoard, type PlanMoment } from '@/features/product-map/planExample';
 import { boardScript } from '@/features/product-map/testBoard';
 import { LocaleProvider } from '@/shared/i18n';
-import { useNavigation } from '@/shared/navigation';
+import { useMemorySheet, useNavigation, useSettingsSheet } from '@/shared/navigation';
 import {
   mergeScripts,
   scriptedConnection,
@@ -108,6 +108,8 @@ const frame = () => screen.findByTitle('alpine-code 앱', {}, { timeout: 3000 })
 beforeEach(() => {
   localStorage.clear();
   useNavigation.setState({ lastProject: null, searchOpen: false, pinnedProjects: [] });
+  useSettingsSheet.setState({ place: null });
+  useMemorySheet.setState({ project: null });
   useAppViewState.setState({ views: {}, cards: {}, sizes: {} });
   act(() => showDockTab('summary'));
   vi.stubGlobal(
@@ -203,10 +205,14 @@ describe('the rail beside the conversation', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     fireEvent.click(within(await rail()).getByRole('button', { name: '더 보기' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: '기억' }));
-    await waitFor(() => expect(router.state.location.href).toBe('/memory' + q(app)));
-    // Away from the map, its name leads back.
-    fireEvent.click(await screen.findByRole('link', { name: 'alpine-code' }));
-    await waitFor(() => expect(router.state.location.href).toBe('/board' + q(app)));
+    // The memory is a sheet over the board, which stays where it was.
+    const memory = await screen.findByRole('dialog');
+    expect(within(memory).getByRole('heading', { name: '기억' })).toBeTruthy();
+    expect(within(memory).getByText(/alpine-code에서 일하며 배운 것/)).toBeTruthy();
+    expect(router.state.location.href).toBe('/board' + q(app));
+    fireEvent.click(within(memory).getByRole('button', { name: '닫기' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByRole('main', { name: '제품 보드' })).toBeTruthy();
   });
 
   it('opens 터미널 in the conversation’s place, and 대화 brings the conversation back', async () => {

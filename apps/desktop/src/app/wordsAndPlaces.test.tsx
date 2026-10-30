@@ -8,7 +8,7 @@ import { useDockOpen, useDockTab } from '@/features/dock/state';
 import { blogBoard, type PlanMoment } from '@/features/product-map/planExample';
 import { boardScript } from '@/features/product-map/testBoard';
 import { LocaleProvider } from '@/shared/i18n';
-import { useNavigation } from '@/shared/navigation';
+import { useMemorySheet, useNavigation, useSettingsSheet } from '@/shared/navigation';
 import {
   EXAMPLE_MAP,
   flowScript,
@@ -76,6 +76,12 @@ const mapMenu = async () => {
   fireEvent.click(await screen.findByRole('button', { name: '더 보기' }));
   return screen.findByRole('menu');
 };
+/** Settings over the board: the rail's 설정 opens it at 에이전트, 더 보기 › 설정 at 일반. */
+const openSettingsFromMenu = async () => {
+  fireEvent.click(await screen.findByRole('button', { name: '더 보기' }));
+  fireEvent.click(await screen.findByRole('menuitem', { name: /^설정/ }));
+  return screen.findByRole('dialog', { name: '설정' });
+};
 const mapInput = () => screen.getByRole('textbox', { name: '보드에 부탁하기' });
 const write = (text: string) => {
   fireEvent.change(mapInput(), { target: { value: text } });
@@ -84,6 +90,8 @@ const write = (text: string) => {
 
 beforeEach(() => {
   localStorage.clear();
+  useSettingsSheet.setState({ place: null });
+  useMemorySheet.setState({ project: null });
   // The map's input and bars sit under its conversation in the dock (map-first 43).
   const open = renderHook(() => useDockOpen());
   act(() => open.result.current[1](true));
@@ -273,21 +281,20 @@ describe('memory is reached from the map (#69, #82)', () => {
     const { router } = mount('/board' + q(app));
     // alpine-code has two suggestions waiting in the scripted memory.
     fireEvent.click(await screen.findByRole('button', { name: '기억할까요? 2' }));
-    await waitFor(() => expect(router.state.location.pathname).toBe('/memory'));
-    expect(await screen.findByText('기다리는 제안')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '← 보드로' }));
-    await waitFor(() => expect(router.state.location.pathname).toBe('/board'));
+    const sheet = await screen.findByRole('dialog');
+    expect(await within(sheet).findByText('기다리는 제안')).toBeTruthy();
+    // The memory is a sheet over the map: closing it is going back.
+    fireEvent.click(within(sheet).getByRole('button', { name: '닫기' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(router.state.location.search).toEqual({ project: app });
-    // The map's menu has it too, and the memory page's project name goes back to the map.
+    // The map's menu has it too.
     fireEvent.click(within(await mapMenu()).getByRole('menuitem', { name: '기억' }));
-    await waitFor(() => expect(router.state.location.pathname).toBe('/memory'));
-    fireEvent.click(await screen.findByRole('link', { name: 'alpine-code' }));
-    await waitFor(() => expect(router.state.location.pathname).toBe('/board'));
+    expect(await within(await screen.findByRole('dialog')).findByText('기다리는 제안')).toBeTruthy();
   });
 
   it('offers to try again when the memory could not be read', async () => {
     let fails = true;
-    mount('/memory' + q(app), {
+    mount('/board' + q(app), {
       extra: {
         results: {
           'memory/list': () => {
@@ -297,10 +304,12 @@ describe('memory is reached from the map (#69, #82)', () => {
         },
       },
     });
-    expect(await screen.findByText('기억을 불러오지 못했어요')).toBeTruthy();
+    fireEvent.click(within(await mapMenu()).getByRole('menuitem', { name: '기억' }));
+    const sheet = await screen.findByRole('dialog');
+    expect(await within(sheet).findByText('기억을 불러오지 못했어요')).toBeTruthy();
     fails = false;
-    fireEvent.click(screen.getByRole('button', { name: '다시 시도' }));
-    expect(await screen.findByText('아직 기억한 게 없어요')).toBeTruthy();
+    fireEvent.click(within(sheet).getByRole('button', { name: '다시 시도' }));
+    expect(await within(sheet).findByText('아직 기억한 게 없어요')).toBeTruthy();
   });
 });
 
@@ -355,21 +364,24 @@ describe('the same words everywhere (#47, #54, #67, #74, #77, #80, #84, #89)', (
   });
 
   it('names the connection settings one way, shows the version plainly, and asks for a missing key with a button', async () => {
-    mount('/settings?tab=connection');
-    expect(await screen.findByRole('heading', { name: '연결한 곳' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '연결 추가' })).toBeTruthy();
+    mount('/board' + q(app));
+    const sheet = await openSettingsFromMenu();
+    fireEvent.click(within(within(sheet).getByRole('navigation')).getByRole('button', { name: '모델 연결' }));
+    expect(await within(sheet).findByRole('heading', { name: '연결한 곳' })).toBeTruthy();
+    expect(within(sheet).getByRole('button', { name: '연결 추가' })).toBeTruthy();
     // A provider whose key is missing: no environment variable name, a button to the key form.
-    expect(screen.queryByText(/ZAI_API_KEY/)).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: '키 넣기' }));
+    expect(within(sheet).queryByText(/ZAI_API_KEY/)).toBeNull();
+    fireEvent.click(within(sheet).getByRole('button', { name: '키 넣기' }));
     expect(await screen.findByText('API 키로 연결')).toBeTruthy();
     expect(screen.getByText('공급자')).toBeTruthy();
   });
 
   it('shows the version without the protocol', async () => {
-    mount('/settings?tab=general');
-    expect(await screen.findByText('버전')).toBeTruthy();
-    expect(await screen.findByText(/^Alpine Code /)).toBeTruthy();
-    expect(screen.queryByText(/프로토콜/)).toBeNull();
+    mount('/board' + q(app));
+    const sheet = await openSettingsFromMenu();
+    expect(await within(sheet).findByText('버전')).toBeTruthy();
+    expect(await within(sheet).findByText(/^Alpine Code /)).toBeTruthy();
+    expect(within(sheet).queryByText(/프로토콜/)).toBeNull();
   });
 
   it('names the places on the rail in plain words, each word under its icon', async () => {
@@ -379,7 +391,7 @@ describe('the same words everywhere (#47, #54, #67, #74, #77, #80, #84, #89)', (
       within(rail)
         .getAllByRole('button')
         .map((item) => item.textContent),
-    ).toEqual(['대화', '명령', '터미널', '로그', '브라우저', '더 보기']);
+    ).toEqual(['대화', '명령', '터미널', '로그', '브라우저', '설정', '더 보기']);
     fireEvent.click(within(rail).getByRole('button', { name: '명령' }));
     const dock = await screen.findByRole('complementary', { name: '오른쪽 창' });
     expect(await within(dock).findByText('AI나 Alpine이 띄운 명령이 없어요.')).toBeTruthy();
@@ -387,34 +399,40 @@ describe('the same words everywhere (#47, #54, #67, #74, #77, #80, #84, #89)', (
   });
 
   it('shows no 준비 중 places on the agents screen', async () => {
-    mount('/agents');
-    expect(await screen.findByRole('button', { name: '스킬 쓰기' })).toBeTruthy();
-    expect(screen.queryByText('준비 중')).toBeNull();
-    expect(screen.queryByText('MCP')).toBeNull();
-    expect(screen.queryByText('서브에이전트')).toBeNull();
+    mount('/board' + q(app));
+    fireEvent.click(
+      within(await screen.findByRole('navigation', { name: '도구' })).getByRole('button', { name: '설정' }),
+    );
+    const sheet = await screen.findByRole('dialog', { name: '설정' });
+    expect(await within(sheet).findByRole('button', { name: '스킬 쓰기' })).toBeTruthy();
+    expect(within(sheet).queryByText('준비 중')).toBeNull();
+    expect(within(sheet).queryByText('MCP')).toBeNull();
+    expect(within(sheet).queryByText('서브에이전트')).toBeNull();
   });
 
   it('calls a conversation 대화, and its build record by plain words', async () => {
-    mount('/session/plain', {
+    mount('/board' + q(app), {
       sessions: [
         { info: sessionInfo({ id: 'plain', cwd: app, title: '' }) },
         { info: sessionInfo({ id: 'build-1', cwd: app, purpose: 'build', title: 'Build the planned product' }) },
       ],
     });
-    const rail = await screen.findByRole('navigation', { name: '주 메뉴' });
-    expect(await within(rail).findByText('제목 없는 대화')).toBeTruthy();
-    const record = within(rail).getByRole('link', { name: /만든 기록/ });
-    expect(record.getAttribute('title')).toMatch(/^만든 기록 · .+에 시작$/);
+    fireEvent.click(within(await mapMenu()).getByRole('menuitem', { name: '지난 대화' }));
+    const list = await screen.findByRole('listbox', { name: '프로젝트와 대화 찾기' });
+    expect(await within(list).findByRole('option', { name: /^제목 없는 대화/ })).toBeTruthy();
+    expect(within(list).getByRole('option', { name: /^만든 기록/ })).toBeTruthy();
+    expect(within(list).queryByText(/Build the planned product/)).toBeNull();
   });
 });
 
 describe('where a new project is made (bundle F)', () => {
   it('says where the usual place is changed, and goes there', async () => {
-    const { router } = mount('/');
+    mount('/');
     fireEvent.click(await screen.findByRole('button', { name: '만들 곳: 새 폴더' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: /새 폴더를 만들 곳 바꾸기/ }));
-    await waitFor(() => expect(router.state.location.pathname).toBe('/settings'));
-    expect(router.state.location.search).toEqual({ tab: 'general' });
+    const sheet = await screen.findByRole('dialog', { name: '설정' });
+    expect(within(sheet).getByRole('heading', { name: '일반' })).toBeTruthy();
+    expect(within(sheet).getByText('프로젝트를 두는 곳')).toBeTruthy();
   });
 });
 
@@ -458,7 +476,7 @@ describe('a call waiting for my OK is never hidden (dogfood 2, 4, 15)', () => {
   });
 
   it('is said on every other page, with the way to its map', async () => {
-    const { connection, router } = mount('/settings', {
+    const { connection, router } = mount('/', {
       sessions: [{ info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', title: '보드' }) }],
     });
     await connection.request('session/send', { sessionId: 'map-1', text: 'README를 고쳐 줘' });

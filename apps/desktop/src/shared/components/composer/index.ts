@@ -1,4 +1,5 @@
 export { AgentChip } from './AgentChip';
+export { AgentSkillsChip } from './AgentSkillsChip';
 export { chip as chipClass } from './chip';
 export { Composer } from './Composer';
 export { MODES, ModeChip, nextMode, type Mode } from './ModeChip';

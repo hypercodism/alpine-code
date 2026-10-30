@@ -15,7 +15,12 @@ function Root<Payload>(props: BaseDialog.Root.Props<Payload>) {
 }
 const Trigger = BaseDialog.Trigger;
 
-const widths = { md: 'w-150', sm: 'w-120' };
+const sizes = {
+  md: 'w-150 max-w-full flex-col gap-4 p-6',
+  sm: 'w-120 max-w-full flex-col gap-4 p-6',
+  // Nearly the whole window, laid out by its contents: settings, with its own list of places on the left.
+  page: 'h-full max-h-200 w-full max-w-300 overflow-clip',
+};
 
 /** The sheet in the middle of the window, over a scrim. Focus stays inside while it is open. */
 function Popup({
@@ -23,7 +28,7 @@ function Popup({
   className,
   children,
   ...props
-}: WithClass<typeof BaseDialog.Popup> & { size?: keyof typeof widths }) {
+}: WithClass<typeof BaseDialog.Popup> & { size?: keyof typeof sizes }) {
   const open = useContext(OpenContext);
   const [content, setContent] = useState(children);
   // Controlled dialogs often clear their selection on close. Keep their last frame until Base UI unmounts it.
@@ -34,8 +39,8 @@ function Popup({
       <BaseDialog.Viewport className="fixed inset-0 z-50 flex items-center justify-center p-6">
         <BaseDialog.Popup
           className={clsx(
-            'motion-dialog flex max-w-full flex-col gap-4 rounded-xl border border-line bg-canvas-raised p-6 text-fg shadow-overlay',
-            widths[size],
+            'motion-dialog flex rounded-xl border border-line bg-canvas-raised text-fg shadow-overlay',
+            sizes[size],
             className,
           )}
           {...props}

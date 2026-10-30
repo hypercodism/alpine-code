@@ -1,5 +1,4 @@
 import { LinkButton } from '@alpine/ui/primitives';
-import { Link } from '@tanstack/react-router';
 import { memo, useMemo } from 'react';
 
 import { agentMessages, agentName, Character, toolLabel } from '@/shared/components/agent';
@@ -8,6 +7,7 @@ import { Markdown } from '@/shared/components/markdown';
 import { skillTitle } from '@/shared/components/skills';
 import { TaskForceCard } from '@/shared/components/taskforce';
 import { useFormat, useLocale, useMessages } from '@/shared/i18n';
+import { openSettings } from '@/shared/navigation';
 import { productMapMessage } from '@/shared/productMapMessage';
 import { openInBrowser } from '@/shared/platform';
 import { CHATGPT_USAGE_URL, useAgents, useCloudStatus, useSendMessage, useSkills, type Item } from '@/shared/server';
@@ -284,9 +284,9 @@ const ItemView = memo(function ItemView({
           <Character look={item.look} color={item.color} size={22} />
           <span>
             {t.agentChanged(agentName({ id: item.agent, name: item.name }, a), changes.join(' · '))} ·{' '}
-            <Link to="/agents" search={{ agent: item.agent }} className="text-interactive hover:underline">
+            <LinkButton className="min-h-5 px-0.5" onClick={() => openSettings('agents', { agent: item.agent })}>
               {t.seeAgent}
-            </Link>
+            </LinkButton>
           </span>
           <span className="h-px grow bg-line-subtle" />
         </div>
@@ -311,9 +311,9 @@ function CreditsStopped() {
 function ConnectionLink() {
   const t = useMessages(messages);
   return (
-    <Link to="/settings" search={{ tab: 'connection' }} className="text-interactive hover:underline">
+    <LinkButton className="min-h-5 px-0.5" onClick={() => openSettings('connection')}>
       {t.openConnection}
-    </Link>
+    </LinkButton>
   );
 }
 

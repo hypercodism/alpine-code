@@ -10,7 +10,7 @@ import { useMessages } from '@/shared/i18n';
 import { MoreMenu } from './MoreMenu';
 import { ProjectMenu } from './ProjectMenu';
 import { shellMessages } from './shellMessages';
-import { UpdateButton } from './TopBar';
+import { UpdateButton } from './UpdateButton';
 
 /**
  * What the map's top bar shows on its right: where the map stands and its one main button. One function, so the map's

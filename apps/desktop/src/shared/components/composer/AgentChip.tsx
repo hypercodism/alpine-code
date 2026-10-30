@@ -1,7 +1,7 @@
 import { Menu } from '@alpine/ui/primitives';
-import { useNavigate } from '@tanstack/react-router';
 import { ChevronDown } from 'lucide-react';
 
+import { openSettings } from '@/shared/navigation';
 import { abilities, agentMessages, agentName, Character, shortModel } from '@/shared/components/agent';
 import { useMessages } from '@/shared/i18n';
 import { useAgents, useConnections } from '@/shared/server';
@@ -36,7 +36,6 @@ export function AgentChip({
 }) {
   const t = useMessages(messages);
   const a = useMessages(agentMessages);
-  const navigate = useNavigate();
   const loaded = useAgents();
   const agents = loaded.data?.agents;
   const defaultModel = useConnections().data?.defaultModel ?? null;
@@ -84,10 +83,8 @@ export function AgentChip({
           })}
         </Menu.RadioGroup>
         <Menu.Separator />
-        <Menu.Item onClick={() => void navigate({ to: '/agents', search: { create: true } })}>{t.newAgent}</Menu.Item>
-        <Menu.Item onClick={() => void navigate({ to: '/agents', search: { agent: shownId } })}>
-          {t.agentSettings} ›
-        </Menu.Item>
+        <Menu.Item onClick={() => openSettings('agents', { create: true })}>{t.newAgent}</Menu.Item>
+        <Menu.Item onClick={() => openSettings('agents', { agent: shownId })}>{t.agentSettings} ›</Menu.Item>
       </Menu.Popup>
     </Menu.Root>
   );

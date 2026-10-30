@@ -1,11 +1,11 @@
 import { Combobox, LinkButton } from '@alpine/ui/primitives';
-import { useNavigate } from '@tanstack/react-router';
 import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 
 import { shortModel } from '@/shared/components/agent';
 import { connectionLabel, connectMessages, PlanLine, useConnectPrompt } from '@/shared/components/connect';
 import { useMessages } from '@/shared/i18n';
+import { openSettings } from '@/shared/navigation';
 import { shownModels, useConnections, useModelsOf } from '@/shared/server';
 
 import { messages } from './messages';
@@ -45,7 +45,6 @@ export function ModelPicker({
   const [query, setQuery] = useState('');
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const [recent, setRecent] = useState(readRecent);
-  const navigate = useNavigate();
   const lists = useModelsOf((data?.connections ?? []).map((connection) => ({ connection: connection.name })));
 
   const defaultModel = data?.defaultModel ?? null;
@@ -137,10 +136,7 @@ export function ModelPicker({
           <span className="min-w-0 grow">
             <PlanLine model={value ?? defaultModel} />
           </span>
-          <LinkButton
-            className="shrink-0"
-            onClick={() => void navigate({ to: '/settings', search: { tab: 'connection' } })}
-          >
+          <LinkButton className="shrink-0" onClick={() => openSettings('connection')}>
             {t.manageModels} ›
           </LinkButton>
         </div>

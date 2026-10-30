@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useConnectPrompt } from '@/shared/components/connect';
 import { LocaleProvider } from '@/shared/i18n';
-import { useNavigation } from '@/shared/navigation';
+import { useMemorySheet, useNavigation, useSettingsSheet } from '@/shared/navigation';
 import { useUpdateCheck } from '@/shared/platform';
 import {
   EXAMPLE_MAP,
@@ -85,9 +85,24 @@ function mount(path: string, script: Script, sessions: { info: SessionInfo; item
   return { router, connection, push };
 }
 
-const rail = () => screen.findByRole('navigation', { name: '주 메뉴' });
-const projectRow = async (name: string) =>
-  (await within(await rail()).findByRole('button', { name: new RegExp(`^${name} 열기`) })).parentElement!;
+/** Settings over the board: the rail's 설정 opens it at 에이전트, 더 보기 › 설정 at 일반. */
+const settings = () => screen.findByRole('dialog', { name: '설정' });
+const openSettingsFromRail = async () => {
+  fireEvent.click(
+    within(await screen.findByRole('navigation', { name: '도구' })).getByRole('button', { name: '설정' }),
+  );
+  return settings();
+};
+const openConnection = async () => {
+  fireEvent.click(await screen.findByRole('button', { name: '더 보기' }));
+  fireEvent.click(await screen.findByRole('menuitem', { name: /^설정/ }));
+  const sheet = await settings();
+  fireEvent.click(within(within(sheet).getByRole('navigation')).getByRole('button', { name: '모델 연결' }));
+  return sheet;
+};
+/** The settings sheet shows 모델 연결. */
+const showsConnection = async () =>
+  expect(await within(await settings()).findByRole('heading', { name: '모델 연결' })).toBeTruthy();
 /** A project's row in the project menu (the map has no rail): opens the menu if it is closed. */
 const menuRow = async (name: string) => {
   if (!screen.queryByRole('list', { name: '최근 프로젝트' }))
@@ -98,6 +113,8 @@ const menuRow = async (name: string) => {
 
 beforeEach(() => {
   localStorage.clear();
+  useSettingsSheet.setState({ place: null });
+  useMemorySheet.setState({ project: null });
   useConnectPrompt.setState({ dismissed: false, asked: false });
   useUpdateCheck.setState({ phase: null });
   useNavigation.setState({
@@ -129,11 +146,12 @@ afterEach(() => {
 });
 
 describe('nothing connected (#14, #26, #15)', () => {
-  it('opens the connect sheet from a conversation when I send', async () => {
-    mount('/session/old', nothingConnected, [
+  it('opens the connect sheet when I send with a conversation open beside the board', async () => {
+    mount('/board' + q(app) + '&session=old', nothingConnected, [
       { info: sessionInfo({ id: 'old', cwd: app, title: '예전 대화' }), items: [] },
     ]);
-    const input = await screen.findByPlaceholderText('무엇을 할까요?');
+    await screen.findByRole('main', { name: '예전 대화' });
+    const input = screen.getByRole('textbox', { name: '보드에 부탁하기' });
     fireEvent.change(input, { target: { value: '이어서 해 줘' } });
     fireEvent.click(screen.getByRole('button', { name: '보내기' }));
     expect(await screen.findByRole('dialog')).toBeTruthy();
@@ -142,9 +160,11 @@ describe('nothing connected (#14, #26, #15)', () => {
   });
 
   it('opens it from the agents screen’s 모델 연결 chip', async () => {
-    mount('/agents', nothingConnected);
-    fireEvent.click((await screen.findAllByRole('button', { name: '모델 연결' }))[0]!);
-    expect(await screen.findByRole('dialog')).toBeTruthy();
+    mount('/board' + q(app), nothingConnected);
+    const sheet = await openSettingsFromRail();
+    const chips = await within(sheet).findAllByRole('button', { name: '모델 연결' });
+    fireEvent.click(chips.find((chip) => !chip.closest('nav'))!);
+    expect(await screen.findByText('AI를 어떻게 쓸까요?')).toBeTruthy();
   });
 
   it('opens it from the map input, and the words stay', async () => {
@@ -192,8 +212,8 @@ describe('nothing connected (#14, #26, #15)', () => {
     fireEvent.click(screen.getByRole('button', { name: '보내기' }));
     const again = (await screen.findByText(/모델이 준비되지 않았어요/)).closest('[role="alert"]') as HTMLElement;
     fireEvent.click(within(again).getByRole('button', { name: '모델 연결 열기' }));
-    await waitFor(() => expect(router.state.location.pathname).toBe('/settings'));
-    expect(router.state.location.search).toEqual({ tab: 'connection' });
+    await showsConnection();
+    expect(router.state.location.pathname).toBe('/board');
   });
 });
 
@@ -206,14 +226,15 @@ describe('the map follows the default safety (#16)', () => {
 
 describe('the app engine stops (#21)', () => {
   it('fails what waited, says so across the window, and restarts', async () => {
-    const { connection } = mount('/settings?tab=connection', {
+    const { connection } = mount('/board' + q(docs), {
       results: { 'connections/list': () => new Promise<never>(() => {}) },
     });
-    expect(await screen.findByText('연결 정보를 불러오는 중…')).toBeTruthy();
+    const sheet = await openConnection();
+    expect(await within(sheet).findByText('연결 정보를 불러오는 중…')).toBeTruthy();
     act(() => connection.exit());
-    // What waited for the server has failed, rather than waiting for ever.
-    expect(await screen.findByText('연결 정보를 불러오지 못했어요.')).toBeTruthy();
+    // The sheet, which can read nothing any more, gives way to the banner and its way back.
     const banner = (await screen.findByText('앱 엔진이 멈췄어요.')).closest('[role="alert"]') as HTMLElement;
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '설정' })).toBeNull());
     fireEvent.click(within(banner).getByRole('button', { name: '다시 시작' }));
     expect(platform.restartApp).toHaveBeenCalledOnce();
   });
@@ -223,7 +244,7 @@ describe('Settings › 모델 연결 while it cannot be read (#51)', () => {
   it('says so and asks again', async () => {
     let fails = true;
     const list = setUpScript().results!['connections/list'] as () => unknown;
-    mount('/settings?tab=connection', {
+    mount('/board' + q(docs), {
       results: {
         'connections/list': () => {
           if (fails) throw new ServerError(-32000, 'boom');
@@ -231,10 +252,11 @@ describe('Settings › 모델 연결 while it cannot be read (#51)', () => {
         },
       },
     });
-    expect(await screen.findByText('연결 정보를 불러오지 못했어요.')).toBeTruthy();
+    const sheet = await openConnection();
+    expect(await within(sheet).findByText('연결 정보를 불러오지 못했어요.')).toBeTruthy();
     fails = false;
-    fireEvent.click(screen.getByRole('button', { name: '다시 시도' }));
-    expect(await screen.findByRole('button', { name: '연결 추가' })).toBeTruthy();
+    fireEvent.click(within(sheet).getByRole('button', { name: '다시 시도' }));
+    expect(await within(sheet).findByRole('button', { name: '연결 추가' })).toBeTruthy();
   });
 });
 
@@ -285,20 +307,20 @@ describe('a conversation that stopped (#83, #86)', () => {
   });
 
   it('leads to the model connection when the model sign-in ended', async () => {
-    const { router } = mount('/session/old', {}, [
+    mount('/session/old', {}, [
       {
         info: sessionInfo({ id: 'old', cwd: app, title: '예전 대화' }),
         items: [failed[0]!, { id: 'r1', kind: 'run_stopped', reason: 'signed_out', message: 'expired' }],
       },
     ]);
-    fireEvent.click(await screen.findByRole('link', { name: '모델 연결 열기' }));
-    await waitFor(() => expect(router.state.location.pathname).toBe('/settings'));
+    fireEvent.click(await screen.findByRole('button', { name: '모델 연결 열기' }));
+    await showsConnection();
   });
 
   it('says it is loading, and offers to ask again when the agents cannot be read', async () => {
     let fails = true;
     const list = setUpScript().results!['agents/list'] as () => unknown;
-    mount('/agents', {
+    mount('/board' + q(docs), {
       results: {
         'agents/list': () => {
           if (fails) throw new ServerError(-32000, 'boom');
@@ -306,10 +328,11 @@ describe('a conversation that stopped (#83, #86)', () => {
         },
       },
     });
-    expect(await screen.findByText('에이전트를 불러오지 못했어요')).toBeTruthy();
+    const sheet = await openSettingsFromRail();
+    expect(await within(sheet).findByText('에이전트를 불러오지 못했어요')).toBeTruthy();
     fails = false;
-    fireEvent.click(screen.getByRole('button', { name: '다시 시도' }));
-    await waitFor(() => expect(screen.queryByText('에이전트를 불러오지 못했어요')).toBeNull());
+    fireEvent.click(within(sheet).getByRole('button', { name: '다시 시도' }));
+    await waitFor(() => expect(within(sheet).queryByText('에이전트를 불러오지 못했어요')).toBeNull());
   });
 });
 
@@ -379,11 +402,10 @@ describe('a question the AI asked on a map (#63, #73, #8, #25, #39)', () => {
 
   it('leaves me where I am when the window comes forward after a notice I got while working in it', async () => {
     const focused = vi.spyOn(document, 'hasFocus').mockReturnValue(true);
-    const { router, push } = mount('/session/old', {}, [
-      { info: sessionInfo({ id: 'old', cwd: docs, title: '예전 대화' }) },
+    const { router, push } = mount('/board' + q(docs), {}, [
       { info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', status: 'running' }) },
     ]);
-    await projectRow('alpine-code');
+    await menuRow('alpine-code');
     push(status(50, 'waiting'));
     await waitFor(() => expect(platform.notify).toHaveBeenCalled());
     // A Finder dialog, or another app, takes the window's focus for a while and gives it back.
@@ -392,21 +414,20 @@ describe('a question the AI asked on a map (#63, #73, #8, #25, #39)', () => {
     focused.mockReturnValue(true);
     act(() => void window.dispatchEvent(new Event('focus')));
     await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(router.state.location.pathname).toBe('/session/old');
+    expect(router.state.location.search).toEqual({ project: docs });
   });
 
   it('does not move me to a map whose work only ended while I was away', async () => {
     vi.spyOn(document, 'hasFocus').mockReturnValue(false);
-    const { router, push } = mount('/session/old', {}, [
-      { info: sessionInfo({ id: 'old', cwd: docs, title: '예전 대화' }) },
+    const { router, push } = mount('/board' + q(docs), {}, [
       { info: sessionInfo({ id: 'map-1', cwd: app, purpose: 'map', status: 'running' }) },
     ]);
-    await projectRow('alpine-code');
+    await menuRow('alpine-code');
     push(status(50, 'idle'));
     await waitFor(() => expect(platform.notify).toHaveBeenCalled());
     act(() => void window.dispatchEvent(new Event('focus')));
     await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(router.state.location.pathname).toBe('/session/old');
+    expect(router.state.location.search).toEqual({ project: docs });
   });
 
   it('says nothing about the map I am looking at while the window is in front', async () => {
@@ -465,24 +486,10 @@ describe('a project whose folder moved', () => {
   });
 });
 
-describe('archiving the open conversation', () => {
-  it('goes to the project map, not to a build record', async () => {
-    const { router } = mount('/session/old', {}, [
-      { info: sessionInfo({ id: 'build-1', cwd: app, purpose: 'build', title: '만들기' }) },
-      { info: sessionInfo({ id: 'old', cwd: app, title: '예전 대화' }) },
-    ]);
-    const row = (await within(await rail()).findByRole('link', { name: /예전 대화/ })).parentElement!;
-    fireEvent.click(within(row).getByRole('button', { name: /메뉴/ }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: '보관' }));
-    await waitFor(() => expect(router.state.location.pathname).toBe('/board'));
-    expect(router.state.location.search).toEqual({ project: app });
-  });
-});
-
 describe('checking for updates by hand (#50)', () => {
   it('says at once that it checks, then that it downloads', async () => {
-    mount('/settings', {});
-    await screen.findByRole('button', { name: '뒤로' });
+    mount('/board' + q(docs), {});
+    await screen.findByRole('button', { name: /^docs-site · 다른 프로젝트로/ });
     act(() => useUpdateCheck.setState({ phase: 'checking' }));
     expect(screen.getByText('업데이트 확인하는 중…')).toBeTruthy();
     act(() => useUpdateCheck.setState({ phase: 'downloading' }));

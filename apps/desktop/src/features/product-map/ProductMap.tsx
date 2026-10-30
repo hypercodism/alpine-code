@@ -8,7 +8,7 @@ import { createPortal } from 'react-dom';
 
 import { lookingAt } from '@/features/app-view/state';
 
-import { AgentChip, ModeChip, type Mode } from '@/shared/components/composer';
+import { AgentChip, AgentSkillsChip, ModeChip, type Mode } from '@/shared/components/composer';
 import { ImportLink } from '@/shared/components/import-link';
 import { latestTaskForce, roomOf, teamShape } from '@/shared/components/taskforce';
 import { useMessages } from '@/shared/i18n';
@@ -1591,6 +1591,7 @@ export function ProductMap({
                   agent={
                     <>
                       {agentChip}
+                      <AgentSkillsChip agentId={talkInfo ? (talkInfo.agent ?? 'default') : pickedAgent} />
                       {modeChip}
                     </>
                   }

@@ -7,7 +7,7 @@ import { ask, message } from '@tauri-apps/plugin-dialog';
 import { useEffect, useRef } from 'react';
 
 import { useLocale, useMessages } from '@/shared/i18n';
-import { useNavigation } from '@/shared/navigation';
+import { openSettings, useNavigation } from '@/shared/navigation';
 import { checkForUpdate, inTauri, restartToUpdate } from '@/shared/platform';
 
 import appIcon from '../../src-tauri/icons/128x128@2x.png';
@@ -18,7 +18,6 @@ import { useWorkRunning } from './useWorkRunning';
 interface Actions {
   newSession: () => void;
   openFolder: () => void;
-  toggleRail: () => void;
 }
 
 /**
@@ -26,7 +25,7 @@ interface Actions {
  * follow the language setting; its shortcuts (⌘N, ⌘O, ⌘,) reach the app through it. Closing the window quits the app,
  * so 윈도우 닫기, 끝내기 and the window's close button all ask first while the AI works. Does nothing outside Tauri.
  */
-export function useAppMenu(railOpen: boolean, actions: Actions) {
+export function useAppMenu(actions: Actions) {
   const { locale } = useLocale();
   const t = useMessages(menuMessages);
   const q = useMessages(quitMessages);
@@ -55,7 +54,7 @@ export function useAppMenu(railOpen: boolean, actions: Actions) {
   useEffect(() => {
     if (!inTauri()) return;
     let current = true;
-    void buildMenu(railOpen, () => latest.current).then(async ({ menu, items }) => {
+    void buildMenu(() => latest.current).then(async ({ menu, items }) => {
       if (!current) return void Promise.all([menu, ...items].map((each) => each.close()));
       const previous = await menu.setAsAppMenu();
       const before = held.current;
@@ -66,7 +65,7 @@ export function useAppMenu(railOpen: boolean, actions: Actions) {
     return () => {
       current = false;
     };
-  }, [railOpen, locale]);
+  }, [locale]);
 }
 
 export type Latest = Actions & {
@@ -78,7 +77,7 @@ export type Latest = Actions & {
   working: boolean;
 };
 
-export async function buildMenu(railOpen: boolean, get: () => Latest): Promise<{ menu: Menu; items: MenuItem[] }> {
+export async function buildMenu(get: () => Latest): Promise<{ menu: Menu; items: MenuItem[] }> {
   const { t } = get();
   // An item written inline in Menu.new loses its action as soon as the menu is made; one made with MenuItem.new and
   // held keeps it.
@@ -109,7 +108,7 @@ export async function buildMenu(railOpen: boolean, get: () => Latest): Promise<{
           await act({
             text: t.settings,
             accelerator: 'CmdOrCtrl+,',
-            action: () => void get().navigate({ to: '/settings' }),
+            action: () => openSettings('general'),
           }),
           { item: 'Separator' },
           { item: 'Services', text: t.services },
@@ -151,12 +150,6 @@ export async function buildMenu(railOpen: boolean, get: () => Latest): Promise<{
       {
         text: t.view,
         items: [
-          await act({
-            text: railOpen ? t.hideSidebar : t.showSidebar,
-            accelerator: 'CmdOrCtrl+B',
-            action: () => get().toggleRail(),
-          }),
-          { item: 'Separator' },
           await act({ text: t.back, accelerator: 'CmdOrCtrl+[', action: () => get().router.history.back() }),
           await act({ text: t.forward, accelerator: 'CmdOrCtrl+]', action: () => get().router.history.forward() }),
           { item: 'Separator' },
