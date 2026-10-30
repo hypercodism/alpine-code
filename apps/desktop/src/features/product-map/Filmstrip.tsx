@@ -412,11 +412,22 @@ const DOTTED = {
 const LABEL = BOARD.columnGap - 12;
 
 /**
- * What a way between screens says (10-27 rule for arrows; app-first): the button pressed to go on, drawn as a button
- * with its own words, and 누르면 under it, right under the arrow so the arrow itself stays whole. Its edge takes the
- * arrow's colour.
+ * What a way between screens says (10-27 rule for arrows; app-first), right under the arrow so the arrow stays whole:
+ * the real button pressed to go on, drawn as a button with its own words and 누르면 under it; words that are not a
+ * button the screen has (a step said in a sentence) stand alone. Its edge takes the arrow's colour.
  */
-function ArrowWords({ middle, words, tone }: { middle: Point; words: string; tone: keyof typeof edgeTone }) {
+function ArrowWords({
+  middle,
+  words,
+  tone,
+  pressed,
+}: {
+  middle: Point;
+  words: string;
+  tone: keyof typeof edgeTone;
+  /** The words are a real button's on the screen. */
+  pressed: boolean;
+}) {
   const t = useMessages(messages);
   return (
     <foreignObject x={middle.x - LABEL / 2} y={middle.y + 5} width={LABEL} height={58}>
@@ -424,17 +435,17 @@ function ArrowWords({ middle, words, tone }: { middle: Point; words: string; ton
         <span
           title={words}
           className={clsx(
-            'line-clamp-2 w-fit max-w-full rounded-md border bg-canvas-raised px-2 py-0.5 text-center text-meta leading-4 font-medium break-keep text-fg shadow-card',
-            tone === 'checked'
-              ? 'border-interactive'
+            'line-clamp-2 w-fit max-w-full text-center text-meta leading-4 break-keep',
+            pressed
+              ? 'rounded-md border border-interactive bg-canvas-raised px-2 py-0.5 font-medium text-fg shadow-card'
               : tone === 'missing'
-                ? 'border-dashed border-attention'
-                : 'border-fg-faint',
+                ? 'rounded-md border border-dashed border-attention bg-canvas-raised px-1.5 py-0.5 text-fg'
+                : 'rounded-md bg-canvas px-1 text-fg-muted',
           )}
         >
           {words}
         </span>
-        <span className="text-meta leading-4 text-fg-muted">{t.pressed}</span>
+        {pressed && <span className="text-meta leading-4 text-fg-muted">{t.pressed}</span>}
       </span>
     </foreignObject>
   );
@@ -578,7 +589,8 @@ function BoardArrow({ edge, board, strip }: { edge: BoardEdge; board: BoardLayou
   }
   const row = board.lanes.flatMap((lane) => lane.rows).find((one) => one.y === from.rowY);
   const { path, middle } = route(from, to, start, row ? row.y + row.height : undefined);
-  const words = edge.label || button?.label || '';
+  // The real button's words when there is one, so 누르면 under them is true.
+  const words = button?.label || edge.label || '';
   const label = tone === 'missing' ? t.missingButton(stepTitle(strip.map, edge.to)) : button?.label;
   const proposed = !!strip.map.cards[edge.to]?.tentative;
   return (
@@ -593,7 +605,7 @@ function BoardArrow({ edge, board, strip }: { edge: BoardEdge; board: BoardLayou
         strokeLinejoin="round"
         markerEnd={`url(#board-arrow-${tone})`}
       />
-      {words && <ArrowWords middle={middle} words={words} tone={tone} />}
+      {words && <ArrowWords middle={middle} words={words} tone={tone} pressed={!!button?.label} />}
     </g>
   );
 }
@@ -966,7 +978,7 @@ function SituationArrows({ node, box, board }: { node: BoardNode; box: BoardSitu
               strokeLinejoin="round"
               markerEnd="url(#board-arrow-checked)"
             />
-            {target.label && <ArrowWords middle={middle} words={target.label} tone="checked" />}
+            {target.label && <ArrowWords middle={middle} words={target.label} tone="checked" pressed />}
           </g>
         );
       })}

@@ -31,6 +31,8 @@ Do not ask anything before the map exists. People fix a wrong picture more easil
 - **Steps**: one card per screen they pass through, in order, with `kind: "screen"` and `phase: "planned"`. Five to
   twelve screens in all is usual for a first product. A step that exists only if an open question goes one way gets
   `tentative: true`.
+- **Ways on**: each flow's `edges` say how the person gets from one screen to the next; an edge's `label` is the
+  words on the button they press there ("RSS로 구독하기"), since the board draws it as that button with 누르면 under it.
 - **Situations**: each screen card's `states`, the situations it must handle besides the ordinary one, in the
   person's words: nothing there yet ("아직 글이 없을 때"), sold out or full, an error or no connection, not allowed or
   not signed in, waiting for an answer, a very long name or a hundred items. Two to five for most screens; skip the

@@ -179,7 +179,7 @@ describe('the filmstrip', () => {
     expect(within(await screen.findByRole('dialog')).getByRole('heading', { name: '문자 보내기' })).toBeTruthy();
   });
 
-  it('draws a fork as two arrows with the button pressed on each, and says a way back under its card', async () => {
+  it('draws a fork as two arrows with their words, and says a way back under its card', async () => {
     mount(
       codeMap(
         [
@@ -199,9 +199,9 @@ describe('the filmstrip', () => {
       ),
     );
     await screen.findByRole('region', { name: '빵 미리 예약하기' });
-    // Each arrow's words are the button pressed to go on, with 누르면 under them.
-    for (const words of ['로그인했으면', '안 했으면'])
-      expect(screen.getByText(words).nextElementSibling?.textContent).toBe('누르면');
+    // Words that are no button the screen has (no screen has drawn itself here) stand alone: 누르면 is said only under
+    // a real button's words.
+    for (const words of ['로그인했으면', '안 했으면']) expect(screen.getByText(words).nextElementSibling).toBeNull();
     expect(document.querySelectorAll('svg path[marker-end]')).toHaveLength(3);
     // The way back is a line under the card it leaves, its button and where it goes, which brings that screen into view.
     const back = screen.getByRole('button', { name: '처음으로 누르면 ← 첫 화면' });
