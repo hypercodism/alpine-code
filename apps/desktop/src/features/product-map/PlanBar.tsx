@@ -1,7 +1,7 @@
 import type { RunStoppedItem } from '@alpine/protocol';
 import { Button, LinkButton } from '@alpine/ui/primitives';
 import clsx from 'clsx';
-import { useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 import { HtmlFrame } from '@/shared/components/html-frame';
 import { useMessages } from '@/shared/i18n';
@@ -44,16 +44,10 @@ export interface PlanOpenPromise {
   failed: boolean;
 }
 
-/** The product once built: its screens, its promises and how many hold, what is still open. */
+/** How far the build got: cards built of all. */
 export interface PlanBuilt {
-  checked: number;
-  total: number;
   cards: number;
   done: number;
-  screens: number;
-  open: PlanOpenPromise[];
-  /** What the person needs to try each card that needs something (a sign-in, a password), in plain words. */
-  tries: { cardId: string; card: string; text: string }[];
 }
 
 /** What the person can say to the build's TF from the map, as on its card in the conversation. */
@@ -65,8 +59,8 @@ export const CONNECTION = new Set<RunStoppedItem['reason']>(['signed_out', 'cred
 /**
  * What a planned map says just above its input, from facts only: the question the AI waits on (on the card it
  * changes), that everything is decided (이대로 만들기 itself is in the top bar), what the AI does now while it builds
- * (with 멈추기, and a call to look when it waits for my OK), and once built, the completion card: what was checked,
- * each broken promise with 바로 고치기, the ones to check again with one 다시 확인, and 인터넷에 올리기.
+ * (with 멈추기, and a call to look when it waits for my OK). Once built it says nothing (app-first): what is broken
+ * stands over the app as one red line, and 인터넷에 올리기 is in the top bar.
  */
 export function PlanBar({
   docked = false,
@@ -88,16 +82,11 @@ export function PlanBar({
   onDecideRest,
   onAskOn,
   onDrawOn,
-  onFix,
-  onRecheck,
-  onOpenInApp,
-  onPublish,
   onTeam,
   onContinue,
   onFixConnection,
   onStop,
   onLook,
-  busy = false,
 }: {
   /**
    * Under the conversation beside the map (map-first 43): what the conversation itself shows (the OK it waits on,
@@ -133,14 +122,6 @@ export function PlanBar({
   onAskOn: () => void;
   /** Asks the AI to go on drawing a plan that stopped before its first card. */
   onDrawOn: () => void;
-  /** Asks the AI to fix one promise the built product does not keep, as a request about its card. */
-  onFix: (cardId: string, promiseId: string) => void;
-  /** Asks the AI to check these cards' promises (again). */
-  onRecheck: (cardIds: string[]) => void;
-  /** Opens the running app at a screen; absent where the page cannot, or for a screen without an address. */
-  onOpenInApp?: (cardId: string) => boolean | void;
-  /** Puts the app online (Alpine Cloud); absent when there is nowhere to put it. */
-  onPublish?: (from: HTMLElement) => void;
   onTeam: (answer: PlanTeamAnswer) => void;
   /** Continues a build that stopped with cards left. */
   onContinue: () => void;
@@ -149,8 +130,6 @@ export function PlanBar({
   onStop: () => void;
   /** Shows the conversation at work, where what it waits on is. */
   onLook: () => void;
-  /** The conversation is at work on something new (a fix asked once it was built): the completion card folds. */
-  busy?: boolean;
 }) {
   const t = useMessages(messages);
   if (docked && (phase === 'building' || phase === 'drawing' || thinking)) return null;
@@ -253,145 +232,7 @@ export function PlanBar({
       </Bar>
     );
   }
-  if (phase === 'built')
-    return (
-      <Done
-        key={busy ? 'busy' : 'rest'}
-        built={built}
-        folded={busy}
-        onFix={onFix}
-        onRecheck={onRecheck}
-        onOpenInApp={onOpenInApp}
-        onPublish={onPublish}
-      />
-    );
   return null;
-}
-
-/** Promises the completion card lists one by one; the rest are counted. */
-const OPEN_ROWS = 5;
-
-/**
- * The completion card: it is built, how many screens and how many promises were checked, each broken promise with
- * 바로 고치기, the promises still to be checked (never, or again since what they rest on changed) as one line with one
- * 다시 확인, and 인터넷에 올리기 as its one button (none without Alpine Cloud). Its title says 다 만들었어요 alone only
- * when nothing is broken or waits. The app opens from the top bar.
- */
-function Done({
-  built,
-  folded: startFolded = false,
-  onFix,
-  onRecheck,
-  onOpenInApp,
-  onPublish,
-}: {
-  built: PlanBuilt;
-  /** Starts as one line (new work began after it): the conversation and what it asks stay in view. */
-  folded?: boolean;
-  onFix: (cardId: string, promiseId: string) => void;
-  onRecheck: (cardIds: string[]) => void;
-  onOpenInApp?: (cardId: string) => boolean | void;
-  onPublish?: (from: HTMLElement) => void;
-}) {
-  const t = useMessages(messages);
-  const [folded, setFolded] = useState(startFolded);
-  const broken = built.open.filter((open) => open.failed);
-  const waiting = built.open.filter((open) => !open.failed);
-  const shown = broken.slice(0, OPEN_ROWS);
-  const title = broken.length
-    ? t.builtToFix(broken.length)
-    : waiting.length
-      ? t.builtToRecheck(waiting.length)
-      : t.builtTitle;
-  if (folded)
-    return (
-      <section
-        aria-label={t.builtTitle}
-        className="pointer-events-auto motion-step flex items-center gap-3 rounded-xl border border-line bg-canvas-raised px-4 py-2 shadow-overlay"
-      >
-        <p className="min-w-0 grow truncate text-body text-fg">
-          {title}
-          <span className="text-meta text-fg-muted"> · {t.builtCounts(built.screens, built.total, built.checked)}</span>
-        </p>
-        <LinkButton className="min-h-5 shrink-0 px-0.5" aria-expanded={false} onClick={() => setFolded(false)}>
-          {t.unfold}
-        </LinkButton>
-      </section>
-    );
-  return (
-    <section
-      aria-label={t.builtTitle}
-      className="pointer-events-auto motion-step flex max-h-[40vh] flex-col gap-3 overflow-y-auto rounded-xl border border-line bg-canvas-raised p-4 shadow-overlay"
-    >
-      <div className="flex items-start gap-3">
-        <p className="min-w-0 grow text-reading font-medium text-fg">{title}</p>
-        <LinkButton className="min-h-5 shrink-0 px-0.5" aria-expanded onClick={() => setFolded(true)}>
-          {t.fold}
-        </LinkButton>
-      </div>
-      <div className="-mt-3 flex flex-col">
-        <p className="text-meta text-fg-muted">{t.builtCounts(built.screens, built.total, built.checked)}</p>
-      </div>
-      {built.tries.length > 0 && (
-        <section aria-label={t.howToTry} className="flex flex-col gap-1.5 border-t border-line-subtle pt-3">
-          <p className="text-meta text-fg-muted">{t.howToTry}</p>
-          <p className="text-meta text-fg-muted">{t.situationsOnMap}</p>
-          <ul className="flex flex-col gap-1">
-            {built.tries.map((one) => (
-              <li key={one.cardId} className="text-body text-fg">
-                <span className="text-fg-muted">{one.card} · </span>
-                <span className="whitespace-pre-wrap">{one.text}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-      {shown.length > 0 && (
-        <ul aria-label={t.openPromises} className="flex flex-col gap-3 border-t border-line-subtle pt-3">
-          {shown.map((open) => (
-            <li key={`${open.cardId}/${open.promiseId}`} className="flex flex-col items-start gap-1.5">
-              <p className="flex gap-2 text-body text-fg">
-                <span aria-hidden className="w-3 shrink-0 text-center text-danger">
-                  ✗
-                </span>
-                <span className="min-w-0">
-                  {open.card} · {open.text}
-                  {open.note && <span className="block text-meta text-fg-muted">{open.note}</span>}
-                </span>
-              </p>
-              <span className="ml-5 flex items-center gap-3">
-                <Button onClick={() => onFix(open.cardId, open.promiseId)}>{t.fixNow}</Button>
-                {onOpenInApp && (
-                  <LinkButton className="min-h-5 px-0.5" onClick={() => onOpenInApp(open.cardId)}>
-                    {t.seeInApp}
-                  </LinkButton>
-                )}
-              </span>
-            </li>
-          ))}
-          {broken.length > shown.length && (
-            <li className="ml-5 text-meta text-fg-muted">{t.moreOpen(broken.length - shown.length)}</li>
-          )}
-        </ul>
-      )}
-      {waiting.length > 0 && (
-        <p className="flex items-center gap-3 border-t border-line-subtle pt-3 text-body text-fg">
-          <span className="flex min-w-0 grow gap-2">
-            <span aria-hidden className="w-3 shrink-0 text-center text-fg-faint">
-              ·
-            </span>
-            {t.toRecheck(waiting.length)}
-          </span>
-          <Button onClick={() => onRecheck([...new Set(waiting.map((open) => open.cardId))])}>{t.recheck}</Button>
-        </p>
-      )}
-      {onPublish && (
-        <Button variant="primary" className="w-full" onClick={(event) => onPublish(event.currentTarget)}>
-          {t.publish}
-        </Button>
-      )}
-    </section>
-  );
 }
 
 /** One line of where the plan (or the map's work) stands and the answers to it. */

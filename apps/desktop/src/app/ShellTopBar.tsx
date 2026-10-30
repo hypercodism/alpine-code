@@ -21,18 +21,20 @@ export function renderMapActions(cwd: string): ReactNode {
 }
 
 /**
- * The bar over the map (flow-spec, 화면의 뼈대): room for the traffic lights, the project's name ⌄ (the project menu),
- * the tabs 보드 · 문서 · 앱 · 코드 in the middle (앱 once there is an app to look at), and the map's actions on the
- * right. The bar and its empty parts drag the window; the buttons never do.
+ * The bar over the map (flow-spec, 화면의 뼈대; app-first): room for the traffic lights, the project's name ⌄ (the
+ * project menu), 앱 | 보드 in the middle once there is an app to look at, and the map's actions on the right. The
+ * document and the code are read from ⋯ 더 보기. The bar and its empty parts drag the window; the buttons never do.
  */
 export function MapTopBar({ cwd, hasApp, end }: { cwd: string; hasApp: boolean; end?: ReactNode }) {
+  const view = useProjectView(cwd);
   return (
     <div data-tauri-drag-region className="relative flex h-12 shrink-0 items-center gap-3 pr-6 pl-20">
       <ProjectMenu current={cwd} />
       {/* Where the map stands, beside its name (the main button is on the right). */}
       <MapStatusWord cwd={cwd} />
       <span data-tauri-drag-region className="grow self-stretch" />
-      <ViewSwitch cwd={cwd} hasApp={hasApp} />
+      {/* Without an app there is only the board, until ⋯ opens the document or the code: then the way back. */}
+      {(hasApp || view !== 'map') && <ViewSwitch cwd={cwd} hasApp={hasApp} />}
       <div className="flex shrink-0 items-center gap-3">
         {renderMapActions(cwd)}
         {end}
@@ -41,30 +43,24 @@ export function MapTopBar({ cwd, hasApp, end }: { cwd: string; hasApp: boolean; 
   );
 }
 
-/** 보드 · 문서 · 앱 · 코드: four ways to look at the same project, on the left of its window. */
+/**
+ * 앱 | 보드: the app the project makes, and the board of all its screens. While the document or the code shows,
+ * neither is pressed, and either leads back.
+ */
 function ViewSwitch({ cwd, hasApp }: { cwd: string; hasApp: boolean }) {
   const t = useMessages(shellMessages);
-  const shown = useProjectView(cwd);
-  // Without an app to look at, its tab is not there; a view left on it shows the board.
-  const view = shown === 'app' && !hasApp ? 'map' : shown;
+  const view = useProjectView(cwd);
   const item = (on: boolean) =>
     clsx(
-      'flex h-7 cursor-pointer items-center gap-1.5 rounded-md px-4 text-body',
+      'flex h-7 cursor-pointer items-center rounded-md px-5 text-body',
       on ? 'bg-canvas-raised font-medium text-fg shadow-overlay' : 'text-fg-muted hover:text-fg',
     );
-  const tab = (id: 'map' | 'doc' | 'code') => (
-    <button type="button" aria-pressed={view === id} onClick={() => showView(cwd, id)} className={item(view === id)}>
-      {t[id]}
-    </button>
-  );
   return (
     <div
       role="group"
       aria-label={t.viewSwitch}
       className="absolute top-2 left-1/2 flex -translate-x-1/2 gap-0.5 rounded-lg bg-hover p-0.5"
     >
-      {tab('map')}
-      {tab('doc')}
       {hasApp && (
         <button
           type="button"
@@ -72,11 +68,17 @@ function ViewSwitch({ cwd, hasApp }: { cwd: string; hasApp: boolean }) {
           onClick={() => showApp(cwd)}
           className={item(view === 'app')}
         >
-          <span aria-hidden="true" className="size-1.5 rounded-full bg-interactive" />
           {t.app}
         </button>
       )}
-      {tab('code')}
+      <button
+        type="button"
+        aria-pressed={view === 'map'}
+        onClick={() => showView(cwd, 'map')}
+        className={item(view === 'map')}
+      >
+        {t.map}
+      </button>
     </div>
   );
 }

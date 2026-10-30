@@ -1,8 +1,8 @@
-import { Button, LinkButton } from '@alpine/ui/primitives';
+import { Button, Menu } from '@alpine/ui/primitives';
 import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
-import { Monitor, Smartphone } from 'lucide-react';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Monitor, RotateCw, Smartphone } from 'lucide-react';
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 
 import { useMessages } from '@/shared/i18n';
 import { openInBrowser } from '@/shared/platform';
@@ -14,7 +14,7 @@ import {
 } from '@/shared/server/devServers';
 
 import { messages } from './messages';
-import { setAppSize, settleAppCard, useAppSize, type AppSize } from './state';
+import { seeAppScreen, setAppSize, settleAppCard, useAppSize, useAppViewState, type AppSize } from './state';
 
 /** A promise of a screen, as the side strip lists it: kept (✓), broken (✗, with why) or not checked yet. */
 export interface AppPromise {
@@ -75,14 +75,6 @@ const FIX_LOG = 4000;
 // eslint-disable-next-line no-control-regex -- the escape character is what it looks for
 const stripAnsi = (text: string) => text.replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '');
 
-const avatars = [
-  'bg-avatar-1 text-avatar-1-ink',
-  'bg-avatar-2 text-avatar-2-ink',
-  'bg-avatar-3 text-avatar-3-ink',
-  'bg-avatar-4 text-avatar-4-ink',
-  'bg-avatar-5 text-avatar-5-ink',
-];
-
 /**
  * The page address of a screen in the running app, in a situation when one is given (`?alpine-state=`, which the apps
  * read). Only a web address takes a path; anything else stays itself.
@@ -99,10 +91,11 @@ export function screenUrl(base: string, path: string | null, state: string | nul
 }
 
 /**
- * The 앱 view (flow-spec 4.2-4.4): Alpine starts the project's app itself and shows it large, in a browser frame or a
- * phone frame, with a strip beside it holding the screen on view (its person, device, journey and promises) and every
- * other screen of the map, grouped by person and journey; pressing one takes the app to that screen's address. When
- * the app will not open, the AI can be asked to fix it; a phone app (an Expo project) says how to see it on a phone.
+ * The 앱 view (flow-spec 4.2-4.4, app-first): Alpine starts the project's app itself and shows it large, the way a
+ * person uses it, with a bar of its own over it: back, forward, again, the name of the screen on view (pressed, every
+ * screen of the map, to go to one) and the size. Over that, only while the app breaks a promise, one red line and
+ * a button that hands it to the AI. When the app will not open, the AI can be asked to fix it; a phone app (an Expo
+ * project) says how to see it on a phone.
  */
 export function AppView({
   cwd,
@@ -111,6 +104,7 @@ export function AppView({
   cardId,
   onPick,
   onAskFix,
+  onAskFixBroken,
   onAskSetup,
   onShowTerminal,
   reload = 0,
@@ -124,6 +118,8 @@ export function AppView({
   onPick: (cardId: string) => void;
   /** Hands the AI what went wrong when the app would not open. */
   onAskFix: (failure: OpenFailure) => void;
+  /** Hands the AI the promises the app breaks. */
+  onAskFixBroken: (broken: BrokenPromise[]) => void;
   /** Asks the AI to make a project that nothing says how to run open the way Alpine opens apps. */
   onAskSetup: () => void;
   /** Opens the terminal beside it (where a phone app is started). */
@@ -159,14 +155,28 @@ export function AppView({
   }, [cwd, settled]);
   const picked = useAppSize(cwd);
   const size: AppSize = picked ?? shown?.journey.device ?? 'computer';
-  // The situation picked belongs to the screen it was picked on; another screen starts in its ordinary one.
-  const [pickedSituation, setSituation] = useState<{ screen: string; id: string } | null>(null);
-  const situation =
-    pickedSituation?.screen === shown?.screen.id &&
-    shown?.screen.situations?.some((one) => one.id === pickedSituation?.id)
-      ? pickedSituation!.id
-      : null;
-  const url = app.url ? screenUrl(app.url, shown?.screen.path ?? null, situation) : null;
+  const url = app.url ? screenUrl(app.url, shown?.screen.path ?? null) : null;
+  // The same page straight from the app's server, for a real browser.
+  const direct = app.direct ? screenUrl(app.direct, shown?.screen.path ?? null) : '';
+  const frame = useRef<HTMLIFrameElement>(null);
+  const [reloaded, setReloaded] = useState(0);
+  const at = useAppViewState((state) => state.at[cwd] ?? null);
+  // The bridge in the page says which screen it is on as the person moves inside the app (by its card id, else by its
+  // address), so the bar names it and words sent from the conversation are about it.
+  useEffect(() => {
+    const listen = (event: MessageEvent) => {
+      if (!frame.current || event.source !== frame.current.contentWindow || event.data?.type !== 'alpine:layout')
+        return;
+      const href = typeof event.data.href === 'string' ? event.data.href.split('?')[0] : '';
+      const card =
+        screens.find((entry) => entry.screen.id === event.data.screen)?.screen.id ??
+        screens.find((entry) => !!href && entry.screen.path === href)?.screen.id ??
+        null;
+      seeAppScreen(cwd, card);
+    };
+    addEventListener('message', listen);
+    return () => removeEventListener('message', listen);
+  }, [cwd, screens]);
 
   if (mobile.data)
     return (
@@ -233,73 +243,89 @@ export function AppView({
       </Centre>
     );
 
+  // The screen the app says it is on (after moving inside it), else the one it was taken to.
+  const onScreen = screens.find((entry) => entry.screen.id === at)?.screen ?? shown?.screen;
+  const go = (step: -1 | 1) => frame.current?.contentWindow?.postMessage({ type: 'alpine:history', step }, '*');
+
   return (
-    <section aria-label={t.title} className="flex min-h-0 min-w-0 grow flex-col overflow-clip">
-      <div className="flex h-10 shrink-0 items-center gap-2.5 px-6 text-meta text-fg-muted">
-        <span aria-hidden="true" className="size-1.5 rounded-full bg-interactive" />
-        <span role="status">{t.running}</span>
-        <LinkButton className="min-h-5 px-0.5 text-meta" title={t.framedHint} onClick={() => void openInBrowser(url)}>
-          {t.openInBrowser}
-        </LinkButton>
-        <div role="group" aria-label={t.sizeLabel} className="ml-auto flex gap-0.5 rounded-lg bg-hover p-0.5">
-          <SizeButton on={size === 'phone'} onClick={() => setAppSize(cwd, 'phone')} icon={<Smartphone size={13} />}>
-            {t.phoneSize}
-          </SizeButton>
-          <SizeButton on={size === 'computer'} onClick={() => setAppSize(cwd, 'computer')} icon={<Monitor size={13} />}>
-            {t.computerSize}
-          </SizeButton>
-        </div>
-      </div>
-      <div className="flex min-h-0 grow gap-6 px-6 pb-6">
-        <div className="flex min-w-0 grow items-start justify-center">
+    <section aria-label={t.title} className="flex min-h-0 min-w-0 grow flex-col overflow-clip px-6 pt-3 pb-6">
+      {/* What is broken stands over the app, never on it: the app below moves down and stays whole. */}
+      <BrokenBar people={people} onPick={onPick} onAskFix={onAskFixBroken} />
+      <div className="flex min-h-0 grow flex-col items-center">
+        <div
+          className={clsx(
+            'flex min-h-0 flex-col overflow-clip rounded-xl border border-line bg-canvas-raised shadow-overlay',
+            size === 'phone' ? 'app-phone-frame h-full max-h-200 w-full max-w-104' : 'size-full',
+          )}
+        >
+          <div className="flex h-10 shrink-0 items-center gap-1 border-b border-line-subtle px-2 text-fg-muted">
+            <ToolButton label={t.back} onClick={() => go(-1)}>
+              <ChevronLeft size={16} />
+            </ToolButton>
+            <ToolButton label={t.forward} onClick={() => go(1)}>
+              <ChevronRight size={16} />
+            </ToolButton>
+            <ToolButton label={t.reload} onClick={() => setReloaded((n) => n + 1)}>
+              <RotateCw size={14} />
+            </ToolButton>
+            <ScreenMenu people={people} current={onScreen ?? null} onPick={onPick} />
+            {size !== 'phone' && (
+              <ToolButton label={t.openInBrowser} title={t.framedHint} onClick={() => void openInBrowser(direct)}>
+                <ExternalLink size={14} />
+              </ToolButton>
+            )}
+            <div role="group" aria-label={t.sizeLabel} className="flex gap-0.5 rounded-lg bg-hover p-0.5">
+              <SizeButton label={t.phoneSize} on={size === 'phone'} onClick={() => setAppSize(cwd, 'phone')}>
+                <Smartphone size={13} />
+              </SizeButton>
+              <SizeButton label={t.computerSize} on={size === 'computer'} onClick={() => setAppSize(cwd, 'computer')}>
+                <Monitor size={13} />
+              </SizeButton>
+            </div>
+          </div>
           {size === 'phone' ? (
-            <div className="app-phone-frame flex aspect-1/2 h-full max-h-186 shrink-0 border border-line bg-canvas-raised p-2.5 shadow-overlay">
-              <iframe
-                key={`${app.serverId}:${reload}`}
-                src={url}
-                title={t.frameTitle(name)}
-                sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-                className="app-phone-screen size-full bg-canvas-raised"
-              />
-            </div>
+            <iframe
+              ref={frame}
+              key={`${app.serverId}:${reload}:${reloaded}`}
+              name={APP_FRAME}
+              src={url}
+              title={t.frameTitle(name)}
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+              className="app-phone-screen min-h-0 w-full grow bg-canvas-raised"
+            />
           ) : (
-            <div className="flex size-full flex-col overflow-clip rounded-xl border border-line bg-canvas-raised shadow-overlay">
-              <div className="flex h-9 shrink-0 items-center gap-2 border-b border-line-subtle bg-canvas-sunken px-3.5">
-                <span aria-hidden="true" className="size-2.5 rounded-full bg-line" />
-                <span aria-hidden="true" className="size-2.5 rounded-full bg-line" />
-                <span aria-hidden="true" className="size-2.5 rounded-full bg-line" />
-                <span
-                  title={url}
-                  className="mx-auto max-w-[60%] truncate rounded-md border border-line-subtle bg-canvas-raised px-4 text-meta text-fg-faint"
-                >
-                  {shown ? `${name} · ${t.screenOf(shown.person.name)}` : name}
-                </span>
-              </div>
-              <ComputerScreen key={`${app.serverId}:${reload}`} src={url} title={t.frameTitle(name)} />
-            </div>
+            <ComputerScreen
+              key={`${app.serverId}:${reload}:${reloaded}`}
+              frame={frame}
+              src={url}
+              title={t.frameTitle(name)}
+            />
           )}
         </div>
-        <ScreenStrip
-          people={people}
-          shown={shown}
-          cardId={cardId}
-          onPick={onPick}
-          situation={situation}
-          onSituation={(id) => shown && setSituation(id ? { screen: shown.screen.id, id } : null)}
-        />
       </div>
     </section>
   );
 }
 
-/** A computer's page width: the app draws its computer layout at it, and the frame is scaled to fit beside the strip. */
+/** The frame's name: the bridge in a page named so lets the app be used for real (relay_bridge.js). */
+const APP_FRAME = 'alpine-app';
+
+/** A computer's page width: the app draws its computer layout at it, and the frame is scaled to fit the room. */
 export const COMPUTER_WIDTH = 1280;
 
 /**
- * The app at a computer's width (dogfood 16: in the room beside the strip it was about 520 px wide and drew its narrow
- * layout): the page is 1280 wide, scaled down to the room there is, never up.
+ * The app at a computer's width (dogfood 16: in a narrow room it drew its narrow layout): the page is 1280 wide,
+ * scaled down to the room there is, never up.
  */
-function ComputerScreen({ src, title }: { src: string; title: string }) {
+function ComputerScreen({
+  src,
+  title,
+  frame,
+}: {
+  src: string;
+  title: string;
+  frame: RefObject<HTMLIFrameElement | null>;
+}) {
   const box = useRef<HTMLDivElement>(null);
   const [room, setRoom] = useState({ width: 0, height: 0 });
   useEffect(() => {
@@ -316,6 +342,8 @@ function ComputerScreen({ src, title }: { src: string; title: string }) {
   return (
     <div ref={box} className="relative min-h-0 grow overflow-clip bg-canvas-raised">
       <iframe
+        ref={frame}
+        name={APP_FRAME}
         src={src}
         title={title}
         sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
@@ -342,209 +370,160 @@ function Centre({ children }: { children: ReactNode }) {
   );
 }
 
-function SizeButton({
-  on,
+function ToolButton({
+  label,
+  title,
   onClick,
-  icon,
   children,
 }: {
-  on: boolean;
+  label: string;
+  title?: string;
   onClick: () => void;
-  icon: ReactNode;
   children: ReactNode;
 }) {
   return (
     <button
       type="button"
-      aria-pressed={on}
+      aria-label={label}
+      title={title ?? label}
       onClick={onClick}
-      className={clsx(
-        'flex h-6 cursor-pointer items-center gap-1.5 rounded-md px-2.5 text-meta',
-        on ? 'bg-canvas-raised font-medium text-fg shadow-overlay' : 'text-fg-muted hover:text-fg',
-      )}
+      className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-md hover:bg-hover hover:text-fg"
     >
-      <span aria-hidden="true">{icon}</span>
-      {children}
+      <span aria-hidden="true">{children}</span>
     </button>
   );
 }
 
-function SituationButton({ on, onClick, children }: { on: boolean; onClick: () => void; children: ReactNode }) {
+function SizeButton({
+  label,
+  on,
+  onClick,
+  children,
+}: {
+  label: string;
+  on: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
   return (
     <button
       type="button"
+      aria-label={label}
+      title={label}
       aria-pressed={on}
       onClick={onClick}
       className={clsx(
-        'min-h-6 cursor-pointer rounded-md px-2 py-0.5 text-left text-meta',
-        on ? 'bg-selected font-medium text-fg' : 'bg-hover text-fg-muted hover:text-fg',
+        'grid h-6 w-7 cursor-pointer place-items-center rounded-md',
+        on ? 'bg-canvas-raised text-fg shadow-overlay' : 'text-fg-muted hover:text-fg',
       )}
     >
-      {children}
+      <span aria-hidden="true">{children}</span>
     </button>
   );
 }
 
-/** The strip beside the app: the screen on view, then every other screen, grouped by person and journey. */
-function ScreenStrip({
+/**
+ * Where the address bar would be: the name of the screen on view, as the board names it. Pressed, it lists every
+ * screen by journey; picking one takes the app there.
+ */
+function ScreenMenu({
   people,
-  shown,
-  cardId,
+  current,
   onPick,
-  situation,
-  onSituation,
 }: {
   people: AppPerson[];
-  shown: { screen: AppScreen; person: AppPerson; journey: AppJourney } | undefined;
-  cardId: string | null;
+  current: AppScreen | null;
   onPick: (cardId: string) => void;
-  /** The situation the app is shown in; null is the ordinary one. */
-  situation: string | null;
-  onSituation: (id: string | null) => void;
 }) {
   const t = useMessages(messages);
-  const deviceWord = (device: AppSize | null) => (device === 'computer' ? t.computer : t.phone);
-  const failed = shown?.screen.promises.filter((promise) => promise.status === 'failed').length ?? 0;
+  const journeys = people.flatMap((person) => person.journeys);
   return (
-    <aside aria-label={t.nowViewing} className="flex w-63 shrink-0 flex-col overflow-y-auto pt-1.5">
-      <p className="text-meta text-fg-muted">{t.nowViewing}</p>
-      <h2 className="mt-1 mb-0.5 text-display font-medium">{shown?.screen.title ?? t.firstPage}</h2>
-      {shown ? (
-        <>
-          <p className="flex items-center gap-1.5 text-meta text-fg-muted">
-            <Avatar name={shown.person.name} tone={shown.person.tone} small />
-            {shown.person.name} · {deviceWord(shown.journey.device)} · {shown.journey.title}
-          </p>
-          {!shown.screen.path && <p className="mt-2 text-meta text-fg-muted">{t.noPath}</p>}
-          {failed > 0 ? (
-            <p className="mt-2 flex items-center gap-1.5 text-meta text-danger">
-              <span aria-hidden="true" className="size-1.5 rounded-full bg-danger" />
-              {t.toFix(failed)}
-            </p>
-          ) : (
-            shown.screen.real && (
-              <p className="mt-2 flex items-center gap-1.5 text-meta text-fg-muted">
-                <span aria-hidden="true" className="size-1.5 rounded-full bg-interactive" />
-                {t.real}
-              </p>
-            )
-          )}
-          {!!shown.screen.situations?.length && (
-            <div role="group" aria-label={t.situations} className="mt-3 flex flex-col gap-1">
-              <p className="text-meta text-fg-muted">{t.situations}</p>
-              <div className="flex flex-wrap gap-1">
-                <SituationButton on={situation === null} onClick={() => onSituation(null)}>
-                  {t.usual}
-                </SituationButton>
-                {shown.screen.situations.map((item) => (
-                  <SituationButton key={item.id} on={situation === item.id} onClick={() => onSituation(item.id)}>
-                    {item.title}
-                  </SituationButton>
-                ))}
-              </div>
-            </div>
-          )}
-          <ul aria-label={shown.screen.title} className="mt-3 flex flex-col gap-1.5">
-            {shown.screen.promises.map((promise) => (
-              <li
-                key={promise.id}
-                className={clsx('flex gap-1.5 text-body', promise.status === 'failed' ? 'text-fg' : 'text-fg-muted')}
-              >
-                <span
-                  aria-hidden="true"
-                  className={clsx(
-                    'w-3 shrink-0 text-center',
-                    promise.status === 'failed'
-                      ? 'text-danger'
-                      : promise.status === 'passed'
-                        ? 'text-interactive'
-                        : 'text-fg-faint',
-                  )}
-                >
-                  {promise.status === 'failed' ? '✗' : promise.status === 'passed' ? '✓' : '○'}
-                </span>
-                <span>
-                  {promise.text}
-                  {promise.status === 'failed' && promise.note && (
-                    <span className="mt-0.5 block text-meta text-fg-muted">{promise.note}</span>
-                  )}
-                </span>
-              </li>
+    <Menu.Root>
+      <Menu.Trigger
+        aria-label={t.screenMenu}
+        className="mx-1 flex h-7 min-w-0 grow cursor-pointer items-center justify-center gap-1.5 rounded-md bg-canvas-sunken px-3 text-meta text-fg outline-none hover:bg-hover focus-visible:ring-2 focus-visible:ring-interactive data-popup-open:bg-hover"
+      >
+        <span className="truncate">{current?.title ?? t.firstPage}</span>
+        <ChevronDown size={13} aria-hidden="true" className="shrink-0 text-fg-faint" />
+      </Menu.Trigger>
+      <Menu.Popup align="center" className="max-h-[70vh] overflow-y-auto">
+        {journeys.map((journey, index) => (
+          <Menu.Group key={journey.id}>
+            {index > 0 && <Menu.Separator />}
+            <Menu.GroupLabel>{journey.title}</Menu.GroupLabel>
+            {journey.screens.map((screen) => (
+              <Menu.Item key={`${journey.id}:${screen.id}`} onClick={() => onPick(screen.id)}>
+                <span className={clsx('grow', screen.id === current?.id && 'text-interactive')}>{screen.title}</span>
+              </Menu.Item>
             ))}
-          </ul>
-          {shown.screen.howToTry.trim() && (
-            <section aria-label={t.howToTry} className="mt-4 flex flex-col gap-1 rounded-lg bg-canvas-sunken px-3 py-2">
-              <p className="text-meta text-fg-muted">{t.howToTry}</p>
-              <p className="text-body whitespace-pre-wrap text-fg">{shown.screen.howToTry.trim()}</p>
-            </section>
-          )}
-        </>
-      ) : (
-        <p className="text-meta text-fg-muted">{t.firstPageHint}</p>
-      )}
-      <hr className="mt-5 mb-3.5 border-line" />
-      <p className="mb-2 text-meta text-fg-muted">{t.others}</p>
-      {people.map((person) => (
-        <div key={person.id} className="mb-3.5">
-          <p className="mb-1 flex items-center gap-1.5 text-meta text-fg">
-            <Avatar name={person.name} tone={person.tone} />
-            {person.name}
-            {personDevice(person) && <span className="text-fg-faint">· {deviceWord(personDevice(person)!)}</span>}
-          </p>
-          {person.journeys.map((journey) => (
-            <div key={journey.id}>
-              <p className="mt-1.5 mb-0.5 ml-7 text-meta text-fg-faint">{journey.title}</p>
-              {journey.screens.map((screen) => {
-                const broken = screen.promises.filter((promise) => promise.status === 'failed').length;
-                const on = shown?.screen.id === screen.id && (cardId === screen.id || cardId === null);
-                return (
-                  <button
-                    key={`${journey.id}:${screen.id}`}
-                    type="button"
-                    aria-current={on ? 'page' : undefined}
-                    onClick={() => onPick(screen.id)}
-                    className={clsx(
-                      'flex h-7 w-full cursor-pointer items-center gap-2 rounded-md pr-2 pl-7 text-left text-body',
-                      on ? 'bg-selected font-medium text-fg' : 'text-fg-muted hover:bg-hover',
-                    )}
-                  >
-                    <span
-                      aria-hidden="true"
-                      className={clsx('size-1.5 shrink-0 rounded-full', broken ? 'bg-danger' : 'bg-interactive')}
-                    />
-                    <span className="min-w-0 truncate">{screen.title}</span>
-                    {broken > 0 && (
-                      <span className="ml-auto shrink-0 text-meta font-normal text-danger">{t.toFix(broken)}</span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          ))}
-        </div>
-      ))}
-    </aside>
+          </Menu.Group>
+        ))}
+      </Menu.Popup>
+    </Menu.Root>
   );
 }
 
-/** The device a person's journeys share, or null when they differ (each journey then says its own). */
-function personDevice(person: AppPerson): AppSize | null {
-  const devices = new Set(person.journeys.map((journey) => journey.device ?? 'phone'));
-  return devices.size === 1 ? [...devices][0]! : null;
+/** A promise the app does not keep, with the screen it belongs to. */
+export interface BrokenPromise {
+  screen: AppScreen;
+  promise: AppPromise;
 }
 
-function Avatar({ name, tone, small = false }: { name: string; tone: number; small?: boolean }) {
+/** Every promise the app breaks, once each (a screen in two journeys is listed twice). */
+export function brokenPromises(people: AppPerson[]): BrokenPromise[] {
+  const seen = new Set<string>();
+  return people.flatMap((person) =>
+    person.journeys.flatMap((journey) =>
+      journey.screens.flatMap((screen) =>
+        screen.promises
+          .filter((promise) => promise.status === 'failed')
+          .filter((promise) => {
+            const key = `${screen.id}:${promise.id}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          })
+          .map((promise) => ({ screen, promise })),
+      ),
+    ),
+  );
+}
+
+/**
+ * The one red line over the app, shown only while the app breaks a promise: what does not work, in the promise's own
+ * words, and one button that hands it to the AI. The words take the app to that screen.
+ */
+function BrokenBar({
+  people,
+  onPick,
+  onAskFix,
+}: {
+  people: AppPerson[];
+  onPick: (cardId: string) => void;
+  onAskFix: (broken: BrokenPromise[]) => void;
+}) {
+  const t = useMessages(messages);
+  const broken = brokenPromises(people);
+  const first = broken[0];
+  if (!first) return null;
   return (
-    <span
-      aria-hidden="true"
-      className={clsx(
-        'grid shrink-0 place-items-center rounded-full text-meta font-medium',
-        small ? 'size-4.5' : 'size-5.5',
-        avatars[(tone - 1 + avatars.length) % avatars.length],
-      )}
+    <div
+      role="alert"
+      className="mb-3 flex min-h-12 shrink-0 items-center gap-3 rounded-xl border border-danger/30 bg-danger/8 px-4 py-2 text-body text-danger"
     >
-      {[...name][0] ?? ''}
-    </span>
+      <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-danger" />
+      <button
+        type="button"
+        onClick={() => onPick(first.screen.id)}
+        className="min-w-0 grow cursor-pointer truncate text-left hover:underline"
+      >
+        {t.notWorking(first.screen.title, first.promise.text)}
+        {broken.length > 1 && <span className="ml-2 text-meta">{t.andMore(broken.length - 1)}</span>}
+      </button>
+      <Button variant="danger" onClick={() => onAskFix(broken)}>
+        {t.askFixBroken}
+      </Button>
+    </div>
   );
 }
 
@@ -586,7 +565,10 @@ function useRunningApp(cwd: string, enabled: boolean) {
             : 'stopped';
   return {
     state,
-    url: state === 'running' ? (current?.url ?? null) : null,
+    // Through Alpine's relay, whose bridge says which screen is on view and moves back and forward; the server's
+    // own address when there is no relay.
+    url: state === 'running' ? (current?.boardUrl ?? current?.url ?? null) : null,
+    direct: state === 'running' ? (current?.url ?? null) : null,
     serverId: current?.id ?? '',
     open,
     failure: (): OpenFailure => ({

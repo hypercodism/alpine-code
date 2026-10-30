@@ -430,29 +430,25 @@ describe('the top row', () => {
     expect(dimmed(await stepCard('주문 결과 받기'))).toBe(false);
     expect(dimmed(await stepCard('장바구니'))).toBe(true);
   });
-  it('a choice of what to look at lights its screens and lets go when pressed again; one at a time', async () => {
+  it('a choice of what to look at lights the broken screens and lets go when pressed again; waiting is no choice', async () => {
     mount();
     await loaded();
     const all = screen.getByRole('button', { name: '모두' });
-    const again = screen.getByRole('button', { name: '다시 확인할 화면 1' });
     const failed = screen.getByRole('button', { name: '깨진 화면 1' });
-    // A promise waiting or broken is its own choice, not a change.
+    // A promise waiting for a check again is nothing wrong: it is not a choice, nor a change.
+    expect(screen.queryByRole('button', { name: /^다시 확인할 화면/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /^바뀐 화면 \d/ })).toBeNull();
     expect(all.getAttribute('aria-pressed')).toBe('true');
-    expect(again.getAttribute('aria-pressed')).toBe('false');
-    fireEvent.click(again);
-    expect(again.getAttribute('aria-pressed')).toBe('true');
-    expect(dimmed(await stepCard('회원 주문'))).toBe(false);
-    const quiet = await stepCard('주문 요청');
+    expect(failed.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(failed);
+    expect(failed.getAttribute('aria-pressed')).toBe('true');
+    expect(all.getAttribute('aria-pressed')).toBe('false');
+    expect(stepCards('결제').every((card) => !dimmed(card))).toBe(true);
+    const quiet = await stepCard('주문 결과 받기');
     expect(dimmed(quiet)).toBe(true);
     // Quieted cards stay focusable buttons.
     quiet.focus();
     expect(globalThis.document.activeElement).toBe(quiet);
-    fireEvent.click(failed);
-    expect(failed.getAttribute('aria-pressed')).toBe('true');
-    expect(again.getAttribute('aria-pressed')).toBe('false');
-    expect(stepCards('결제').every((card) => !dimmed(card))).toBe(true);
-    expect(dimmed(await stepCard('주문 결과 받기'))).toBe(true);
     fireEvent.click(failed);
     expect(failed.getAttribute('aria-pressed')).toBe('false');
     expect(all.getAttribute('aria-pressed')).toBe('true');

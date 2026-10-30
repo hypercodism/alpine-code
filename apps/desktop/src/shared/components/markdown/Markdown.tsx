@@ -1,4 +1,4 @@
-import { memo, type ElementType, type HTMLAttributes, type ReactNode } from 'react';
+import { createContext, memo, useContext, type ElementType, type HTMLAttributes, type ReactNode } from 'react';
 import {
   defaultRehypePlugins,
   defaultRemarkPlugins,
@@ -27,8 +27,30 @@ const remarkPlugins = [...Object.values(defaultRemarkPlugins), remarkCjkStrong];
 /** Links we open: web pages and mail, always in the default browser, never inside the app. */
 const OPENABLE = /^(https?:|mailto:)/i;
 
+/** A link to a screen of the product map, as the AI writes it (`[RSS 화면](#screen:rss)`): its card id. */
+const SCREEN = /^#screen:(.+)$/;
+
+/**
+ * What opening a screen does where the reply is read (a project's window opens the app at it). Without one, a link to
+ * a screen is plain text.
+ */
+const ScreenLinks = createContext<((cardId: string) => void) | null>(null);
+export const ScreenLinksProvider = ScreenLinks.Provider;
+
 function Link({ href, children }: { href: string | undefined; children: ReactNode }) {
   const navigation = useFileNavigation();
+  const openScreen = useContext(ScreenLinks);
+  const screen = href ? SCREEN.exec(href)?.[1] : undefined;
+  if (screen && openScreen)
+    return (
+      <button
+        type="button"
+        onClick={() => openScreen(decodeURIComponent(screen))}
+        className="cursor-pointer font-medium text-interactive underline decoration-line underline-offset-2 hover:decoration-interactive"
+      >
+        {children} →
+      </button>
+    );
   if (href && navigation && parseFileLocation(href)) return <FileReference value={href}>{children}</FileReference>;
   if (!href || !OPENABLE.test(href)) return <span>{children}</span>;
   return (

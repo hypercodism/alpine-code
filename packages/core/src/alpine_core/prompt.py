@@ -85,6 +85,12 @@ def build_system_prompt(cwd: Path, memory: str = "", instructions: str = "", ski
             "Do not remove a failing promise without rechecking. "
             "Never fabricate screenshots, implementation, or check results. "
             "Write every text on the map in the user's language (Korean when they write Korean). "
+            "A flow's title is one sentence of what its person can do, said as a fact and starting with them "
+            "(\"처음 찾아온 방문자는 팀을 알아보고 다음 기록을 구독할 수 있다.\"); when you touch a flow whose title "
+            "is not one yet, rewrite it so. "
+            "When you change what a screen shows or does, say what changed in a sentence or two and end with a "
+            "link to that screen, written [<its title, in their language>](#screen:<card id>): the person "
+            "presses it and the app opens at that screen. "
             "Alpine refuses a map file it could not read as you write it; `map_check` checks them all."
         )
     if instructions.strip():

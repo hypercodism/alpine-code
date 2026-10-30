@@ -77,11 +77,14 @@ export interface BoardLayout {
 /** The sizes the board is drawn at. */
 export const BOARD = {
   pad: 28,
-  laneHeader: 64,
+  /** The person's line, then room for the first journey's sentence (ROW_HEAD in Filmstrip). */
+  laneHeader: 80,
   lanePad: 22,
   laneGap: 24,
-  rowGap: 34,
-  columnGap: 136,
+  /** Between two journeys of a person: the next journey's sentence stands in it. */
+  rowGap: 52,
+  /** Between two screens: the arrow, and under it the button pressed to go on. */
+  columnGap: 168,
   title: 24,
   caption: 96,
   /** A situation's screen, as large as its screen and right under it; its name over it, a way back under it. */

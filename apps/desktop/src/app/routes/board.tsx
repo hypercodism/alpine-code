@@ -3,7 +3,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { useQueryClient } from '@tanstack/react-query';
 import { Database, FileText, Globe, ListChecks, MessageSquare, SquareTerminal } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useState, type ReactNode } from 'react';
 
 import { useAppPeople, useHasApp } from '@/app/appScreens';
 import { shellMessages } from '@/app/shellMessages';
@@ -13,7 +13,16 @@ import { UpdateButton } from '@/app/UpdateButton';
 import { ToolRail, type RailPlace } from '@/app/ToolRail';
 import { DataPlace, SUMMARY_TAB } from '@/app/WorkspaceDock';
 import { AppView } from '@/features/app-view/AppView';
-import { showApp, showMap, showView, useAppCard, useLookingAt, useProjectView } from '@/features/app-view/state';
+import { messages as appMessages } from '@/features/app-view/messages';
+import {
+  setHasApp,
+  showApp,
+  showMap,
+  showView,
+  useAppCard,
+  useLookingAt,
+  useProjectView,
+} from '@/features/app-view/state';
 import { DeployLogs } from '@/features/deploy-logs/DeployLogs';
 import { messages as serverMessages } from '@/features/development-servers/messages';
 import { messages as dockMessages } from '@/features/dock/messages';
@@ -33,6 +42,7 @@ import { Session } from '@/features/session/Session';
 import { WaitingApprovals } from '@/features/session/WaitingApprovals';
 import { useTaskForceTab } from '@/features/taskforce/useTaskForceTab';
 import { Terminal } from '@/features/terminal';
+import { ScreenLinksProvider } from '@/shared/components/markdown';
 import { FileNavigationProvider } from '@/shared/files';
 import { useMessages } from '@/shared/i18n';
 import { openMemory, openSettings } from '@/shared/navigation';
@@ -84,6 +94,7 @@ function BoardRoute() {
   const m = useMessages(mapMessages);
   const s = useMessages(shellMessages);
   const servers = useMessages(serverMessages);
+  const appWords = useMessages(appMessages);
   const attachedHere = !!session && !!attached.data && attached.data.info.cwd === chosen && !attached.data.deleted;
   // The conversation's AI 팀 (a TF), opened from its card in the conversation's place, with the way back.
   const team = useTaskForceTab(attachedHere ? session : null, renderRecord);
@@ -97,6 +108,10 @@ function BoardRoute() {
   const unbuilt = !!board?.planned && planPhase(board, false, false) !== 'built';
   const publishable = usePublishable(cwd, cloud && !!project && !unbuilt);
   const hasApp = useHasApp(cwd);
+  // A project with an app opens on it (app-first); told before the first paint, so the board does not flash first.
+  useLayoutEffect(() => {
+    if (cwd) setHasApp(cwd, hasApp);
+  }, [cwd, hasApp]);
   const view = useProjectView(cwd);
   const showingApp = view === 'app' && hasApp;
   // The code tab covers the map like the app does; the document is the map itself, read another way.
@@ -246,183 +261,195 @@ function BoardRoute() {
   return (
     // A file opened anywhere in the window (a link in the conversation) shows in the 코드 tab.
     <FileNavigationProvider key={cwd} cwd={cwd} onOpen={() => showView(cwd, 'code')}>
-      {/* Neither side ever scrolls as a whole (overflow: clip): the bar over the map and the conversation's header
+      {/* A screen the AI links to in its reply (`#screen:<card id>`) opens in the app. */}
+      <ScreenLinksProvider value={openInApp}>
+        {/* Neither side ever scrolls as a whole (overflow: clip): the bar over the map and the conversation's header
           stay, whatever inside them is brought into view. */}
-      <div className="flex min-h-0 min-w-0 grow overflow-clip">
-        <section className="flex min-h-0 min-w-0 grow flex-col overflow-clip">
-          <MapTopBar
-            cwd={cwd}
-            hasApp={hasApp}
-            end={
-              <>
-                {/* The restart-to-update button, which sat by ⋯ before ⋯ went down to the rail. */}
-                <UpdateButton />
-                {publishable && (
-                  // A plan's completion card has 인터넷에 올리기; the sheet still opens from there (openPublish).
-                  <PublishButton cwd={cwd} name={project.name} sessionId={talkTo} sheetOnly={planned} />
-                )}
-              </>
-            }
-          />
-          <div className="relative min-h-0 grow overflow-clip">
-            {/* The map stays mounted under the app, so going back finds it where it was. */}
-            <div
-              className={clsx('absolute inset-0 flex min-w-0', mapCovered && 'invisible')}
-              aria-hidden={mapCovered}
-              inert={mapCovered}
-            >
-              <ProductMap
+        <div className="flex min-h-0 min-w-0 grow overflow-clip">
+          <section className="flex min-h-0 min-w-0 grow flex-col overflow-clip">
+            <MapTopBar
+              cwd={cwd}
+              hasApp={hasApp}
+              end={
+                <>
+                  {/* The restart-to-update button, which sat by ⋯ before ⋯ went down to the rail. */}
+                  <UpdateButton />
+                  {publishable && <PublishButton cwd={cwd} name={project.name} sessionId={talkTo} />}
+                </>
+              }
+            />
+            <div className="relative min-h-0 grow overflow-clip">
+              {/* The map stays mounted under the app, so going back finds it where it was. */}
+              <div
+                className={clsx('absolute inset-0 flex min-w-0', mapCovered && 'invisible')}
+                aria-hidden={mapCovered}
+                inert={mapCovered}
+              >
+                <ProductMap
+                  key={cwd}
+                  cwd={cwd}
+                  sessionId={session ?? null}
+                  dockOpen
+                  menuInWindow
+                  hidden={mapCovered}
+                  view={view === 'doc' ? 'doc' : 'board'}
+                  onShowBoard={() => showMap(cwd)}
+                  talkSlot={talkSlot}
+                  onShowTalk={() => showDockTab(SUMMARY_TAB)}
+                  demo={!('__TAURI_INTERNALS__' in window)}
+                  onShowConversation={() => showDockTab(SUMMARY_TAB)}
+                  // The app opens itself in the app view: Alpine starts the project's server and shows it.
+                  onOpenApp={() => showApp(cwd)}
+                  onOpenInApp={openInApp}
+                  onFixConnection={() => openSettings('connection')}
+                  onMemory={() => openMemory(cwd)}
+                  onNewHere={(folder) => void navigate({ to: '/', search: { folder } })}
+                  onNewProject={() => void navigate({ to: '/' })}
+                  // An empty id lets go of the session (the map started over).
+                  onSession={(id) =>
+                    void navigate({
+                      to: '/board',
+                      search: id ? { project: cwd, session: id } : { project: cwd },
+                      replace: true,
+                    })
+                  }
+                />
+              </div>
+              {showingCode && (
+                <div className="absolute inset-0 flex min-w-0">
+                  <ProjectCode key={cwd} cwd={cwd} />
+                </div>
+              )}
+              {showingApp && (
+                <div className="absolute inset-0 flex min-w-0">
+                  <AppView
+                    cwd={cwd}
+                    name={project.name}
+                    people={people}
+                    cardId={cardId}
+                    onPick={openInApp}
+                    // The app would not open: the map takes what went wrong as my words, and its conversation shows
+                    // the fixing.
+                    onAskFix={(failure) => {
+                      askMapFor(cwd, servers.fixRequest(failure.command, failure.port, failure.log));
+                      showDockTab(SUMMARY_TAB);
+                    }}
+                    onAskFixBroken={(broken) => {
+                      askMapFor(
+                        cwd,
+                        appWords.fixBrokenRequest(
+                          broken.map(({ screen, promise }) =>
+                            [screen.title, promise.text, promise.note].filter(Boolean).join(' · '),
+                          ),
+                        ),
+                      );
+                      showDockTab(SUMMARY_TAB);
+                    }}
+                    onAskSetup={() => {
+                      askMapFor(cwd, servers.setupRequest);
+                      showDockTab(SUMMARY_TAB);
+                    }}
+                    onShowTerminal={() => showDockTab('terminal')}
+                    reload={appReload.count}
+                  />
+                </div>
+              )}
+            </div>
+          </section>
+          <aside
+            // The place the rail picked; folded, it is not shown and the board takes the room.
+            aria-label={t.title}
+            hidden={rail.folded}
+            style={{ width: width.width }}
+            className={clsx(
+              'relative min-h-0 shrink-0 flex-col border-l border-line bg-canvas',
+              rail.folded ? 'hidden' : 'flex',
+            )}
+          >
+            <PanelResizer panel={width} edge="left" label={t.resize} />
+            {place === SUMMARY_TAB ? (
+              <PlaceHeader>
+                {/* The conversations of the project will sit here as tabs; for now the board's own. */}
+                <span className="rounded-md bg-hover px-2.5 py-1 text-body font-medium text-fg">
+                  {s.conversationWithBoard}
+                </span>
+              </PlaceHeader>
+            ) : place === 'processes' ? null : (
+              <PlaceHeader>
+                <h2 className="text-body font-semibold">{places.find((each) => each.id === place)?.label}</h2>
+              </PlaceHeader>
+            )}
+            {place === 'processes' && (
+              <ProcessControl
                 key={cwd}
                 cwd={cwd}
-                sessionId={session ?? null}
-                dockOpen
-                menuInWindow
-                hidden={mapCovered}
-                view={view === 'doc' ? 'doc' : 'board'}
-                onShowBoard={() => showMap(cwd)}
-                talkSlot={talkSlot}
-                onShowTalk={() => showDockTab(SUMMARY_TAB)}
-                demo={!('__TAURI_INTERNALS__' in window)}
-                onShowConversation={() => showDockTab(SUMMARY_TAB)}
-                // The app opens itself in the app view: Alpine starts the project's server and shows it.
-                onOpenApp={() => showApp(cwd)}
-                onOpenInApp={openInApp}
-                onPublish={publishable ? (from) => openPublish(cwd, from) : undefined}
-                onFixConnection={() => openSettings('connection')}
-                onMemory={() => openMemory(cwd)}
-                onNewHere={(folder) => void navigate({ to: '/', search: { folder } })}
-                onNewProject={() => void navigate({ to: '/' })}
-                // An empty id lets go of the session (the map started over).
-                onSession={(id) =>
-                  void navigate({
-                    to: '/board',
-                    search: id ? { project: cwd, session: id } : { project: cwd },
-                    replace: true,
-                  })
-                }
+                onInspectProcess={(processId) => {
+                  client.setQueryData(['terminal-selection', cwd], processId);
+                  showDockTab('terminal');
+                }}
+                onAskAI={(text) => {
+                  askMapFor(cwd, text);
+                  showDockTab(SUMMARY_TAB);
+                }}
+                renderHeader={(count, actions) => (
+                  <PlaceHeader>
+                    <h2 className="text-body font-semibold">{s.commands}</h2>
+                    {count}
+                    <span data-tauri-drag-region className="grow self-stretch" />
+                    {actions}
+                  </PlaceHeader>
+                )}
               />
-            </div>
-            {showingCode && (
-              <div className="absolute inset-0 flex min-w-0">
-                <ProjectCode key={cwd} cwd={cwd} />
-              </div>
             )}
-            {showingApp && (
-              <div className="absolute inset-0 flex min-w-0">
-                <AppView
+            {/* The terminal keeps its shells while another place shows. */}
+            {terminalFor === cwd && (
+              <div className={clsx('min-h-0 grow flex-col', place === 'terminal' ? 'flex' : 'hidden')}>
+                <Terminal
+                  key={cwd}
                   cwd={cwd}
-                  name={project.name}
-                  people={people}
-                  cardId={cardId}
-                  onPick={openInApp}
-                  // The app would not open: the map takes what went wrong as my words, and its conversation shows
-                  // the fixing.
-                  onAskFix={(failure) => {
-                    askMapFor(cwd, servers.fixRequest(failure.command, failure.port, failure.log));
-                    showDockTab(SUMMARY_TAB);
-                  }}
-                  onAskSetup={() => {
-                    askMapFor(cwd, servers.setupRequest);
-                    showDockTab(SUMMARY_TAB);
-                  }}
-                  onShowTerminal={() => showDockTab('terminal')}
-                  reload={appReload.count}
+                  sessionId={attachedHere ? session : undefined}
+                  onOpenDevelopmentServer={() => showApp(cwd)}
                 />
               </div>
             )}
-          </div>
-        </section>
-        <aside
-          // The place the rail picked; folded, it is not shown and the board takes the room.
-          aria-label={t.title}
-          hidden={rail.folded}
-          style={{ width: width.width }}
-          className={clsx(
-            'relative min-h-0 shrink-0 flex-col border-l border-line bg-canvas',
-            rail.folded ? 'hidden' : 'flex',
-          )}
-        >
-          <PanelResizer panel={width} edge="left" label={t.resize} />
-          {place === SUMMARY_TAB ? (
-            <PlaceHeader>
-              {/* The conversations of the project will sit here as tabs; for now the board's own. */}
-              <span className="rounded-md bg-hover px-2.5 py-1 text-body font-medium text-fg">
-                {s.conversationWithBoard}
-              </span>
-            </PlaceHeader>
-          ) : place === 'processes' ? null : (
-            <PlaceHeader>
-              <h2 className="text-body font-semibold">{places.find((each) => each.id === place)?.label}</h2>
-            </PlaceHeader>
-          )}
-          {place === 'processes' && (
-            <ProcessControl
-              key={cwd}
-              cwd={cwd}
-              onInspectProcess={(processId) => {
-                client.setQueryData(['terminal-selection', cwd], processId);
-                showDockTab('terminal');
-              }}
-              onAskAI={(text) => {
-                askMapFor(cwd, text);
-                showDockTab(SUMMARY_TAB);
-              }}
-              renderHeader={(count, actions) => (
-                <PlaceHeader>
-                  <h2 className="text-body font-semibold">{s.commands}</h2>
-                  {count}
-                  <span data-tauri-drag-region className="grow self-stretch" />
-                  {actions}
-                </PlaceHeader>
-              )}
-            />
-          )}
-          {/* The terminal keeps its shells while another place shows. */}
-          {terminalFor === cwd && (
-            <div className={clsx('min-h-0 grow flex-col', place === 'terminal' ? 'flex' : 'hidden')}>
-              <Terminal
-                key={cwd}
-                cwd={cwd}
-                sessionId={attachedHere ? session : undefined}
-                onOpenDevelopmentServer={() => showApp(cwd)}
-              />
+            {place === 'logs' && (
+              <div className="min-h-0 grow overflow-y-auto">
+                <DeployLogs
+                  published={published}
+                  onPublish={publishable ? () => openPublish(cwd) : undefined}
+                  onShowCommands={() => pickRailPlace(cwd, 'processes')}
+                  onShowTerminal={() => pickRailPlace(cwd, 'terminal')}
+                />
+              </div>
+            )}
+            {place === 'data' && (
+              <div className="flex min-h-0 grow flex-col">
+                <DataPlace key={cwd} cwd={cwd} />
+              </div>
+            )}
+            {/* The conversation stays mounted behind another place, so coming back finds it where it was. */}
+            <div className={clsx('min-h-0 grow flex-col', place === SUMMARY_TAB ? 'flex' : 'hidden')}>
+              {conversation}
             </div>
-          )}
-          {place === 'logs' && (
-            <div className="min-h-0 grow overflow-y-auto">
-              <DeployLogs
-                published={published}
-                onPublish={publishable ? () => openPublish(cwd) : undefined}
-                onShowCommands={() => pickRailPlace(cwd, 'processes')}
-                onShowTerminal={() => pickRailPlace(cwd, 'terminal')}
-              />
-            </div>
-          )}
-          {place === 'data' && (
-            <div className="flex min-h-0 grow flex-col">
-              <DataPlace key={cwd} cwd={cwd} />
-            </div>
-          )}
-          {/* The conversation stays mounted behind another place, so coming back finds it where it was. */}
-          <div className={clsx('min-h-0 grow flex-col', place === SUMMARY_TAB ? 'flex' : 'hidden')}>{conversation}</div>
-          {/* Every call of the project waiting for my OK, whatever shows above: never behind a card or another view. */}
-          <WaitingApprovals cwd={cwd} />
-          {lookingTitle && (
-            <p className="mx-4 mb-2 flex items-center gap-1.5 text-meta text-fg-muted">
-              <span aria-hidden="true" className="size-1.5 rounded-full bg-interactive" />
-              {s.lookingAt(lookingTitle)}
-            </p>
-          )}
-          <div ref={setTalkSlot} className="contents" />
-        </aside>
-        <ToolRail
-          project={cwd}
-          places={places}
-          current={place}
-          folded={rail.folded}
-          onPick={(id) => pickRailPlace(cwd, id)}
-        />
-      </div>
+            {/* Every call of the project waiting for my OK, whatever shows above: never behind a card or another view. */}
+            <WaitingApprovals cwd={cwd} />
+            {lookingTitle && (
+              <p className="mx-4 mb-2 flex items-center gap-1.5 text-meta text-fg-muted">
+                <span aria-hidden="true" className="size-1.5 rounded-full bg-interactive" />
+                {s.lookingAt(lookingTitle)}
+              </p>
+            )}
+            <div ref={setTalkSlot} className="contents" />
+          </aside>
+          <ToolRail
+            project={cwd}
+            places={places}
+            current={place}
+            folded={rail.folded}
+            onPick={(id) => pickRailPlace(cwd, id)}
+          />
+        </div>
+      </ScreenLinksProvider>
     </FileNavigationProvider>
   );
 }

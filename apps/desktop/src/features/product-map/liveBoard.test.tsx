@@ -121,7 +121,7 @@ function mount(
       <ServerProvider connection={connection}>
         <LocaleProvider locale="ko">
           <div style={{ height: 900 }}>
-            <ProductMap cwd={cwd} onSession={vi.fn()} onPublish={vi.fn()} onOpenInApp={vi.fn()} />
+            <ProductMap cwd={cwd} onSession={vi.fn()} onOpenInApp={vi.fn()} />
           </div>
         </LocaleProvider>
       </ServerProvider>
@@ -406,9 +406,9 @@ describe('situations on the live map', () => {
     report(checker()!, marked('menu', 'usual'));
     // The proposal is not in the code: nothing to open for it. The journey's situation is on 연락처 남기기.
     await waitFor(() => expect(checker()?.getAttribute('src')).toBe(`${RELAY}/order/contact`));
-    // Looking the same as the usual day: not made yet, and the journey says how many really show.
+    // Looking the same as the usual day: not made yet, said on the situation itself (the journey counts nothing).
     expect(await screen.findByTitle('보통 때와 같아요')).toBeTruthy();
-    expect(screen.getByText(/상황 2개 중 0개가 실제 화면으로 떠요/)).toBeTruthy();
+    expect(screen.queryByText(/실제 화면으로 떠요/)).toBeNull();
   });
 
   it('asks the AI to fix a situation that looks the same as the usual day', async () => {

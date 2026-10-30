@@ -21,17 +21,15 @@ import {
 } from './boardLayout';
 import { boardSituations } from './boardSituations';
 import { useBoardDevice, useJourneyDevice } from './boardDevice';
-import { devicesOf, journeyCounts, personCounts } from './filmstripModel';
+import { devicesOf, personCounts } from './filmstripModel';
 import { CardDialog, type FlowTreeProps, type Focus } from './FlowTree';
 import {
   LiveScreen,
   missingButtons,
   plannedLinks,
   SituationCheck,
-  situationResult,
   useLayout,
   useLiveApp,
-  useLiveLayouts,
   useSituationResult,
   WallZoom,
   type LiveTarget,
@@ -410,33 +408,50 @@ const DOTTED = {
   backgroundSize: '22px 22px',
 };
 
-/** An arrow's words fit the gap between two cards, on up to two lines. */
+/** An arrow's words fit the gap between two cards. */
 const LABEL = BOARD.columnGap - 12;
 
 /**
- * What a way between screens says (10-27 rule for arrows): the step that takes the person on, in full, on the arrow
- * itself, since what happens to go from one screen to the next is why the board is read. Up to two lines, never cut
- * to a word or two; its edge takes the arrow's colour.
+ * What a way between screens says (10-27 rule for arrows; app-first), right under the arrow so the arrow stays whole:
+ * the real button pressed to go on, drawn as a button with its own words and 누르면 under it; words that are not a
+ * button the screen has (a step said in a sentence) stand alone. Its edge takes the arrow's colour.
  */
-function ArrowWords({ middle, words, tone }: { middle: Point; words: string; tone: keyof typeof edgeTone }) {
+function ArrowWords({
+  middle,
+  words,
+  tone,
+  pressed,
+}: {
+  middle: Point;
+  words: string;
+  tone: keyof typeof edgeTone;
+  /** The words are a real button's on the screen. */
+  pressed: boolean;
+}) {
+  const t = useMessages(messages);
   return (
-    <foreignObject x={middle.x - LABEL / 2} y={middle.y - 21} width={LABEL} height={42}>
-      <span className="flex size-full items-center justify-center">
+    <foreignObject x={middle.x - LABEL / 2} y={middle.y + 5} width={LABEL} height={58}>
+      <span className="flex size-full flex-col items-center gap-0.5">
         <span
           title={words}
           className={clsx(
-            'line-clamp-2 w-fit max-w-full rounded-md border bg-canvas-raised px-1.5 py-0.5 text-center text-meta leading-4 break-keep text-fg shadow-card',
-            tone === 'checked' ? 'border-interactive/45' : tone === 'missing' ? 'border-attention/55' : 'border-line',
+            'line-clamp-2 w-fit max-w-full text-center text-meta leading-4 break-keep',
+            pressed
+              ? 'rounded-md border border-interactive bg-canvas-raised px-2 py-0.5 font-medium text-fg shadow-card'
+              : tone === 'missing'
+                ? 'rounded-md border border-dashed border-attention bg-canvas-raised px-1.5 py-0.5 text-fg'
+                : 'rounded-md bg-canvas px-1 text-fg-muted',
           )}
         >
           {words}
         </span>
+        {pressed && <span className="text-meta leading-4 text-fg-muted">{t.pressed}</span>}
       </span>
     </foreignObject>
   );
 }
 
-/** A way back said under its card: the step in full (its words), and the screen it goes back to. */
+/** A way back said under its card: the button pressed (drawn as one), and the screen it goes back to. */
 function BackWay({ to, label, strip }: { to: string; label: string; strip: Strip }) {
   const t = useMessages(messages);
   const title = stepTitle(strip.map, to);
@@ -449,7 +464,10 @@ function BackWay({ to, label, strip }: { to: string; label: string; strip: Strip
     >
       {label ? (
         <>
-          ← <span className="text-fg">{label}</span> <span className="text-fg-faint">· {title}</span>
+          <span className="rounded-md border border-fg-faint bg-canvas-raised px-1.5 font-medium text-fg shadow-card">
+            {label}
+          </span>{' '}
+          {t.pressedBack(title)}
         </>
       ) : (
         t.backTo(title)
@@ -458,8 +476,8 @@ function BackWay({ to, label, strip }: { to: string; label: string; strip: Strip
   );
 }
 
-/** Room over a row for its journey's title and situations. */
-const ROW_HEAD = 30;
+/** Room over a row for its journey's sentence. */
+const ROW_HEAD = 46;
 
 const edgeTone = { quiet: 'text-fg-faint', checked: 'text-interactive', missing: 'text-attention' } as const;
 
@@ -508,38 +526,42 @@ function LaneHeader({ person, strip }: { person: Person; strip: Strip }) {
 }
 
 /**
- * A journey's name over its row: what it is for, how many screens and promises, and how its situations stand (each is
- * drawn under the screen where it is seen).
+ * A journey's sentence over its row, large (app-first): what this person can do, said as a fact ("처음 찾아온 방문자는
+ * 팀을 알아보고 다음 기록을 구독할 수 있다."), the person in it coloured; then 흐름 재생. Its situations are drawn
+ * under the screens where they are seen, and no count of screens or promises is said.
  */
 function JourneyTitle({ person, journey, strip }: { person: Person; journey: Journey; strip: Strip }) {
   const t = useMessages(messages);
   const text = useText();
-  const counts = journeyCounts(strip.map, journey);
+  const title = text(journey.title);
+  const who = text(person.name);
+  const named = person.id !== UNPLACED && !!who && title.startsWith(who);
   return (
-    <h3 className="flex flex-wrap items-baseline gap-x-2.5 whitespace-nowrap">
+    <h3 className="flex items-center gap-x-3 whitespace-nowrap">
       <button
         type="button"
         onClick={() => strip.show({ kind: 'journey', personId: person.id, journeyId: journey.id })}
-        className="-ml-1.5 cursor-pointer rounded-md px-1.5 text-left text-title font-semibold transition-colors hover:bg-hover"
+        className="-ml-1.5 cursor-pointer rounded-md px-1.5 text-left text-display font-semibold tracking-tight transition-colors hover:bg-hover"
       >
-        {text(journey.title)}
+        {named ? (
+          <>
+            <span className="text-interactive">{who}</span>
+            {title.slice(who.length)}
+          </>
+        ) : (
+          title
+        )}
       </button>
       <button
         type="button"
-        aria-label={t.playJourney(text(journey.title))}
+        aria-label={t.playJourney(title)}
         title={t.playFlow}
         onClick={() => strip.play(journey.id)}
-        className="flex h-6 cursor-pointer items-center gap-1 self-center rounded-full border border-line bg-canvas-raised px-2 text-meta text-fg-muted transition-colors hover:border-interactive hover:text-fg"
+        className="flex h-7 cursor-pointer items-center gap-1 rounded-full border border-line bg-canvas-raised px-2.5 text-meta text-fg-muted transition-colors hover:border-interactive hover:text-fg"
       >
         <Play size={10} aria-hidden className="fill-current" />
         {t.playFlow}
       </button>
-      <span className="text-meta text-fg-muted">
-        {strip.planning
-          ? t.journeyPlanned(counts.screens, counts.promises)
-          : t.journeyChecked(counts.screens, counts.promises, counts.checked)}
-      </span>
-      <SituationsShown journey={journey} strip={strip} />
     </h3>
   );
 }
@@ -567,7 +589,8 @@ function BoardArrow({ edge, board, strip }: { edge: BoardEdge; board: BoardLayou
   }
   const row = board.lanes.flatMap((lane) => lane.rows).find((one) => one.y === from.rowY);
   const { path, middle } = route(from, to, start, row ? row.y + row.height : undefined);
-  const words = edge.label || button?.label || '';
+  // The real button's words when there is one, so 누르면 under them is true.
+  const words = button?.label || edge.label || '';
   const label = tone === 'missing' ? t.missingButton(stepTitle(strip.map, edge.to)) : button?.label;
   const proposed = !!strip.map.cards[edge.to]?.tentative;
   return (
@@ -582,7 +605,7 @@ function BoardArrow({ edge, board, strip }: { edge: BoardEdge; board: BoardLayou
         strokeLinejoin="round"
         markerEnd={`url(#board-arrow-${tone})`}
       />
-      {words && <ArrowWords middle={middle} words={words} tone={tone} />}
+      {words && <ArrowWords middle={middle} words={words} tone={tone} pressed={!!button?.label} />}
     </g>
   );
 }
@@ -955,7 +978,7 @@ function SituationArrows({ node, box, board }: { node: BoardNode; box: BoardSitu
               strokeLinejoin="round"
               markerEnd="url(#board-arrow-checked)"
             />
-            {target.label && <ArrowWords middle={middle} words={target.label} tone="checked" />}
+            {target.label && <ArrowWords middle={middle} words={target.label} tone="checked" pressed />}
           </g>
         );
       })}
@@ -963,7 +986,10 @@ function SituationArrows({ node, box, board }: { node: BoardNode; box: BoardSitu
   );
 }
 
-/** Under a screen on the board: how it stands, how many promises hold, a missing button, a way back. */
+/**
+ * Under a screen on the board: how it stands, what is broken on it (counts of kept promises are not shown: they read
+ * as a test score to the people the board is for), a missing button, a way back.
+ */
 function BoardCaption({ card, strip, back }: { card: TreeCard; strip: Strip; back: BoardEdge[] }) {
   const t = useMessages(messages);
   const tree = useMessages(flowTreeMessages);
@@ -973,11 +999,10 @@ function BoardCaption({ card, strip, back }: { card: TreeCard; strip: Strip; bac
   return (
     <div data-caption className="flex flex-col gap-1 overflow-clip px-0.5 pt-2" style={{ maxHeight: BOARD.caption }}>
       <p className="flex items-center justify-between gap-2 text-meta">
+        {/* Its state says 고칠 곳 n개 when a promise is broken; while planning, how many promises it will keep. */}
         <State card={card} strip={strip} />
-        {counts.total > 0 && (
-          <span className="shrink-0 text-fg-faint tabular-nums">
-            {strip.planning ? tree.promisesPlanned(counts.total) : tree.passedOf(counts.passed, counts.total)}
-          </span>
+        {strip.planning && counts.total > 0 && (
+          <span className="shrink-0 text-fg-faint tabular-nums">{tree.promisesPlanned(counts.total)}</span>
         )}
       </p>
       {back.length > 0 && (
@@ -1220,25 +1245,6 @@ function DeviceIcon({ device }: { device: Device }) {
       <rect x=".6" y=".6" width="11.8" height="7.8" rx="1.2" stroke="currentColor" strokeWidth="1.1" />
       <path d="M4 10.4h5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
     </svg>
-  );
-}
-
-/** How many of a journey's situations Alpine saw show as real screens, once it has looked at any. */
-function SituationsShown({ journey, strip }: { journey: Journey; strip: Strip }) {
-  const t = useMessages(messages);
-  const layouts = useLiveLayouts((store) => store.byKey);
-  const situations = journey.steps.flatMap((id) =>
-    (strip.map.cards[id]?.states ?? [])
-      .filter((situation) => situation.handled !== false)
-      .map((situation) => situationResult(layouts, id, situation.id)),
-  );
-  const seen = situations.filter((result) => result !== 'unseen');
-  if (!seen.length) return null;
-  const shown = seen.filter((result) => result === 'shows').length;
-  return (
-    <span className={clsx('text-meta', shown < situations.length ? 'text-attention' : 'text-fg-muted')}>
-      · {t.situationsShown(shown, situations.length)}
-    </span>
   );
 }
 

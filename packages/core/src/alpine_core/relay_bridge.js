@@ -1,7 +1,10 @@
 // Runs inside every app screen shown on the board. It reports where the controls that lead to other screens are,
-// and turns a click on one into "go there on the board" instead of navigating inside the frame.
+// and turns a click on one into "go there on the board" instead of navigating inside the frame. In the 앱 view (a
+// frame named "alpine-app") the app is used for real: clicks navigate as usual, the reports say which screen is on
+// view, and Alpine's ‹ › go back and forward in the app's own history.
 (function () {
   if (window.parent === window) return;
+  var app = window.name === "alpine-app";
   var sent = "";
   // A control's words as a person reads them: its own name, else its texts with a space between (a logo's
   // <span>Basecamp</span><small>by Alpine Code</small> is "Basecamp by Alpine Code", not "Basecampby Alpine Code").
@@ -55,7 +58,14 @@
   // Said once even when the page never finishes loading (a module that never comes): the map can tell a blank screen.
   setTimeout(layout, 1500);
   addEventListener("resize", soon);
-  addEventListener("message", function (e) { if (e.data && e.data.type === "alpine:ping") { sent = ""; layout(); } });
+  addEventListener("message", function (e) {
+    if (!e.data) return;
+    if (e.data.type === "alpine:ping") { sent = ""; layout(); }
+    if (app && e.data.type === "alpine:history" && (e.data.step === -1 || e.data.step === 1)) history.go(e.data.step);
+  });
+  // A single-page app moves between screens without loading a page; each move is reported like a new page.
+  addEventListener("popstate", soon);
+  if (app) return;
   addEventListener("click", function (e) {
     var el = e.target.closest && e.target.closest("[data-alpine-to]");
     if (!el) return;

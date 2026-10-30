@@ -10,24 +10,36 @@ export type ProjectView = 'map' | 'doc' | 'app' | 'code';
 export type AppSize = 'phone' | 'computer';
 
 interface AppViewState {
-  /** Per project folder: what the left shows. A project not in it shows its map. */
+  /** Per project folder: what the left shows, once picked. A project not in it shows its app when it has one. */
   views: Record<string, ProjectView>;
+  /** Per project folder: it has an app to look at (`useHasApp`), so it opens on the app. */
+  apps: Record<string, boolean>;
   /** Per project folder: the screen card the app shows (its address), or null for the app's first page. */
   cards: Record<string, string | null>;
+  /** Per project folder: the screen card the app says it is on now, after moving inside it; null when unknown. */
+  at: Record<string, string | null>;
   /** Per project folder: the size picked by hand for the screen on view; null follows the screen's journey. */
   sizes: Record<string, AppSize | null>;
 }
 
 /**
  * Where each project's window stands between its map and its app (map-first 45, flow-spec 4.2-4.3). Kept outside the
- * page so the top bar's 지도 | 앱, the map's 앱에서 보기 and the conversation's "…화면을 보면서 말하는 중" all read one
- * place. Not remembered across restarts: a reopened project shows its map (flow-spec 6).
+ * page so the top bar's 앱 | 보드, the map's 앱에서 보기 and the conversation's "…화면을 보면서 말하는 중" all read one
+ * place. Not remembered across restarts: a reopened project shows its app when it has one, else its map (app-first).
  */
-export const useAppViewState = create<AppViewState>(() => ({ views: {}, cards: {}, sizes: {} }));
+export const useAppViewState = create<AppViewState>(() => ({ views: {}, apps: {}, cards: {}, at: {}, sizes: {} }));
+
+/** What the left shows before anything is picked: the app, once there is one (like Lovable), else the board. */
+const viewOf = (state: AppViewState, cwd: string): ProjectView => state.views[cwd] ?? (state.apps[cwd] ? 'app' : 'map');
 
 /** What the left of the project's window shows. */
 export function useProjectView(cwd: string): ProjectView {
-  return useAppViewState((state) => state.views[cwd] ?? 'map');
+  return useAppViewState((state) => viewOf(state, cwd));
+}
+
+/** Says whether the project has an app to look at, which it opens on until another view is picked. */
+export function setHasApp(cwd: string, has: boolean) {
+  useAppViewState.setState((state) => (!!state.apps[cwd] === has ? state : { apps: { ...state.apps, [cwd]: has } }));
 }
 
 /** The screen card the project's app shows (null: the app's first page). */
@@ -59,7 +71,11 @@ export function showApp(cwd: string, cardId?: string | null) {
     views: { ...state.views, [cwd]: 'app' },
     ...(cardId === undefined
       ? {}
-      : { cards: { ...state.cards, [cwd]: cardId }, sizes: { ...state.sizes, [cwd]: null } }),
+      : {
+          cards: { ...state.cards, [cwd]: cardId },
+          at: { ...state.at, [cwd]: null },
+          sizes: { ...state.sizes, [cwd]: null },
+        }),
   }));
 }
 
@@ -71,6 +87,14 @@ export function settleAppCard(cwd: string, cardId: string) {
   useAppViewState.setState((state) => (state.cards[cwd] ? state : { cards: { ...state.cards, [cwd]: cardId } }));
 }
 
+/** Notes the screen the app says it is on (its page's `data-alpine-screen`), without taking the app there. */
+export function seeAppScreen(cwd: string, cardId: string | null) {
+  useAppViewState.setState((state) => (state.at[cwd] === cardId ? state : { at: { ...state.at, [cwd]: cardId } }));
+}
+
+/** The screen the app is on: the one it says, else the one it was taken to. */
+const onScreen = (state: AppViewState, cwd: string) => state.at[cwd] ?? state.cards[cwd] ?? null;
+
 /** Picks the size the app is shown at, until another screen is picked. */
 export function setAppSize(cwd: string, size: AppSize) {
   useAppViewState.setState((state) => ({ sizes: { ...state.sizes, [cwd]: size } }));
@@ -81,11 +105,11 @@ export function setAppSize(cwd: string, size: AppSize) {
  * shown, else null. Words sent from the conversation then name that screen.
  */
 export function useLookingAt(cwd: string): string | null {
-  return useAppViewState((state) => ((state.views[cwd] ?? 'map') === 'app' ? (state.cards[cwd] ?? null) : null));
+  return useAppViewState((state) => (viewOf(state, cwd) === 'app' ? onScreen(state, cwd) : null));
 }
 
 /** The same, read once (for the moment words are sent, outside React). */
 export function lookingAt(cwd: string): string | null {
   const state = useAppViewState.getState();
-  return (state.views[cwd] ?? 'map') === 'app' ? (state.cards[cwd] ?? null) : null;
+  return viewOf(state, cwd) === 'app' ? onScreen(state, cwd) : null;
 }

@@ -22,12 +22,17 @@ Do not ask anything before the map exists. People fix a wrong picture more easil
 
 - **People**: who uses the product (손님, 사장님, 글쓴이, 방문자). One flow per journey, its `actor` the person's name
   for them. Most products have two or three people; a visitor who only reads is a person too.
+- **Flow titles**: each flow's `title` is one sentence of what its person can do, said as a fact and starting with
+  them: "처음 찾아온 방문자는 팀을 알아보고 다음 기록을 구독할 수 있다.", "손님은 빵을 골라 픽업 시간을 예약할 수
+  있다." It is the largest line on the board, so it says the promise of the journey, not a name for it.
 - **Device**: each flow's `device`, what that person uses it on: `"phone"` for people who use it on the go (손님,
   회원, 방문자), `"computer"` for desk work (직원, 관리자, 사장님이 가게에서 보는 화면). Decide it yourself; ask only
   when it is a real product question (a shop owner who might manage from either).
 - **Steps**: one card per screen they pass through, in order, with `kind: "screen"` and `phase: "planned"`. Five to
   twelve screens in all is usual for a first product. A step that exists only if an open question goes one way gets
   `tentative: true`.
+- **Ways on**: each flow's `edges` say how the person gets from one screen to the next; an edge's `label` is the
+  words on the button they press there ("RSS로 구독하기"), since the board draws it as that button with 누르면 under it.
 - **Situations**: each screen card's `states`, the situations it must handle besides the ordinary one, in the
   person's words: nothing there yet ("아직 글이 없을 때"), sold out or full, an error or no connection, not allowed or
   not signed in, waiting for an answer, a very long name or a hundred items. Two to five for most screens; skip the
