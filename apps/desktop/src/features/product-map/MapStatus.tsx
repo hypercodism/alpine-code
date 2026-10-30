@@ -1,12 +1,9 @@
 import clsx from 'clsx';
-import { useMemo } from 'react';
-
 import { useMessages } from '@/shared/i18n';
 import { useProductMap, useSessions } from '@/shared/server';
 
-import { toTreeMap } from './flowTreeData';
 import { useMapTalk } from './mapTalk';
-import { openPromises, planPhase } from './planData';
+import { planPhase } from './planData';
 import { planMessages } from './planMessages';
 
 /** Where a project's map stands, in one word: its plan's stage, or the work going on in it. */
@@ -40,39 +37,25 @@ const dots: Record<MapStatus, string> = {
   built: 'bg-fg-faint',
 };
 
-const NO_ONE = { ko: '', en: '' };
-const NOTHING_WORKING: ReadonlySet<string> = new Set();
-
 /**
- * The map's state as a dot and a word, for the top bar. Once built it says what the completion card says, counted the
- * same way: the promises to fix, else the ones to check again, and 다 만들었어요 only when none is open.
+ * The map's state as a dot and a word, for the top bar, while something is going on: planned, being built, waiting on
+ * me, stopped. Once built it says nothing: what is broken shows over the app, and counts of promises to check again
+ * read as broken to the people the app is for (app-first).
  */
 export function MapStatusWord({ cwd, className }: { cwd: string; className?: string }) {
   const t = useMessages(planMessages);
   const status = useMapStatus(cwd);
-  const board = useProductMap(cwd).data;
-  const open = useMemo(
-    () =>
-      status === 'built' && board
-        ? openPromises(toTreeMap(board, NOTHING_WORKING, '', { unnamed: NO_ONE, unnamedRole: NO_ONE }), board)
-        : [],
-    [status, board],
-  );
-  if (!status) return null;
-  const broken = open.filter((promise) => promise.failed).length;
-  const waiting = open.length - broken;
-  const word = broken ? t.openToFix(broken) : waiting ? t.toRecheck(waiting) : t[`status_${status}`];
-  const dot = broken ? 'bg-danger' : waiting ? 'bg-attention' : dots[status];
+  if (!status || status === 'built') return null;
   return (
     <span
       className={clsx(
         'inline-flex items-center gap-1.5 text-meta whitespace-nowrap',
-        broken ? 'text-danger' : waiting ? 'text-attention' : status === 'waiting' ? 'text-fg' : 'text-fg-muted',
+        status === 'waiting' ? 'text-fg' : 'text-fg-muted',
         className,
       )}
     >
-      <span aria-hidden="true" className={clsx('size-1.5 rounded-full', dot)} />
-      {word}
+      <span aria-hidden="true" className={clsx('size-1.5 rounded-full', dots[status])} />
+      {t[`status_${status}`]}
     </span>
   );
 }

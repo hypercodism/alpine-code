@@ -110,7 +110,7 @@ beforeEach(() => {
   useNavigation.setState({ lastProject: null, searchOpen: false, pinnedProjects: [] });
   useSettingsSheet.setState({ place: null });
   useMemorySheet.setState({ project: null });
-  useAppViewState.setState({ views: {}, cards: {}, sizes: {} });
+  useAppViewState.setState({ views: {}, apps: {}, cards: {}, at: {}, sizes: {} });
   act(() => showDockTab('summary'));
   vi.stubGlobal(
     'ResizeObserver',

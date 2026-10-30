@@ -39,6 +39,15 @@ export const messages = defineMessages({
     computer: '컴퓨터',
     screenOf: (person: string) => `${person} 화면`,
     frameTitle: (name: string) => `${name} 앱`,
+    back: '뒤로',
+    forward: '앞으로',
+    reload: '다시 불러오기',
+    screenMenu: '보고 있는 화면 · 다른 화면으로 가기',
+    notWorking: (screen: string, promise: string) => `${screen}: ${promise} — 지금 안 되고 있어요`,
+    andMore: (count: number) => `외 ${count}개`,
+    askFixBroken: '고쳐 달라고 하기',
+    fixBrokenRequest: (lines: string[]) =>
+      `앱에서 지금 안 되는 것을 고쳐 주세요:\n${lines.map((line) => `- ${line}`).join('\n')}`,
   },
   en: {
     title: 'App',
@@ -78,5 +87,14 @@ export const messages = defineMessages({
     computer: 'Computer',
     screenOf: (person: string) => `${person}'s screens`,
     frameTitle: (name: string) => `${name} app`,
+    back: 'Back',
+    forward: 'Forward',
+    reload: 'Reload',
+    screenMenu: 'Screen on view · go to another screen',
+    notWorking: (screen: string, promise: string) => `${screen}: ${promise} — not working now`,
+    andMore: (count: number) => `and ${count} more`,
+    askFixBroken: 'Ask to fix it',
+    fixBrokenRequest: (lines: string[]) =>
+      `Fix what does not work in the app now:\n${lines.map((line) => `- ${line}`).join('\n')}`,
   },
 });

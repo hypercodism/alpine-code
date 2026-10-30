@@ -1,12 +1,13 @@
 import type { DevServerInfo } from '@alpine/protocol';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { LocaleProvider } from '@/shared/i18n';
 import { mergeScripts, scriptedConnection, ServerProvider, setUpScript } from '@/shared/server';
 
 import { AppView, screenUrl, type AppPerson } from './AppView';
+import { useAppViewState } from './state';
 
 const cwd = '/Users/me/basecamp';
 const RUNNING: DevServerInfo = {
@@ -53,13 +54,15 @@ const people: AppPerson[] = [
   },
 ];
 
-function mount(cardId: string) {
+function mount(cardId: string, { server = RUNNING, list = people } = {}) {
   const connection = scriptedConnection(
     mergeScripts(setUpScript(), {
-      results: { 'devServers/open': { server: RUNNING }, 'devServers/list': { servers: [RUNNING] } },
+      results: { 'devServers/open': { server }, 'devServers/list': { servers: [server] } },
     }),
   );
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  const onAskFixBroken = vi.fn();
+  const onPick = vi.fn();
   render(
     <QueryClientProvider client={client}>
       <ServerProvider connection={connection}>
@@ -67,10 +70,11 @@ function mount(cardId: string) {
           <AppView
             cwd={cwd}
             name="basecamp"
-            people={people}
+            people={list}
             cardId={cardId}
-            onPick={vi.fn()}
+            onPick={onPick}
             onAskFix={vi.fn()}
+            onAskFixBroken={onAskFixBroken}
             onAskSetup={vi.fn()}
             onShowTerminal={vi.fn()}
           />
@@ -78,11 +82,27 @@ function mount(cardId: string) {
       </ServerProvider>
     </QueryClientProvider>,
   );
+  return { onAskFixBroken, onPick };
 }
 
 const frame = () => screen.findByTitle('basecamp 앱', {}, { timeout: 3000 }) as Promise<HTMLIFrameElement>;
 
-afterEach(cleanup);
+const kept = (list: AppPerson[]): AppPerson[] =>
+  list.map((person) => ({
+    ...person,
+    journeys: person.journeys.map((journey) => ({
+      ...journey,
+      screens: journey.screens.map((one) => ({
+        ...one,
+        promises: one.promises.map((promise) => ({ ...promise, status: 'passed' as const })),
+      })),
+    })),
+  }));
+
+afterEach(() => {
+  cleanup();
+  useAppViewState.setState({ views: {}, apps: {}, cards: {}, at: {}, sizes: {} });
+});
 
 describe('screenUrl', () => {
   it('carries the situation as the parameter the apps read', () => {
@@ -93,36 +113,55 @@ describe('screenUrl', () => {
   });
 });
 
-describe('앱 view situations', () => {
-  it('shows a button per situation and reloads the app in the one pressed', async () => {
-    mount('list');
-    expect((await frame()).src).toBe('http://localhost:5173/breads');
-    const usual = screen.getByRole('button', { name: '보통' });
-    expect(usual.getAttribute('aria-pressed')).toBe('true');
-
-    const empty = screen.getByRole('button', { name: '빵이 하나도 없을 때' });
-    fireEvent.click(empty);
-    expect((await frame()).src).toBe('http://localhost:5173/breads?alpine-state=empty');
-    expect(empty.getAttribute('aria-pressed')).toBe('true');
-    expect(usual.getAttribute('aria-pressed')).toBe('false');
-
-    fireEvent.click(usual);
-    expect((await frame()).src).toBe('http://localhost:5173/breads');
+describe('앱 view', () => {
+  it('opens the app through the relay, whose bridge lets it be used in the frame', async () => {
+    mount('list', { server: { ...RUNNING, boardUrl: 'http://127.0.0.1:61000/' } });
+    const app = await frame();
+    expect(app.src).toBe('http://127.0.0.1:61000/breads');
+    expect(app.name).toBe('alpine-app');
   });
 
-  it('keeps the how-to text and marks promises as the document does', async () => {
+  it('names the screen on view and follows the screen the app says it moved to', async () => {
     mount('list');
-    await frame();
-    expect(screen.getByText('?alpine-state=empty 로 열어 보세요')).toBeTruthy();
-    const marks = screen.getByRole('list', { name: '빵 목록' }).textContent;
-    expect(marks).toContain('✓');
-    expect(marks).toContain('✗');
-    expect(marks).toContain('○');
+    const app = await frame();
+    expect(screen.getByRole('button', { name: '보고 있는 화면 · 다른 화면으로 가기' }).textContent).toContain(
+      '빵 목록',
+    );
+    act(() => {
+      dispatchEvent(
+        new MessageEvent('message', {
+          data: { type: 'alpine:layout', screen: null, href: '/about' },
+          source: app.contentWindow,
+        }),
+      );
+    });
+    expect(screen.getByRole('button', { name: '보고 있는 화면 · 다른 화면으로 가기' }).textContent).toContain('소개');
+    expect(useAppViewState.getState().at[cwd]).toBe('plain');
   });
 
-  it('shows no buttons on a screen without situations', async () => {
-    mount('plain');
+  it("goes back in the app's own history", async () => {
+    mount('list');
+    const app = await frame();
+    const sent = vi.spyOn(app.contentWindow!, 'postMessage');
+    fireEvent.click(screen.getByRole('button', { name: '뒤로' }));
+    expect(sent).toHaveBeenCalledWith({ type: 'alpine:history', step: -1 }, '*');
+  });
+
+  it('puts a red line over the app only while it breaks a promise, and hands it to the AI', async () => {
+    const { onAskFixBroken } = mount('list');
     await frame();
-    expect(screen.queryByRole('button', { name: '보통' })).toBeNull();
+    const line = screen.getByRole('alert');
+    expect(line.textContent).toContain('빵 목록: 값이 보여요');
+    fireEvent.click(screen.getByRole('button', { name: '고쳐 달라고 하기' }));
+    expect(onAskFixBroken).toHaveBeenCalledWith([
+      expect.objectContaining({ promise: expect.objectContaining({ id: 'b' }) }),
+    ]);
+  });
+
+  it('shows no red line and no promise counts when everything holds', async () => {
+    mount('list', { list: kept(people) });
+    await frame();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByText(/통과|고칠 곳/)).toBeNull();
   });
 });

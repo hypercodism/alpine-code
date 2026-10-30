@@ -1088,7 +1088,8 @@ export function ProductMap({
       )}
     </>
   );
-  const lensShown = lenses.failed.size > 0 || lenses.recheck.size > 0 || showChanged;
+  // Screens waiting for a check again are not a lens: nothing is wrong with them, and a count of them read as broken.
+  const lensShown = lenses.failed.size > 0 || showChanged;
   const boardCorner = treeMap && (
     <>
       {memoryWaiting > 0 && onMemory && (
@@ -1098,7 +1099,7 @@ export function ProductMap({
         </Chip>
       )}
       <ImportLink cwd={cwd} onOpen={openImported} />
-      {/* One choice of what to look at: every screen, or only those that broke, wait for a check or changed. */}
+      {/* One choice of what to look at: every screen, or only those that broke or changed. */}
       {lensShown && (
         <div role="group" aria-label={t.lensLabel} className="flex gap-0.5 rounded-lg bg-hover p-0.5 shadow-overlay">
           <LensButton pressed={lens === null} onClick={() => setLens(null)}>
@@ -1107,11 +1108,6 @@ export function ProductMap({
           {lenses.failed.size > 0 && (
             <LensButton pressed={lens === 'failed'} tone="danger" onClick={() => pick('failed')}>
               {t.lensFailed(lenses.failed.size)}
-            </LensButton>
-          )}
-          {lenses.recheck.size > 0 && (
-            <LensButton pressed={lens === 'recheck'} tone="attention" onClick={() => pick('recheck')}>
-              {t.lensRecheck(lenses.recheck.size)}
             </LensButton>
           )}
           {/* While a plan is drawn or built every card is the AI's change: only later ones are news. */}

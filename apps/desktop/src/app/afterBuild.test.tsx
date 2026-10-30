@@ -108,7 +108,7 @@ const done = () => screen.findByRole('region', { name: '다 만들었어요' });
 
 beforeEach(() => {
   // The app view is remembered per project for the window's life: each test starts on the map.
-  useAppViewState.setState({ views: {}, cards: {}, sizes: {} });
+  useAppViewState.setState({ views: {}, apps: {}, cards: {}, at: {}, sizes: {} });
   localStorage.clear();
   localStorage.setItem('alpine.rail.open', 'false');
   // The map's input and bars sit under its conversation in the dock (map-first 43).

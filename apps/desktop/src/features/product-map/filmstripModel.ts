@@ -1,4 +1,4 @@
-import { hasScreenArea, isJourneyLink, journeyTally, type Journey, type Person, type TreeMap } from './flowTreeModel';
+import { hasScreenArea, isJourneyLink, type Journey, type Person, type TreeMap } from './flowTreeModel';
 import type { Device } from './planLook';
 
 /**
@@ -59,12 +59,6 @@ export function deviceOf(journey: Journey, map: TreeMap, wide: (src: string) => 
 /** The devices a person's journeys are used on, each once, phone first. */
 export function devicesOf(devices: Device[]): Device[] {
   return (['phone', 'computer'] as const).filter((device) => devices.includes(device));
-}
-
-/** How many screens a journey shows, and how many of its promises hold. */
-export function journeyCounts(map: TreeMap, journey: Journey) {
-  const counts = journeyTally(map, journey);
-  return { screens: screensIn(map, journey.steps).size, promises: counts.total, checked: counts.passed };
 }
 
 /** A person's journeys and the screens across them (a screen shared by two journeys counts once). */

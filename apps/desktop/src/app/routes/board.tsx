@@ -3,7 +3,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { useQueryClient } from '@tanstack/react-query';
 import { Database, FileText, Globe, ListChecks, MessageSquare, SquareTerminal } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useState, type ReactNode } from 'react';
 
 import { useAppPeople, useHasApp } from '@/app/appScreens';
 import { shellMessages } from '@/app/shellMessages';
@@ -13,7 +13,16 @@ import { UpdateButton } from '@/app/UpdateButton';
 import { ToolRail, type RailPlace } from '@/app/ToolRail';
 import { DataPlace, SUMMARY_TAB } from '@/app/WorkspaceDock';
 import { AppView } from '@/features/app-view/AppView';
-import { showApp, showMap, showView, useAppCard, useLookingAt, useProjectView } from '@/features/app-view/state';
+import { messages as appMessages } from '@/features/app-view/messages';
+import {
+  setHasApp,
+  showApp,
+  showMap,
+  showView,
+  useAppCard,
+  useLookingAt,
+  useProjectView,
+} from '@/features/app-view/state';
 import { DeployLogs } from '@/features/deploy-logs/DeployLogs';
 import { messages as serverMessages } from '@/features/development-servers/messages';
 import { messages as dockMessages } from '@/features/dock/messages';
@@ -84,6 +93,7 @@ function BoardRoute() {
   const m = useMessages(mapMessages);
   const s = useMessages(shellMessages);
   const servers = useMessages(serverMessages);
+  const appWords = useMessages(appMessages);
   const attachedHere = !!session && !!attached.data && attached.data.info.cwd === chosen && !attached.data.deleted;
   // The conversation's AI 팀 (a TF), opened from its card in the conversation's place, with the way back.
   const team = useTaskForceTab(attachedHere ? session : null, renderRecord);
@@ -97,6 +107,10 @@ function BoardRoute() {
   const unbuilt = !!board?.planned && planPhase(board, false, false) !== 'built';
   const publishable = usePublishable(cwd, cloud && !!project && !unbuilt);
   const hasApp = useHasApp(cwd);
+  // A project with an app opens on it (app-first); told before the first paint, so the board does not flash first.
+  useLayoutEffect(() => {
+    if (cwd) setHasApp(cwd, hasApp);
+  }, [cwd, hasApp]);
   const view = useProjectView(cwd);
   const showingApp = view === 'app' && hasApp;
   // The code tab covers the map like the app does; the document is the map itself, read another way.
@@ -319,6 +333,17 @@ function BoardRoute() {
                   // the fixing.
                   onAskFix={(failure) => {
                     askMapFor(cwd, servers.fixRequest(failure.command, failure.port, failure.log));
+                    showDockTab(SUMMARY_TAB);
+                  }}
+                  onAskFixBroken={(broken) => {
+                    askMapFor(
+                      cwd,
+                      appWords.fixBrokenRequest(
+                        broken.map(({ screen, promise }) =>
+                          [screen.title, promise.text, promise.note].filter(Boolean).join(' · '),
+                        ),
+                      ),
+                    );
                     showDockTab(SUMMARY_TAB);
                   }}
                   onAskSetup={() => {
