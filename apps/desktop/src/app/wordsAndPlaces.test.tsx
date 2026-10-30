@@ -4,6 +4,7 @@ import { createMemoryHistory, createRouter, RouterProvider } from '@tanstack/rea
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { useAppViewState } from '@/features/app-view/state';
 import { useDockOpen, useDockTab } from '@/features/dock/state';
 import { blogBoard, type PlanMoment } from '@/features/product-map/planExample';
 import { boardScript } from '@/features/product-map/testBoard';
@@ -89,6 +90,8 @@ const write = (text: string) => {
 };
 
 beforeEach(() => {
+  // A project with an app opens on it until another view is picked, for the window's life: each test starts afresh.
+  useAppViewState.setState({ views: {}, apps: {}, cards: {}, at: {}, sizes: {} });
   localStorage.clear();
   useSettingsSheet.setState({ place: null });
   useMemorySheet.setState({ project: null });
@@ -133,8 +136,9 @@ describe('what can not start now says why (#30)', () => {
     const menu = await mapMenu();
     expect(within(menu).getByRole('menuitem', { name: '기능 더 찾기' }).getAttribute('aria-disabled')).toBe('true');
     fireEvent.keyDown(menu, { key: 'Escape' });
-    // A check from a person's panel: it used to be ignored without a word.
-    const map = screen.getByRole('main', { name: '제품 보드' });
+    // A check from a person's panel: it used to be ignored without a word. The map opens on its app; 보드 shows it.
+    fireEvent.click(screen.getByRole('button', { name: '보드' }));
+    const map = await screen.findByRole('main', { name: '제품 보드' });
     // A person's name over their rows opens their details.
     const first = within(map)
       .getAllByRole('region')
@@ -279,7 +283,8 @@ describe('the AI 팀 opens beside the map (#38, #81)', () => {
 describe('memory is reached from the map (#69, #82)', () => {
   it('says suggestions wait, opens the memory from the map, and leads back to the map', async () => {
     const { router } = mount('/board' + q(app));
-    // alpine-code has two suggestions waiting in the scripted memory.
+    // alpine-code has two suggestions waiting in the scripted memory, said on the board (it opens on its app).
+    fireEvent.click(await screen.findByRole('button', { name: '보드' }));
     fireEvent.click(await screen.findByRole('button', { name: '기억할까요? 2' }));
     const sheet = await screen.findByRole('dialog');
     expect(await within(sheet).findByText('기다리는 제안')).toBeTruthy();
@@ -499,6 +504,8 @@ describe('the bar over the map stays (dogfood 17)', () => {
     )!;
     for (let element = bar.parentElement; element && element !== document.body; element = element.parentElement)
       expect(element.className).not.toMatch(/\boverflow-(hidden|auto|scroll|y-auto|x-auto)\b/);
+    // The map opens on its app; the board is under 보드.
+    fireEvent.click(await screen.findByRole('button', { name: '보드' }));
     const wall = await screen.findByRole('region', { name: '화면 필름스트립' });
     for (let element = wall.parentElement; element && element !== document.body; element = element.parentElement)
       expect(element.className).not.toMatch(/\boverflow-(hidden|auto|scroll|y-auto|x-auto)\b/);

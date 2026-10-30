@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ExternalSessionInfo, SessionInfo } from '@alpine/protocol';
+import { useAppViewState } from '@/features/app-view/state';
 import { LocaleProvider } from '@/shared/i18n';
 import { openSettings, useMemorySheet, useNavigation, useSettingsSheet } from '@/shared/navigation';
 import {
@@ -62,6 +63,8 @@ const menuRow = async (name: string) => {
 };
 
 beforeEach(() => {
+  // A project with an app opens on it until another view is picked, for the window's life: each test starts afresh.
+  useAppViewState.setState({ views: {}, apps: {}, cards: {}, at: {}, sizes: {} });
   localStorage.clear();
   useNavigation.setState({
     expanded: {},
@@ -194,6 +197,8 @@ describe("another app's conversations on the map (#42, #71)", () => {
         },
       ],
     );
+    // The offer is on the board, which a map with screens shows from 보드 (it opens on its app).
+    fireEvent.click(await screen.findByRole('button', { name: '보드' }));
     fireEvent.click(await screen.findByRole('button', { name: /Claude Code에서 하던 대화 1개 가져와서 보기/ }));
     const dialog = await screen.findByRole('dialog');
     fireEvent.click(within(dialog).getByRole('button', { name: /로그인 고치기/ }));
@@ -295,6 +300,11 @@ describe('restarting to update (#18)', () => {
     await screen.findByRole('main', { name: '제품 보드' });
     fireEvent.click(await screen.findByRole('button', { name: '다시 시작해서 업데이트' }));
     expect(update.restart).toHaveBeenCalledOnce();
-    expect((await screen.findByRole('alert')).textContent).toMatch(/업데이트하지 못했어요/);
+    // The app view beside it may say something of its own (this script runs no app).
+    await waitFor(() =>
+      expect(screen.getAllByRole('alert').some((alert) => /업데이트하지 못했어요/.test(alert.textContent ?? ''))).toBe(
+        true,
+      ),
+    );
   });
 });

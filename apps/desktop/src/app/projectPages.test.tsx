@@ -3,6 +3,7 @@ import { createMemoryHistory, createRouter, RouterProvider } from '@tanstack/rea
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { useAppViewState } from '@/features/app-view/state';
 import { LocaleProvider } from '@/shared/i18n';
 import { useMemorySheet, useSettingsSheet } from '@/shared/navigation';
 import {
@@ -45,6 +46,8 @@ function mount(path: string, projects = PROJECTS) {
 }
 
 beforeEach(() => {
+  // A project with an app opens on it until another view is picked, for the window's life: each test starts afresh.
+  useAppViewState.setState({ views: {}, apps: {}, cards: {}, at: {}, sizes: {} });
   localStorage.clear();
   useSettingsSheet.setState({ place: null });
   useMemorySheet.setState({ project: null });
@@ -64,9 +67,10 @@ afterEach(() => {
 });
 
 describe('project pages', () => {
-  it('opens the memory from the project menu as a sheet over the board, and Esc goes back to the board', async () => {
+  it('opens the memory from the project menu as a sheet over the window, and Esc goes back to where it was', async () => {
     const router = mount('/board' + q(cwd));
-    await screen.findByRole('main', { name: '제품 보드' });
+    // A map with screens opens on its app; the board is under it.
+    await screen.findByRole('button', { name: '앱', pressed: true });
     fireEvent.click(await screen.findByRole('button', { name: /^alpine-code · 다른 프로젝트로/ }));
     fireEvent.click(await screen.findByRole('button', { name: 'alpine-code 메뉴' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: '기억 열기' }));
@@ -76,6 +80,6 @@ describe('project pages', () => {
     expect(router.state.location.href).toBe('/board' + q(cwd));
     fireEvent.keyDown(memory, { key: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(screen.getByRole('main', { name: '제품 보드' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '앱', pressed: true })).toBeTruthy();
   });
 });

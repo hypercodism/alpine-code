@@ -20,8 +20,8 @@ import { boardScript } from './testBoard';
 
 /**
  * The map as a filmstrip of the product's screens (map-first, 10-25): phone journeys as rows of frames, computer
- * journeys as browser windows one under another, steps without a screen, forks and loops; the question's card and the
- * completion card; and the top bar's one button for where the plan stands.
+ * journeys as browser windows one under another, steps without a screen, forks and loops; the question's card, and
+ * no completion card or counts once built (app-first); and the top bar's one button for where the plan stands.
  */
 
 const cwd = '/project';
@@ -43,7 +43,6 @@ function mount(board: FlowGetResult, { mapItems = [], map = {}, build = {}, buil
   ];
   const connection = scriptedConnection(mergeScripts(boardScript(board), sessionScript({ sessions })));
   const request = vi.spyOn(connection, 'request');
-  const onPublish = vi.fn();
   const onOpenInApp = vi.fn();
   render(
     <QueryClientProvider client={client}>
@@ -53,13 +52,13 @@ function mount(board: FlowGetResult, { mapItems = [], map = {}, build = {}, buil
             <MapTopActions cwd={cwd} />
           </div>
           <div style={{ height: 900 }}>
-            <ProductMap cwd={cwd} onSession={vi.fn()} onPublish={onPublish} onOpenInApp={onOpenInApp} />
+            <ProductMap cwd={cwd} onSession={vi.fn()} onOpenInApp={onOpenInApp} />
           </div>
         </LocaleProvider>
       </ServerProvider>
     </QueryClientProvider>,
   );
-  return { request, onPublish, onOpenInApp };
+  return { request, onOpenInApp };
 }
 
 /** The blog plan at one moment, in `/project`. */
@@ -128,7 +127,9 @@ describe('the filmstrip', () => {
     expect(within(visitor).getByText('휴대폰')).toBeTruthy();
     expect(within(visitor).getByText('흐름 1개 · 화면 3개')).toBeTruthy();
     const reading = within(visitor).getByRole('region', { name: '글 찾아 읽기' });
-    expect(within(reading).getByText('화면 3개 · 약속 5개 중 5개 확인')).toBeTruthy();
+    // No count of screens or promises by the journey's title, nor of kept promises under a screen: they read as a score.
+    expect(within(reading).getByRole('button', { name: '글 찾아 읽기 재생' })).toBeTruthy();
+    expect(within(reading).queryByText(/약속 \d+개|통과/)).toBeNull();
     expect(opens(reading).map((button) => button.getAttribute('aria-label'))).toEqual([
       '글 목록 보기 열기',
       '글 읽기 열기',
@@ -178,7 +179,7 @@ describe('the filmstrip', () => {
     expect(within(await screen.findByRole('dialog')).getByRole('heading', { name: '문자 보내기' })).toBeTruthy();
   });
 
-  it('draws a fork as two arrows with their words, and says a way back under its card', async () => {
+  it('draws a fork as two arrows with the button pressed on each, and says a way back under its card', async () => {
     mount(
       codeMap(
         [
@@ -198,10 +199,12 @@ describe('the filmstrip', () => {
       ),
     );
     await screen.findByRole('region', { name: '빵 미리 예약하기' });
-    for (const words of ['로그인했으면', '안 했으면']) expect(screen.getByText(words)).toBeTruthy();
+    // Each arrow's words are the button pressed to go on, with 누르면 under them.
+    for (const words of ['로그인했으면', '안 했으면'])
+      expect(screen.getByText(words).nextElementSibling?.textContent).toBe('누르면');
     expect(document.querySelectorAll('svg path[marker-end]')).toHaveLength(3);
-    // The way back is a line under the card it leaves, its words in full, which brings that screen into view.
-    const back = screen.getByRole('button', { name: '← 처음으로 · 첫 화면' });
+    // The way back is a line under the card it leaves, its button and where it goes, which brings that screen into view.
+    const back = screen.getByRole('button', { name: '처음으로 누르면 ← 첫 화면' });
     expect(back.getAttribute('title')).toBe('처음으로 · 첫 화면');
     vi.mocked(Element.prototype.scrollIntoView).mockClear();
     fireEvent.click(back);
@@ -234,80 +237,42 @@ describe('the filmstrip', () => {
   });
 });
 
-describe('the completion card', () => {
+describe('a built plan on the board (app-first)', () => {
   const builtWithAMiss = () => {
     const board = blog('built');
     board.states!.comment!.promises!['p-comment'] = { status: 'failed' };
     return board;
   };
 
-  it('counts the screens and checked promises, fixes an open promise at once, and puts the app online', async () => {
-    const { request, onPublish, onOpenInApp } = mount(builtWithAMiss());
-    const done = await screen.findByRole('region', { name: '다 만들었어요' });
-    expect(within(done).getByText(/화면 6개 · 약속 9개 중 8개 확인/)).toBeTruthy();
-    expect(within(done).getByText('다 만들었어요 · 고칠 약속 1개')).toBeTruthy();
-    expect(within(done).queryByRole('button', { name: '앱 열기' })).toBeNull();
-    const open = within(done).getByRole('list', { name: '고칠 약속' });
-    expect(within(open).getByText('댓글 달기 · 로그인한 사람만 댓글을 달 수 있어요')).toBeTruthy();
-
-    fireEvent.click(within(open).getByRole('button', { name: '앱에서 보기' }));
-    expect(onOpenInApp).toHaveBeenCalledWith('comment');
-    fireEvent.click(within(done).getByRole('button', { name: '인터넷에 올리기' }));
-    expect(onPublish).toHaveBeenCalled();
-
-    fireEvent.click(within(open).getByRole('button', { name: '바로 고치기' }));
-    await waitFor(() =>
-      expect(request.mock.calls.find(([method]) => method === 'flow/prepare')?.[1]).toMatchObject({
-        action: 'change',
-        nodeId: 'comment',
-        request: '댓글 달기에서 지켜지지 않는 약속을 고쳐 주세요: 로그인한 사람만 댓글을 달 수 있어요',
-      }),
-    );
-    // The fix is new work: the card folds to one line, so the conversation and what it asks stay in view.
-    const folded = await screen.findByRole('button', { name: '펼치기' });
-    expect(screen.queryByRole('list', { name: '고칠 약속' })).toBeNull();
-    fireEvent.click(folded);
-    expect(await screen.findByRole('list', { name: '고칠 약속' })).toBeTruthy();
+  it('says 고칠 곳 under the screen whose promise is broken, and no completion card or count', async () => {
+    mount(builtWithAMiss());
+    const comment = await screen.findByRole('button', { name: '댓글 달기 열기' });
+    const toFix = screen.getByText('고칠 곳 1개');
+    expect(toFix.closest('[data-card]')).toBe(comment.closest('[data-card]'));
+    expect(screen.getAllByText(/^고칠 곳/)).toHaveLength(1);
+    expect(screen.queryByText(/통과|다 만들었어요/)).toBeNull();
+    expect(screen.queryByRole('region', { name: /다 만들었어요/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: '인터넷에 올리기' })).toBeNull();
   });
 
-  it('says 다 만들었어요 alone only when nothing is broken or waits', async () => {
-    mount(blog('built'));
-    const done = await screen.findByRole('region', { name: '다 만들었어요' });
-    expect(within(done).getByText('다 만들었어요')).toBeTruthy();
-    expect(within(done).queryByRole('list', { name: '고칠 약속' })).toBeNull();
-    expect(within(done).queryByRole('button', { name: '다시 확인' })).toBeNull();
-  });
-
-  it('puts the promises to check again on one line with one 다시 확인, apart from the broken ones', async () => {
-    const board = builtWithAMiss();
-    // A fix changed files other cards rest on: their promises wait to be checked again, they are not broken.
-    board.states!.write!.promises!['p-markdown'] = { status: 'recheck' };
-    board.states!.write!.promises!['p-draft'] = { status: 'recheck' };
-    board.states!.publish!.promises!['p-publish'] = { status: 'unconfirmed' };
+  it('says nothing of promises to check again, and checks them all again from the map menu', async () => {
+    const board = blog('built');
+    // A fix changed files other cards rest on: they wait to be checked again, they are not broken.
+    board.states!.write = { ...board.states!.write!, status: 'recheck' };
+    board.states!.write.promises!['p-markdown'] = { status: 'recheck' };
+    board.states!.write.promises!['p-draft'] = { status: 'recheck' };
     const { request } = mount(board);
-    const done = await screen.findByRole('region', { name: '다 만들었어요' });
-    expect(within(done).getByText('다 만들었어요 · 고칠 약속 1개')).toBeTruthy();
-    const broken = within(done).getByRole('list', { name: '고칠 약속' });
-    expect(within(broken).getAllByRole('listitem')).toHaveLength(1);
-    expect(within(done).getAllByRole('button', { name: '바로 고치기' })).toHaveLength(1);
-    expect(within(done).getByText('다시 확인할 약속 3개')).toBeTruthy();
-
-    fireEvent.click(within(done).getByRole('button', { name: '다시 확인' }));
+    await screen.findByRole('button', { name: '글 쓰기 열기' });
+    expect(screen.queryByText(/다시 확인할|고칠 곳|다 만들었어요/)).toBeNull();
+    expect(screen.queryByRole('button', { name: /^다시 확인할 화면/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '보드 메뉴' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: '바뀐 기능 1개 다시 확인' }));
     await waitFor(() =>
       expect(request.mock.calls.find(([method]) => method === 'flow/prepare')?.[1]).toMatchObject({
         action: 'verify',
-        nodeIds: ['write', 'publish'],
+        nodeIds: ['write'],
       }),
     );
-  });
-
-  it('names what waits in its title when nothing is broken', async () => {
-    const board = blog('built');
-    board.states!.write!.promises!['p-draft'] = { status: 'recheck' };
-    mount(board);
-    const done = await screen.findByRole('region', { name: '다 만들었어요' });
-    expect(within(done).getByText('다 만들었어요 · 다시 확인할 약속 1개')).toBeTruthy();
-    expect(within(done).queryByRole('button', { name: '바로 고치기' })).toBeNull();
   });
 
   it('opens a built screen in the app from its card', async () => {
@@ -376,7 +341,7 @@ describe('the top bar over a map', () => {
 
   it('shows nothing once it is built', async () => {
     mount(blog('built'));
-    await screen.findByRole('region', { name: '다 만들었어요' });
+    await screen.findByRole('button', { name: '글 쓰기 열기' });
     expect(within(top()).queryByRole('button')).toBeNull();
   });
 });

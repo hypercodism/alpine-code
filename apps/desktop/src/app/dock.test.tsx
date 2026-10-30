@@ -4,6 +4,7 @@ import { createMemoryHistory, createRouter, RouterProvider } from '@tanstack/rea
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { useAppViewState } from '@/features/app-view/state';
 import { forgetRails, useDockOpen, useDockTab } from '@/features/dock/state';
 import { LocaleProvider } from '@/shared/i18n';
 import {
@@ -97,6 +98,8 @@ function setDock(value: boolean) {
 }
 
 beforeEach(() => {
+  // A project with an app opens on it until another view is picked, for the window's life: each test starts afresh.
+  useAppViewState.setState({ views: {}, apps: {}, cards: {}, at: {}, sizes: {} });
   localStorage.clear();
   forgetRails();
   localStorage.setItem('alpine.rail.open', 'false');
@@ -133,8 +136,12 @@ describe('right dock on the routes', () => {
         .getAllByRole('textbox')
         .map((box) => box.getAttribute('aria-label')),
     ).toEqual(['보드에 부탁하기']);
+    // A map with screens opens on its app; 보드 shows the map.
+    fireEvent.click(await screen.findByRole('button', { name: '보드' }));
     expect(
-      within(screen.getByRole('main', { name: '제품 보드' })).queryByRole('textbox', { name: '보드에 부탁하기' }),
+      within(await screen.findByRole('main', { name: '제품 보드' })).queryByRole('textbox', {
+        name: '보드에 부탁하기',
+      }),
     ).toBeNull();
     const rail = screen.getByRole('navigation', { name: '도구' });
     expect(within(rail).getByRole('button', { name: '대화', pressed: true })).toBeTruthy();

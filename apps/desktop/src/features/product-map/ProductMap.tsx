@@ -52,14 +52,7 @@ import { flowTreeMessages } from './flowTreeMessages';
 import { JourneyMap } from './JourneyMap';
 import { useMapActionStore, useMapMenuStore } from './mapActions';
 import { Bar, CONNECTION, PlanBar, Working, type PlanTeamAnswer } from './PlanBar';
-import {
-  buildActivity,
-  lastReply,
-  pendingQuestion,
-  planPhase,
-  stopReason,
-  TEAM_WORKING,
-} from './planData';
+import { buildActivity, lastReply, pendingQuestion, planPhase, stopReason, TEAM_WORKING } from './planData';
 import { mapLookCss, type Device, type PickedLook, wornLook } from './planLook';
 import { planMessages } from './planMessages';
 import { useMapRequest } from './askRequest';
@@ -130,7 +123,7 @@ export function ProductMap({
   onShowConversation?: () => void;
   /** Runs and shows the project's app (its development server, in the dock). */
   onOpenApp?: () => void;
-    /** Opens 새 프로젝트 for this folder, which is empty (map-first 41). */
+  /** Opens 새 프로젝트 for this folder, which is empty (map-first 41). */
   onNewHere?: (folder: string) => void;
   /** Opens 새 프로젝트, the one place something new starts. */
   onNewProject?: () => void;
@@ -992,6 +985,11 @@ export function ProductMap({
       </button>
     </div>
   );
+  // What the menu opens shows on the board, so the board comes into view first (the app or the code may cover it).
+  const onBoard = (open: () => void) => () => {
+    onShowBoard?.();
+    open();
+  };
   const menuItems = data && (
     <MapMenuItems
       cwd={cwd}
@@ -1000,10 +998,10 @@ export function ProductMap({
       unseen={unseen}
       canStart={!(locked || board.isError)}
       planning={planning}
-      onChanges={data.changes?.length ? openChanges : undefined}
-      onRediscover={() => setConfirmRebuild(true)}
-      onScope={() => setScopeOpen(true)}
-      onDelete={() => setDeleting(true)}
+      onChanges={data.changes?.length ? onBoard(openChanges) : undefined}
+      onRediscover={onBoard(() => setConfirmRebuild(true))}
+      onScope={onBoard(() => setScopeOpen(true))}
+      onDelete={onBoard(() => setDeleting(true))}
       recheck={recheck.length}
       onRecheck={recheckAll}
       // The window's ⋯ has 기억 already.

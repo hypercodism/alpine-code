@@ -392,14 +392,16 @@ describe('a planned product on its map', () => {
     // Built afterwards (the map comes back after the build): the planning words stay behind.
     cleanup();
     mount(blog('built'), { mapItems: planning });
-    expect(await screen.findByText('다 만들었어요')).toBeTruthy();
+    // Built, the bar under the conversation says nothing: the board is there with its screens.
+    expect(await screen.findByRole('button', { name: '글 쓰기 열기' })).toBeTruthy();
+    expect(screen.queryByText('다 만들었어요')).toBeNull();
     expect(screen.queryByRole('region', { name: 'AI의 답' })).toBeNull();
     expect(screen.queryByText('이제 정할 것이 없어요. 만들 준비가 됐어요.')).toBeNull();
   });
 
   it('takes words as a request once built (#33)', async () => {
     const { request } = mount(blog('built'));
-    await screen.findByText('다 만들었어요');
+    await screen.findByRole('button', { name: '글 쓰기 열기' });
     write('글 목록에 검색 넣어 줘');
     await waitFor(() =>
       expect(request.mock.calls.find(([method]) => method === 'flow/prepare')?.[1]).toMatchObject({

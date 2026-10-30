@@ -987,12 +987,11 @@ function BoardCaption({ card, strip, back }: { card: TreeCard; strip: Strip; bac
   return (
     <div data-caption className="flex flex-col gap-1 overflow-clip px-0.5 pt-2" style={{ maxHeight: BOARD.caption }}>
       <p className="flex items-center justify-between gap-2 text-meta">
+        {/* Its state says 고칠 곳 n개 when a promise is broken; while planning, how many promises it will keep. */}
         <State card={card} strip={strip} />
-        {strip.planning
-          ? counts.total > 0 && (
-              <span className="shrink-0 text-fg-faint tabular-nums">{tree.promisesPlanned(counts.total)}</span>
-            )
-          : counts.failed > 0 && <span className="shrink-0 text-danger tabular-nums">{t.toFix(counts.failed)}</span>}
+        {strip.planning && counts.total > 0 && (
+          <span className="shrink-0 text-fg-faint tabular-nums">{tree.promisesPlanned(counts.total)}</span>
+        )}
       </p>
       {back.length > 0 && (
         <p className="flex flex-wrap gap-x-2 text-meta text-fg-muted">

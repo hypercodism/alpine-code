@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAppViewState } from '@/features/app-view/state';
 import { showDockTab, useDockOpen, useDockTab } from '@/features/dock/state';
 import { useMapActionStore } from '@/features/product-map/mapActions';
-import { usePublishRequest } from '@/features/publish/publishRequest';
 import { blogBoard, blogConversation, type PlanMoment } from '@/features/product-map/planExample';
 import { boardScript } from '@/features/product-map/testBoard';
 import { LocaleProvider } from '@/shared/i18n';
@@ -29,8 +28,8 @@ import type { FlowGetResult } from '@alpine/protocol';
 import { routeTree } from './routeTree.gen';
 
 /**
- * After a plan is built (audit theme 3): the app opens at once from a built screen, the completion card has its way to
- * 올리기, and the top bar says where the map stands.
+ * After a plan is built (audit theme 3, app-first): the project opens on its app, what is broken is one red line over
+ * it, 올리기 is the top bar's, and the top bar says where the map stands only while something goes on.
  */
 
 vi.mock('@/features/terminal/TerminalScreen', () => ({
@@ -96,18 +95,19 @@ function mount(
   return { request };
 }
 
-/** Opens the app from a built screen's card (앱에서 보기). */
+/** Opens the app from a built screen's card (앱에서 보기), on the board 보드 shows. */
 async function openApp() {
+  fireEvent.click(await screen.findByRole('button', { name: '보드' }));
   await screen.findByRole('main', { name: '제품 보드' });
   fireEvent.click(await screen.findByRole('button', { name: '글 쓰기 열기' }));
   fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: '앱에서 보기' }));
 }
 
-/** The completion card under the conversation. */
-const done = () => screen.findByRole('region', { name: '다 만들었어요' });
+/** The app a built project opens on. */
+const frame = () => screen.findByTitle('alpine-code 앱', {}, { timeout: 3000 });
 
 beforeEach(() => {
-  // The app view is remembered per project for the window's life: each test starts on the map.
+  // The app view is remembered per project for the window's life: each test starts as a project just opened.
   useAppViewState.setState({ views: {}, apps: {}, cards: {}, at: {}, sizes: {} });
   localStorage.clear();
   localStorage.setItem('alpine.rail.open', 'false');
@@ -134,12 +134,10 @@ afterEach(() => {
 });
 
 describe('앱 열기 (#7)', () => {
-  it('starts the project the way it runs and shows it in the app view, with no command to type', async () => {
+  it('starts the project the way it runs and opens on it in the app view, with no command to type', async () => {
     const { request } = mount('built');
-    fireEvent.click(await screen.findByRole('button', { name: '앱' }));
-    // The app takes the map's place, large, with the top bar's 보드 | 앱 on 앱.
-    expect(await screen.findByTitle('alpine-code 앱', {}, { timeout: 3000 })).toBeTruthy();
-    expect(screen.getByText('앱이 열려 있어요 · 이 컴퓨터에서만 보여요')).toBeTruthy();
+    // The app takes the map's place, large, with the top bar's 앱 | 보드 on 앱.
+    expect(await frame()).toBeTruthy();
     expect(screen.getByRole('button', { name: '앱', pressed: true })).toBeTruthy();
     expect(request).toHaveBeenCalledWith('devServers/open', expect.objectContaining({ cwd }));
     expect(request.mock.calls.some(([method]) => method === 'devServers/start')).toBe(false);
@@ -167,9 +165,12 @@ describe('a built screen opened from its card', () => {
   it('shows that screen in the app view, and words sent now are about it', async () => {
     const { request } = mount('built');
     await openApp();
-    expect(await screen.findByText('앱이 열려 있어요 · 이 컴퓨터에서만 보여요', {}, { timeout: 3000 })).toBeTruthy();
+    await frame();
     expect(screen.getByRole('button', { name: '앱', pressed: true })).toBeTruthy();
-    expect(await screen.findByText(/화면을 보면서 말하는 중/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: '보고 있는 화면 · 다른 화면으로 가기' }).textContent).toContain(
+      '글 쓰기',
+    );
+    expect(await screen.findByText('글 쓰기 화면을 보면서 말하는 중')).toBeTruthy();
     expect(request).toHaveBeenCalledWith('devServers/open', expect.objectContaining({ cwd }));
   });
 });
@@ -195,7 +196,7 @@ describe('words sent while the app shows a screen', () => {
   });
 });
 
-describe('바로 고치기 on a built plan', () => {
+describe('고쳐 달라고 하기 on the red line over the app', () => {
   const broken = (b: FlowGetResult): FlowGetResult => {
     const write = b.document!.nodes!.find((node) => node.id === 'write')!;
     const promise = write.conditions![0]!.id;
@@ -208,11 +209,12 @@ describe('바로 고치기 on a built plan', () => {
     };
   };
 
-  /** The completion card's 바로 고치기, pressed with the app on view (its server running). */
+  /** The red line's 고쳐 달라고 하기, pressed with the app on view (its server running). */
   async function pressFix() {
-    await openApp();
-    await screen.findByTitle('alpine-code 앱', {}, { timeout: 3000 });
-    fireEvent.click(await within(await done()).findByRole('button', { name: '바로 고치기' }));
+    await frame();
+    const line = await screen.findByRole('alert');
+    expect(line.textContent).toContain('글 쓰기: 마크다운으로 쓰면 바로 미리 보여요');
+    fireEvent.click(within(line).getByRole('button', { name: '고쳐 달라고 하기' }));
   }
 
   it('starts the fix even when the map moved on since it was read, with the app on view', async () => {
@@ -276,7 +278,7 @@ describe('after the build', () => {
         build: { createdAt: '2026-10-25T01:00:00Z', updatedAt: '2026-10-25T01:18:10Z' },
       },
     );
-    await done();
+    await frame();
     const dock = screen.getByRole('complementary', { name: '오른쪽 창' });
     const line = await within(dock).findByRole('button', { name: /만들기 · 18분 걸렸어요/ });
     expect(within(dock).queryByText('지금 보드 대화가 아닌 다른 대화를 보고 있어요')).toBeNull();
@@ -315,15 +317,13 @@ describe('what it takes to try it', () => {
     },
   });
 
-  it('is on the completion card and beside the app for the screen on view, not only in the last message', async () => {
+  it("is on the screen's card on the board, not only in the last message", async () => {
     mount('built', {}, { board: withTry });
-    const tries = within(await done()).getByRole('region', { name: '직접 써 보려면' });
+    fireEvent.click(await screen.findByRole('button', { name: '보드' }));
+    fireEvent.click(await screen.findByRole('button', { name: '글 쓰기 열기' }));
+    const card = await screen.findByRole('dialog');
+    const tries = within(card).getByRole('region', { name: '직접 해 보려면' });
     expect(within(tries).getByText('글쓴이 비밀번호: blog1234')).toBeTruthy();
-    expect(within(tries).getByText(/글 쓰기/)).toBeTruthy();
-    await openApp();
-    const strip = await screen.findByRole('complementary', { name: '지금 보는 화면' }, { timeout: 3000 });
-    const beside = within(strip).getByRole('region', { name: '직접 써 보려면' });
-    expect(within(beside).getByText('글쓴이 비밀번호: blog1234')).toBeTruthy();
   });
 });
 
@@ -370,21 +370,18 @@ describe('the app that fails to open (#7)', () => {
 });
 
 describe('올리기 from the map (#13, #23)', () => {
-  it('offers 인터넷에 올리기 on the completion card, which opens the top bar sheet', async () => {
+  it("offers 올리기 in the top bar once a plan is built, which opens the bar's sheet", async () => {
     mount('built');
-    const press = within(await done()).getByRole('button', { name: '인터넷에 올리기' });
-    fireEvent.click(press);
+    fireEvent.click(await screen.findByRole('button', { name: /^올리기/ }));
     // Signed out, the sheet asks for the account first.
     expect(await screen.findByText('인터넷에 올리려면 Alpine 계정이 필요해요. 무료예요.')).toBeTruthy();
-    // It opens over the button pressed, not under the top bar's hidden trigger.
-    expect(usePublishRequest.getState().from).toBe(press);
-    // The completion card holds 인터넷에 올리기, so the top bar has no button of its own for a plan.
-    expect(screen.queryByRole('button', { name: /^올리기/ })).toBeNull();
+    // The top bar's is the one way: there is no completion card with a 인터넷에 올리기 of its own.
+    expect(screen.queryByRole('button', { name: '인터넷에 올리기' })).toBeNull();
   });
 
   it('promises nothing online when Alpine Cloud is off', async () => {
     mount('built', {}, { cloud: false });
-    await done();
+    await frame();
     expect(screen.queryByRole('button', { name: '인터넷에 올리기' })).toBeNull();
     expect(screen.queryByRole('button', { name: /^올리기/ })).toBeNull();
   });
@@ -411,7 +408,8 @@ describe('a plan stays quiet until it is built', () => {
         }),
       },
     );
-    await done();
+    fireEvent.click(await screen.findByRole('button', { name: '보드' }));
+    await screen.findByRole('button', { name: '글 쓰기 열기' });
     expect(screen.queryByText('보드에 아직 담기지 않은 코드')).toBeNull();
   });
 
@@ -476,7 +474,6 @@ describe('the top bar on the map (#10)', () => {
     ['asking', {}, '기획 중'],
     ['building', { status: 'running' }, '만드는 중'],
     ['building', { status: 'waiting' }, '확인을 기다려요'],
-    ['built', {}, '다 만들었어요'],
   ] as const)('says where a plan stands: %s %o is %s', async (moment, build, word) => {
     mount(moment, {}, { build });
     await screen.findByRole('main', { name: '제품 보드' });
@@ -484,32 +481,32 @@ describe('the top bar on the map (#10)', () => {
     expect(await within(bar).findByText(word)).toBeTruthy();
   });
 
-  it.each([
-    ['recheck', '다시 확인할 약속'],
-    ['failed', '고칠 약속'],
-  ] as const)('once built, says the same open promises as the completion card: %s', async (status, words) => {
-    mount(
-      'built',
-      {},
-      {
-        board: (b) => ({
-          ...b,
-          states: {
-            ...b.states,
-            list: {
-              ...b.states!.list!,
-              promises: { [Object.keys(b.states!.list!.promises ?? {})[0]!]: { status } },
+  it.each([['recheck'], ['failed']] as const)(
+    'says nothing once built, even with a promise %s: what is broken is the red line over the app',
+    async (status) => {
+      mount(
+        'built',
+        {},
+        {
+          board: (b) => ({
+            ...b,
+            states: {
+              ...b.states,
+              list: {
+                ...b.states!.list!,
+                promises: { [Object.keys(b.states!.list!.promises ?? {})[0]!]: { status } },
+              },
             },
-          },
-        }),
-      },
-    );
-    await screen.findByRole('main', { name: '제품 보드' });
-    const bar = screen.getByRole('button', { name: /다른 프로젝트로/ }).parentElement!;
-    const word = await within(bar).findByText(new RegExp(`^${words} \\d+개$`));
-    expect(within(bar).queryByText('다 만들었어요')).toBeNull();
-    expect(await screen.findByText(`다 만들었어요 · ${word.textContent}`)).toBeTruthy();
-  });
+          }),
+        },
+      );
+      await frame();
+      const bar = screen.getByRole('button', { name: /다른 프로젝트로/ }).parentElement!;
+      expect(bar.textContent).not.toMatch(/다 만들었어요|다시 확인할 약속|고칠 약속/);
+      if (status === 'failed') expect((await screen.findByRole('alert')).textContent).toContain('지금 안 되고 있어요');
+      else expect(screen.queryByRole('alert')).toBeNull();
+    },
+  );
 
   it("keeps the map's conversation on the right with no row of tabs (#88)", async () => {
     mount('built');
